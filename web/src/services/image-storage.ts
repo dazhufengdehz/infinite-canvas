@@ -1,8 +1,9 @@
 import localforage from "localforage";
 
-import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import { readImageMeta } from "@/lib/image-utils";
+import { hasStorageServer, putStorageBlob, storageMediaUrl } from "@/services/api/storage";
+import { scopedStorageKey } from "@/services/project-storage";
 
 export type UploadedImage = {
     url: string;
@@ -18,18 +19,17 @@ const imageLogStore = localforage.createInstance({ name: "infinite-canvas", stor
 const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
 const objectUrls = new Map<string, string>();
 
-export async function uploadImage(input: string | Blob): Promise<UploadedImage> {
+export async function uploadImage(input: string | Blob, ownerId = "assets"): Promise<UploadedImage> {
     const blob = typeof input === "string" ? await (await fetch(input)).blob() : input;
-    const storageKey = `image:${nanoid()}`;
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
+    const storageKey = scopedStorageKey("image", ownerId);
+    const url = await setImageBlob(storageKey, blob);
     const meta = await readImageMeta(url);
     return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
 }
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
+    if (await hasStorageServer()) return storageMediaUrl(storageKey);
     const cached = objectUrls.get(storageKey);
     if (cached) return cached;
     const blob = await store.getItem<Blob>(storageKey);
@@ -40,11 +40,21 @@ export async function resolveImageUrl(storageKey?: string, fallback = "") {
 }
 
 export async function getImageBlob(storageKey: string) {
+    if (await hasStorageServer()) {
+        const response = await fetch(storageMediaUrl(storageKey));
+        return response.ok ? response.blob() : null;
+    }
     return store.getItem<Blob>(storageKey);
 }
 
 export async function setImageBlob(storageKey: string, blob: Blob) {
+    if (await hasStorageServer()) {
+        await putStorageBlob(`/media/${encodeURIComponent(storageKey)}`, blob);
+        return storageMediaUrl(storageKey);
+    }
     await store.setItem(storageKey, blob);
+    const previous = objectUrls.get(storageKey);
+    if (previous) URL.revokeObjectURL(previous);
     const url = URL.createObjectURL(blob);
     objectUrls.set(storageKey, url);
     return url;
@@ -59,17 +69,23 @@ export async function imageToDataUrl(image: { url?: string; dataUrl?: string; st
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {
-    await Promise.all(
-        Array.from(new Set(keys)).map(async (key) => {
-            const url = objectUrls.get(key);
-            if (url) URL.revokeObjectURL(url);
-            objectUrls.delete(key);
-            await store.removeItem(key);
-        }),
-    );
+    const uniqueKeys = Array.from(new Set(keys));
+    for (const key of uniqueKeys) {
+        const url = objectUrls.get(key);
+        if (url) URL.revokeObjectURL(url);
+        objectUrls.delete(key);
+    }
+    if (await hasStorageServer()) return;
+    await Promise.all(uniqueKeys.map((key) => store.removeItem(key)));
+}
+
+export function releaseImageObjectUrls() {
+    objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    objectUrls.clear();
 }
 
 export async function cleanupUnusedImages(usedData: unknown) {
+    if (await hasStorageServer()) return;
     const usedKeys = collectImageStorageKeys(usedData);
     await Promise.all([
         imageLogStore.iterate((value) => {

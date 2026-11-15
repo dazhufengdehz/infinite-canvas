@@ -12,6 +12,7 @@ export type CanvasProject = {
     title: string;
     createdAt: string;
     updatedAt: string;
+    revision?: number;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
     chatSessions: CanvasAssistantSession[];
@@ -19,6 +20,16 @@ export type CanvasProject = {
     backgroundMode: CanvasBackgroundMode;
     showImageInfo: boolean;
     viewport: ViewportTransform;
+};
+
+export type CanvasProjectSummary = {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    revision: number;
+    nodeCount: number;
+    connectionCount: number;
 };
 
 type CanvasStore = {
