@@ -42,8 +42,8 @@ vi.mock("@/stores/use-config-store", async (original) => ({
     useEffectiveConfig: () => harness.config,
 }));
 vi.mock("@/stores/canvas/use-canvas-store", () => {
-    const openProject = () => harness.project;
-    return { useCanvasStore: (selector: (state: unknown) => unknown) => selector({ hydrated: true, projects: [harness.project], openProject, updateProject: harness.noop }) };
+    const openProject = async () => harness.project;
+    return { useCanvasStore: (selector: (state: unknown) => unknown) => selector({ hydrated: true, activeProject: harness.project, projects: [harness.project], storageError: null, openProject, flushProject: async () => {}, updateProject: harness.noop }) };
 });
 vi.mock("@/stores/use-agent-store", () => ({ useAgentStore: (selector: (state: unknown) => unknown) => selector({}) }));
 vi.mock("@/stores/use-asset-store", () => ({ useAssetStore: (selector: (state: unknown) => unknown) => selector({ addAsset: harness.noop, cleanupImages: harness.noop }) }));

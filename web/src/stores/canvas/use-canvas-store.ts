@@ -1,10 +1,18 @@
 import { create } from "zustand";
-import { persist, type PersistStorage, type StorageValue } from "zustand/middleware";
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
-import { localForageStorage } from "@/lib/localforage-storage";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+import {
+    createStoredProject,
+    deleteStoredProjects,
+    listProjects,
+    projectSummary,
+    readProject,
+    renameStoredProject,
+    replaceStoredProjects,
+    saveStoredProject,
+} from "@/services/project-storage";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
 export type CanvasProject = {
@@ -32,115 +40,155 @@ export type CanvasProjectSummary = {
     connectionCount: number;
 };
 
+type CanvasProjectPatch = Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>;
+
 type CanvasStore = {
     hydrated: boolean;
-    projects: CanvasProject[];
-    createProject: (title?: string) => string;
-    importProject: (project: Partial<CanvasProject>) => string;
-    openProject: (id: string) => CanvasProject | null;
-    renameProject: (id: string, title: string) => void;
-    deleteProjects: (ids: string[]) => void;
-    replaceProjects: (projects: CanvasProject[]) => void;
-    updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
+    projects: CanvasProjectSummary[];
+    activeProject: CanvasProject | null;
+    storageError: string | null;
+    createProject: (title?: string, id?: string) => Promise<string>;
+    importProject: (project: Partial<CanvasProject>, id?: string) => Promise<string>;
+    openProject: (id: string) => Promise<CanvasProject | null>;
+    renameProject: (id: string, title: string) => Promise<void>;
+    deleteProjects: (ids: string[]) => Promise<void>;
+    replaceProjects: (projects: CanvasProject[]) => Promise<void>;
+    updateProject: (id: string, patch: CanvasProjectPatch) => void;
+    flushProject: () => Promise<void>;
 };
 
 const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
-const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
-type PersistedCanvasState = Pick<CanvasStore, "projects">;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let queuedPersistState: PersistedCanvasState | null = null;
+let queuedProjectId: string | null = null;
+let saveQueue: Promise<void> = Promise.resolve();
 
-const canvasStorage: PersistStorage<CanvasStore> = {
-    getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
-        if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
-        queuedPersistState = parsed.state as PersistedCanvasState;
-        return parsed;
-    },
-    setItem: (name, value) => {
-        const nextState = value.state as PersistedCanvasState;
-        if (queuedPersistState && queuedPersistState.projects === nextState.projects) return;
-        queuedPersistState = nextState;
+function errorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "项目存储失败";
+}
+
+function upsertSummary(projects: CanvasProjectSummary[], project: CanvasProject) {
+    const summary = projectSummary(project);
+    return projects.some((item) => item.id === project.id) ? projects.map((item) => (item.id === project.id ? summary : item)) : [summary, ...projects];
+}
+
+function makeProject(title: string, id = nanoid(), source: Partial<CanvasProject> = {}): CanvasProject {
+    const now = new Date().toISOString();
+    return {
+        id,
+        title,
+        createdAt: source.createdAt || now,
+        updatedAt: now,
+        revision: 1,
+        nodes: source.nodes || [],
+        connections: source.connections || [],
+        chatSessions: source.chatSessions || [],
+        activeChatId: source.activeChatId || null,
+        backgroundMode: source.backgroundMode || "lines",
+        showImageInfo: source.showImageInfo || false,
+        viewport: source.viewport || initialViewport,
+    };
+}
+
+async function persistProject(id: string) {
+    const project = useCanvasStore.getState().activeProject;
+    if (!project || project.id !== id) return;
+    try {
+        const saved = await saveStoredProject(project, project.revision || 1);
+        useCanvasStore.setState((state) => {
+            if (state.activeProject?.id !== id) return { projects: upsertSummary(state.projects, saved), storageError: null };
+            const current = { ...state.activeProject, revision: saved.revision };
+            return { activeProject: current, projects: upsertSummary(state.projects, current), storageError: null };
+        });
+    } catch (error) {
+        useCanvasStore.setState({ storageError: errorMessage(error) });
+    }
+}
+
+function enqueueSave(id: string) {
+    saveQueue = saveQueue.then(() => persistProject(id));
+    return saveQueue;
+}
+
+export const useCanvasStore = create<CanvasStore>()((set, get) => {
+    const flushProject = () => {
+        if (saveTimer) clearTimeout(saveTimer);
+        saveTimer = null;
+        const id = queuedProjectId;
+        queuedProjectId = null;
+        return id ? enqueueSave(id) : saveQueue;
+    };
+
+    const scheduleSave = (id: string) => {
+        queuedProjectId = id;
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
             saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
+            queuedProjectId = null;
+            void enqueueSave(id);
         }, 400);
-    },
-    removeItem: (name) => localForageStorage.removeItem(name),
-};
+    };
 
-export const useCanvasStore = create<CanvasStore>()(
-    persist(
-        (set, get) => ({
-            hydrated: false,
-            projects: [],
-            createProject: (title = i18n.t("canvas.project.untitled")) => {
-                const now = new Date().toISOString();
-                const id = nanoid();
-                const project: CanvasProject = {
-                    id,
-                    title,
-                    createdAt: now,
-                    updatedAt: now,
-                    nodes: [],
-                    connections: [],
-                    chatSessions: [],
-                    activeChatId: null,
-                    backgroundMode: "lines",
-                    showImageInfo: false,
-                    viewport: initialViewport,
-                };
-                set((state) => ({ projects: [project, ...state.projects] }));
-                return id;
-            },
-            importProject: (source) => {
-                const now = new Date().toISOString();
-                const project: CanvasProject = {
-                    id: nanoid(),
-                    title: source.title || i18n.t("canvas.project.imported"),
-                    createdAt: source.createdAt || now,
-                    updatedAt: now,
-                    nodes: source.nodes || [],
-                    connections: source.connections || [],
-                    chatSessions: source.chatSessions || [],
-                    activeChatId: source.activeChatId || null,
-                    backgroundMode: source.backgroundMode || "lines",
-                    showImageInfo: source.showImageInfo || false,
-                    viewport: source.viewport || initialViewport,
-                };
-                set((state) => ({ projects: [project, ...state.projects] }));
-                return project.id;
-            },
-            openProject: (id) => {
-                return get().projects.find((item) => item.id === id) || null;
-            },
-            renameProject: (id, title) =>
-                set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, title: title.trim() || project.title, updatedAt: new Date().toISOString() } : project)),
-                })),
-            deleteProjects: (ids) =>
-                set((state) => {
-                    const projects = state.projects.filter((project) => !ids.includes(project.id));
-                    return { projects };
-                }),
-            replaceProjects: (projects) => set({ projects }),
-            updateProject: (id, patch) =>
-                set((state) => ({
-                    projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),
-                })),
-        }),
-        {
-            name: CANVAS_STORE_KEY,
-            storage: canvasStorage,
-            partialize: (state) =>
-                ({
-                    projects: state.projects,
-                }) as StorageValue<CanvasStore>["state"],
-            onRehydrateStorage: () => () => {
-                useCanvasStore.setState({ hydrated: true });
-            },
+    return {
+        hydrated: false,
+        projects: [],
+        activeProject: null,
+        storageError: null,
+        createProject: async (title = i18n.t("canvas.project.untitled"), id) => {
+            const project = makeProject(title, id);
+            const stored = await createStoredProject(project);
+            set((state) => ({ projects: upsertSummary(state.projects, stored), storageError: null }));
+            return stored.id;
         },
-    ),
-);
+        importProject: async (source, id) => {
+            const project = makeProject(source.title || i18n.t("canvas.project.imported"), id, source);
+            const stored = await createStoredProject(project);
+            set((state) => ({ projects: upsertSummary(state.projects, stored), storageError: null }));
+            return stored.id;
+        },
+        openProject: async (id) => {
+            if (get().activeProject?.id === id) return get().activeProject;
+            await flushProject();
+            const project = await readProject(id);
+            set({ activeProject: project, storageError: null });
+            return project;
+        },
+        renameProject: async (id, title) => {
+            await flushProject();
+            const summary = await renameStoredProject(id, title);
+            set((state) => ({
+                projects: state.projects.map((item) => (item.id === id ? summary : item)),
+                activeProject: state.activeProject?.id === id ? { ...state.activeProject, title: summary.title, updatedAt: summary.updatedAt, revision: summary.revision } : state.activeProject,
+                storageError: null,
+            }));
+        },
+        deleteProjects: async (ids) => {
+            if (!ids.length) return;
+            await flushProject();
+            await deleteStoredProjects(ids);
+            set((state) => ({
+                projects: state.projects.filter((project) => !ids.includes(project.id)),
+                activeProject: state.activeProject && ids.includes(state.activeProject.id) ? null : state.activeProject,
+                storageError: null,
+            }));
+        },
+        replaceProjects: async (projects) => {
+            await flushProject();
+            await replaceStoredProjects(projects);
+            set({ projects: await listProjects(), activeProject: null, storageError: null });
+        },
+        updateProject: (id, patch) => {
+            if (get().activeProject?.id !== id) return;
+            set((state) => {
+                if (state.activeProject?.id !== id) return state;
+                const activeProject = { ...state.activeProject, ...patch, updatedAt: new Date().toISOString() };
+                return { activeProject, projects: upsertSummary(state.projects, activeProject) };
+            });
+            scheduleSave(id);
+        },
+        flushProject,
+    };
+});
+
+void listProjects()
+    .then((projects) => useCanvasStore.setState({ projects, hydrated: true }))
+    .catch((error) => useCanvasStore.setState({ hydrated: true, storageError: errorMessage(error) }));

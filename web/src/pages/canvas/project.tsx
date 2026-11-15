@@ -13,6 +13,7 @@ import { getModelProfile } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { resolveMediaUrl, uploadMediaFile } from "@/services/file-storage";
+import { readProject } from "@/services/project-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
@@ -49,7 +50,7 @@ import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/a
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { useCanvasStore, type CanvasProject } from "@/stores/canvas/use-canvas-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useCollabStore } from "@/stores/use-collab-store";
 import { useCanvasCollab } from "@/pages/canvas/hooks/use-canvas-collab";
 import { CanvasCollabCursors, CanvasCollabSelectionOutlines } from "@/components/canvas/canvas-collab-cursors";
@@ -265,7 +266,9 @@ function InfiniteCanvasPage() {
     const updateProject = useCanvasStore((state) => state.updateProject);
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
-    const currentProject = useCanvasStore((state) => state.projects.find((project) => project.id === projectId));
+    const flushProject = useCanvasStore((state) => state.flushProject);
+    const storageError = useCanvasStore((state) => state.storageError);
+    const currentProject = useCanvasStore((state) => (state.activeProject?.id === projectId ? state.activeProject : null));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
@@ -555,65 +558,63 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!hydrated) return;
+        let cancelled = false;
         setProjectLoaded(false);
-        let project = openProject(projectId);
-        if (!project) {
-            if (searchParams.get("room")) {
-                const now = new Date().toISOString();
-                const placeholder: CanvasProject = {
-                    id: projectId,
-                    title: t("canvas.projectPage.collabCanvas", "协同画布"),
-                    createdAt: now,
-                    updatedAt: now,
-                    nodes: [],
-                    connections: [],
-                    chatSessions: [],
-                    activeChatId: null,
-                    backgroundMode: "lines",
-                    showImageInfo: false,
-                    viewport: { x: 0, y: 0, k: 1 },
-                };
-                useCanvasStore.setState((s) => ({
-                    projects: [placeholder, ...s.projects],
-                }));
-                project = placeholder;
-            } else {
-                navigate("/canvas", { replace: true });
-                return;
-            }
-        }
-
         const restore = async () => {
-            const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
-            const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
-            setNodes(restoredNodes);
-            setConnections(project.connections);
-            setChatSessions(restoredSessions);
-            setActiveChatId(project.activeChatId || null);
-            setBackgroundMode(project.backgroundMode);
-            setShowImageInfo(project.showImageInfo || false);
-            setViewport(project.viewport);
-            historyRef.current = { past: [], future: [] };
-            if (historyCommitTimerRef.current) {
-                clearTimeout(historyCommitTimerRef.current);
-                historyCommitTimerRef.current = null;
+            try {
+                let project = await openProject(projectId);
+                if (!project && roomParam) {
+                    await createProject(t("canvas.projectPage.collabCanvas", "协同画布"), projectId);
+                    project = await openProject(projectId);
+                }
+                if (!project) {
+                    if (!cancelled) navigate("/canvas", { replace: true });
+                    return;
+                }
+                const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes));
+                const restoredSessions = await hydrateAssistantImages(project.chatSessions || []);
+                if (cancelled) return;
+                setNodes(restoredNodes);
+                setConnections(project.connections);
+                setChatSessions(restoredSessions);
+                setActiveChatId(project.activeChatId || null);
+                setBackgroundMode(project.backgroundMode);
+                setShowImageInfo(project.showImageInfo || false);
+                setViewport(project.viewport);
+                historyRef.current = { past: [], future: [] };
+                if (historyCommitTimerRef.current) {
+                    clearTimeout(historyCommitTimerRef.current);
+                    historyCommitTimerRef.current = null;
+                }
+                lastHistoryRef.current = {
+                    nodes: restoredNodes,
+                    connections: project.connections,
+                    chatSessions: restoredSessions,
+                    activeChatId: project.activeChatId || null,
+                    backgroundMode: project.backgroundMode,
+                    showImageInfo: project.showImageInfo || false,
+                };
+                setHistoryState({ canUndo: false, canRedo: false });
+                setInterruptedBannerDismissed(false);
+                setAutoResumeTriggered(false);
+                setAutoResumeFailed(false);
+                setProjectLoaded(true);
+            } catch (error) {
+                if (cancelled) return;
+                message.error(error instanceof Error ? error.message : t("canvas.projectPage.notFound"));
+                navigate("/canvas", { replace: true });
             }
-            lastHistoryRef.current = {
-                nodes: restoredNodes,
-                connections: project.connections,
-                chatSessions: restoredSessions,
-                activeChatId: project.activeChatId || null,
-                backgroundMode: project.backgroundMode,
-                showImageInfo: project.showImageInfo || false,
-            };
-            setHistoryState({ canUndo: false, canRedo: false });
-            setInterruptedBannerDismissed(false);
-            setAutoResumeTriggered(false);
-            setAutoResumeFailed(false);
-            setProjectLoaded(true);
         };
         void restore();
-    }, [hydrated, navigate, openProject, projectId]);
+        return () => {
+            cancelled = true;
+            void flushProject();
+        };
+    }, [createProject, flushProject, hydrated, message, navigate, openProject, projectId, roomParam, t]);
+
+    useEffect(() => {
+        if (storageError) message.error(storageError);
+    }, [message, storageError]);
 
     useEffect(() => {
         if (!projectLoaded || !["new", "recent", "choose"].includes(searchParams.get("mode") || "")) return;
@@ -1646,22 +1647,27 @@ function InfiniteCanvasPage() {
         applyHistory(next);
     }, [applyHistory]);
 
-    const createAndOpenProject = useCallback(() => {
-        const id = createProject(t("canvas.defaultTitle", { count: useCanvasStore.getState().projects.length + 1 }));
-        navigate(`/canvas/${id}`);
-    }, [createProject, navigate, t]);
+    const createAndOpenProject = useCallback(async () => {
+        try {
+            const id = await createProject(t("canvas.defaultTitle", { count: useCanvasStore.getState().projects.length + 1 }));
+            navigate(`/canvas/${id}`);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("canvas.projectPage.notFound"));
+        }
+    }, [createProject, message, navigate, t]);
 
-    const deleteCurrentProject = useCallback(() => {
-        deleteProjects([projectId]);
+    const deleteCurrentProject = useCallback(async () => {
+        await deleteProjects([projectId]);
         cleanupAssetImages();
         navigate("/canvas");
     }, [cleanupAssetImages, deleteProjects, navigate, projectId]);
 
     const exportCurrentProject = useCallback(async () => {
-        const project = useCanvasStore.getState().projects.find((item) => item.id === projectId);
-        if (!project) return message.error(t("canvas.projectPage.notFound"));
         const hide = message.loading(t("canvas.projectPage.exporting"), 0);
         try {
+            await flushProject();
+            const project = await readProject(projectId);
+            if (!project) return message.error(t("canvas.projectPage.notFound"));
             await exportCanvasProjects([project], project.title || t("canvas.title"));
             message.success(t("canvas.projectPage.exported"));
         } catch (error) {
@@ -1670,7 +1676,7 @@ function InfiniteCanvasPage() {
         } finally {
             hide();
         }
-    }, [message, projectId, t]);
+    }, [flushProject, message, projectId, t]);
 
     const handleCanvasMouseDown = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -3366,9 +3372,9 @@ function InfiniteCanvasPage() {
 
     const finishTitleEditing = useCallback(() => {
         const nextTitle = titleDraft.trim();
-        if (nextTitle) renameProject(projectId, nextTitle);
+        if (nextTitle) void renameProject(projectId, nextTitle).catch((error) => message.error(error instanceof Error ? error.message : t("canvas.projectPage.notFound")));
         setTitleEditing(false);
-    }, [projectId, renameProject, titleDraft]);
+    }, [message, projectId, renameProject, t, titleDraft]);
 
     const preventCanvasContextMenu = useCallback((event: ReactMouseEvent) => {
         if ((event.target as HTMLElement).closest("[data-node-id]")) return;

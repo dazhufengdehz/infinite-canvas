@@ -10,21 +10,18 @@ import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
 
 export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultProjectName")) {
     const zipFiles: { name: string; data: BlobPart }[] = [];
-    const exportedProjects = await Promise.all(
-        projects.map(async (project) => {
-            const files: CanvasExportAsset[] = [];
-            await Promise.all(
-                collectStorageKeys(project).map(async (storageKey) => {
-                    const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-                    if (!blob) return;
-                    const path = `projects/${project.id}/files/${safeFileName(storageKey)}.${fileExtension(blob.type, storageKey)}`;
-                    files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
-                    zipFiles.push({ name: path, data: blob });
-                }),
-            );
-            return { project, files };
-        }),
-    );
+    const exportedProjects = [];
+    for (const project of projects) {
+        const files: CanvasExportAsset[] = [];
+        for (const storageKey of collectStorageKeys(project)) {
+            const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
+            if (!blob) continue;
+            const path = `projects/${project.id}/files/${safeFileName(storageKey)}.${fileExtension(blob.type, storageKey)}`;
+            files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
+            zipFiles.push({ name: path, data: blob });
+        }
+        exportedProjects.push({ project, files });
+    }
 
     const data: CanvasExportFile = { app: "infinite-canvas", version: 3, exportedAt: new Date().toISOString(), projects: exportedProjects };
     const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
@@ -69,6 +66,7 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
 function collectStorageKeys(value: unknown, keys = new Set<string>()) {
     if (!value || typeof value !== "object") return [...keys];
     if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
+    if ("posterStorageKey" in value && typeof value.posterStorageKey === "string" && value.posterStorageKey.includes(":")) keys.add(value.posterStorageKey);
     Object.values(value).forEach((item) => (Array.isArray(item) ? item.forEach((child) => collectStorageKeys(child, keys)) : collectStorageKeys(item, keys)));
     return [...keys];
 }

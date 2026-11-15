@@ -1,8 +1,9 @@
 import localforage from "localforage";
 
 import i18n from "@/i18n";
-import { getMediaBlob, resolveMediaUrl, setMediaBlob } from "@/services/file-storage";
+import { getMediaBlob, setMediaBlob } from "@/services/file-storage";
 import { getImageBlob, resolveImageUrl, setImageBlob } from "@/services/image-storage";
+import { readProjects } from "@/services/project-storage";
 import { downloadWebdavFile, uploadWebdavFile, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import type { Asset } from "@/stores/use-asset-store";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -90,7 +91,7 @@ export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?:
             key: "canvas",
             label: "画布",
             emptyData: { projects: [] },
-            localData: async () => ({ projects: useCanvasStore.getState().projects }),
+            localData: async () => ({ projects: await readProjects() }),
             mergeData: (local, remote) => ({ projects: mergeById(local.projects, remote.projects, "updatedAt") }),
             applyData: async (data) => useCanvasStore.getState().replaceProjects(data.projects),
         }),
@@ -268,10 +269,6 @@ async function hydrateAsset(asset: Asset): Promise<Asset> {
     if (asset.kind === "image" && asset.data.storageKey) {
         const dataUrl = await resolveImageUrl(asset.data.storageKey, asset.data.dataUrl);
         return { ...asset, coverUrl: asset.coverUrl.startsWith("blob:") ? dataUrl : asset.coverUrl, data: { ...asset.data, dataUrl } };
-    }
-    if (asset.kind === "video" && asset.data.storageKey) {
-        const url = await resolveMediaUrl(asset.data.storageKey, asset.data.url);
-        return { ...asset, coverUrl: asset.coverUrl.startsWith("blob:") ? url : asset.coverUrl, data: { ...asset.data, url } };
     }
     return asset;
 }
