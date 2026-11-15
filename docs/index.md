@@ -1,0 +1,55 @@
+# Infinite Canvas Documentation Index
+
+## Overview
+
+- [Quick Start](/docs/overview/quick-start)
+- [Features](/docs/overview/features)
+- [ComfyUI 工作流配置指南 (中英文)](COMFYUI_WORKFLOW_GUIDE.md)
+- [云端镜像免本地配置指南](CLOUD_MIRROR_GUIDE.md)
+- [ComfyUI 必备插件安装与说明指南](COMFYUI_PLUGINS.md)
+- [ComfyUI 渠道指南](comfyui-channel.md)
+- [部署与发布指南](../DEPLOY.md)
+- [Nginx 目录与配置说明](NGINX_SERVER_LAYOUT.md)
+- [CI 与镜像发布踩坑手册](CI_RELEASE_TROUBLESHOOTING.md)
+- [Deploy on Render](/docs/overview/render)
+- [Docker Deployment](/docs/overview/docker)
+- [Third-party GitHub Prompt Repositories](/docs/overview/third-party-prompt-repositories)
+
+## Canvas Guide
+
+- [Canvas Node Guide](/docs/canvas/canvas-node-manual)
+- [Canvas Shortcuts](/docs/canvas/canvas-shortcuts)
+
+## Development and Data
+
+- [Local Development](/docs/development/local-development)
+- [Canvas Node System Architecture](/docs/development/canvas-node-system)
+- [Canvas 生成链路 Bug 修复实施手册](CANVAS_GENERATION_BUG_FIX_MANUAL.md)
+- [ComfyUI Workflow Standard](/docs/development/comfyui-workflow-standard)
+- [Workflow Model & Host Decoupling Spec](/docs/development/workflow-model-host-decoupling-spec)
+- [Audio Workflow Model DSL Spec](/docs/development/audio-workflow-model-dsl-spec)
+- [Task Lifecycle Driver Spec](/docs/development/task-lifecycle-driver-spec)
+- [Multimodal Video Workflow Spec](/docs/development/multimodal-video-workflow-spec)
+- [Canvas Data Structure](/docs/development/canvas-data-structure)
+- [How the Local Codex Connection Works](/docs/development/local-codex-canvas)
+
+## Business
+
+- [Open-source License](/docs/business/license)
+- [Business Cooperation](/docs/business/business)
+
+## Support and Security
+
+- [Report a Vulnerability](/docs/support/security)
+- [Sponsor the Project](/docs/support/sponsor)
+
+## Project Progress
+
+- [Changelog](/docs/progress/changelog)
+- [Pending Tests](/docs/progress/pending-test)
+- [TODO](/docs/progress/todo)
+
+## Notes
+
+- Canvas projects and My Assets are primarily stored in the browser. WebDAV can be configured for cross-device synchronization.
+- This project exclusively supports self-hosted ComfyUI instances; credentials (such as Proxy Token) are stored locally in the browser.

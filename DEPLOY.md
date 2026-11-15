@@ -1,0 +1,321 @@
+# 部署与发布指南
+
+本文档说明 infinite-canvas 项目**部署什么、部署到哪里、如何发布版本、实际的部署流程**，并附带部署结果验证方法。流程基于生产服务器（`root@114.55.54.9`，站点 `canvas.imihoo.com`）上的真实部署习惯整理。
+
+## 1. 部署什么东西
+
+本项目是**纯静态前端**（Vite + React），没有任何服务端 API：
+
+- AI 生成由浏览器**直连用户本机/局域网的 ComfyUI**（默认 `http://127.0.0.1:8188`），服务器不代理、不转发。
+- 画布、素材、生成记录、渠道凭据全部保存在浏览器本地（IndexedDB / localStorage）。
+- 因此部署物只有一样：`web/` 构建产物 **`web/dist/`** 目录，包含：
+
+| 内容 | 说明 |
+| --- | --- |
+| `index.html` | SPA 入口，引用带 hash 的 `assets/` |
+| `assets/` | 打包后的 JS/CSS |
+| `config.js` | 运行期配置（统计开关），构建产物内置为空默认值，禁止缓存 |
+| `icons/`、`logo.svg` | 静态图标 |
+| `plugins/` | 插件索引 |
+| `workflows/` | 内置 ComfyUI 工作流 JSON（/guide 页下载用） |
+
+服务器端不需要 Node、不需要数据库，只需要 **nginx 托管静态目录**。
+
+## 2. 支持的部署形态
+
+| 形态 | 入口 | 适用场景 |
+| --- | --- | --- |
+| 本地开发 | `cd web && bun install && bun run dev` → `http://localhost:3000` | 开发调试 |
+| Docker | 仓库根目录 `docker compose up -d`（官方镜像 `916446339/infinite-canvas`），或 `docker-compose.local.yml` 本地构建 | 单机容器部署，详见 `docs/content/docs/overview/docker.zh-CN.mdx` |
+| 静态 nginx 服务器 | 本文第 4 节 | **当前生产环境（canvas.imihoo.com）** |
+| Vercel / Render | `vercel.json` / `render.yaml` | 一键云部署 |
+
+> Docker 与静态部署的区别：Docker 镜像在容器启动时用 `web/docker-entrypoint.sh` 按环境变量（`ANALYTICS_GA4_ID` / `ANALYTICS_BAIDU_ID`）**生成** `config.js`；静态部署直接使用 `web/public/config.js` 的内置空默认值（不启用任何统计）。
+
+## 3. 发布流程（打版本）
+
+> **硬性规则：发布（部署到生产）前必须先打 tag。没有 tag 的构建产物不允许部署。** 执行第 4 节部署前，必须确认第 3 节步骤 4 的 tag 已存在（`git tag -l` 可见、与 `VERSION` 一致）。
+
+遵循 `AGENTS.md` 的发版本流程：
+
+1. 把 `CHANGELOG.md` 的 `Unreleased` 变更整理成新的版本记录，保留空 `Unreleased` 标题。
+2. 提升并更新根目录 `VERSION`（如 `v0.16.0` → `v0.17.0`）。
+3. 将当前代码全部提交到 Git。
+4. 提交完成后打对应 tag，如 `v0.17.0`。
+5. 发版本流程中不执行编译、测试或构建（除非另行手动构建用于部署）。
+
+发布前的 tag 校验（必做）：
+
+```bash
+# 确认 VERSION 与最新 tag 一致，且 tag 已打在已提交的 commit 上
+cat VERSION                     # 如 v0.17.0
+git tag -l 'v0.17.0'            # 非空
+git log -1 --format='%H %d'    # tag 指向当前提交（或已包含在当前提交中）
+```
+
+注意：`web/dist` 会被 `Dockerfile` 打进镜像时重新构建，且 `dist` 已加入 `.gitignore`，**产物不进 Git**，每次部署都从当前工作区重新构建。
+
+### 3.1 发布附件：`dist.zip`（每次发版必做）
+
+每个版本都要把构建产物打包成 `dist.zip` 并上传到对应 GitHub Release 的 **Assets**，方便用户直接下载静态站点包自行部署（Docker / 镜像用户可忽略）。
+
+```bash
+# 1) 从 tag 对应的提交构建（工作区必须是干净且与 tag 一致的检出）
+git rev-parse HEAD && git rev-parse vX.Y.Z^{commit}   # 两者应一致
+cd web && bun run build && cd dist
+
+# 2) 打包（排除 macOS 的 .DS_Store）
+zip -qr ../dist.zip . -x '*.DS_Store'
+
+# 3) 上传到 Release Assets（--clobber 允许覆盖重传）
+gh release upload vX.Y.Z web/dist.zip --clobber
+
+# 4) 校验
+gh release view vX.Y.Z --json assets --jq '.assets[] | "\(.name)  \(.size) bytes  \(.state)"'
+```
+
+约定：
+
+- 附件名固定为 **`dist.zip`**（不含版本号，版本信息由 Release 标签体现）。
+- 打包内容为 `dist/` **目录内的文件**（zip 顶层即 `index.html`、`assets/`…），不含 `dist` 目录本身。
+- `*.zip` 已在 `.gitignore` 中，产物不进 Git。
+- 若部署前忘记上传，可在发版后补传：`gh release upload vX.Y.Z web/dist.zip --clobber`。
+
+## 4. 实际部署流程（静态 nginx 服务器）
+
+生产环境现状（`114.55.54.9`）：
+
+- nginx 1.24（Ubuntu），多站点模式：`/etc/nginx/sites-available/<域名>` 写配置，`/etc/nginx/sites-enabled/<域名>` 软链接启用。
+- 站点目录：`/var/www/<域名>/`，属主 `www-data`。
+- 每次发布前在 `/var/www/` 下生成时间戳备份 `/<域名>_<YYYYMMDD_HHMMSS>.tar.gz`。
+
+### 4.1 首次部署（已有 nginx 配置可跳过）
+
+在服务器 `/etc/nginx/sites-available/canvas.imihoo.com` 放置站点配置（生产已有，要点如下）：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name canvas.imihoo.com;
+
+    ssl_certificate     /etc/nginx/ssl/canvas.imihoo.com/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/canvas.imihoo.com/key.pem;
+
+    root /var/www/canvas.imihoo.com;
+    index index.html;
+
+    # SPA 路由回退（不要写 $uri/，否则 public/ 下与路由同名的目录会 301→403）
+    location / {
+        try_files $uri /index.html;
+    }
+
+    # 运行期配置禁止缓存
+    location = /config.js {
+        add_header Cache-Control "no-store";
+    }
+
+    # 带 hash 的静态资源长缓存
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # Gzip
+    gzip on;
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript image/svg+xml;
+}
+
+server {
+    listen 80;
+    server_name canvas.imihoo.com;
+    return 301 https://$host$request_uri;
+}
+```
+
+启用并检查：
+
+```bash
+ln -s /etc/nginx/sites-available/canvas.imihoo.com /etc/nginx/sites-enabled/
+nginx -t && nginx -s reload
+```
+
+### 4.2 每次发版（本机操作）
+
+```bash
+# 0) 发布前检查：必须已按第 3 节完成提交并打好 tag（硬性规则，未打 tag 不得部署）
+cd infinite-canvas
+cat VERSION && git tag -l | tail -3
+
+# 1) 构建
+cd infinite-canvas/web
+bun install
+bun run build            # 产物在 web/dist
+
+# 2) 打包（打包 dist 目录内容，不含目录本身）
+cd web/dist
+zip -r /tmp/canvas-deploy.zip .
+
+# 3) 上传
+scp /tmp/canvas-deploy.zip root@114.55.54.9:/tmp/
+```
+
+### 4.3 每次发版（服务器操作）
+
+```bash
+STAMP=$(date +%Y%m%d_%H%M%S)
+
+# 1) 备份当前线上目录（沿用 /var/www 下时间戳 tar.gz 的习惯）
+tar czf /var/www/canvas.imihoo.com_${STAMP}.tar.gz -C /var/www canvas.imihoo.com
+
+# 2) 替换站点目录
+rm -rf /var/www/canvas.imihoo.com
+mkdir -p /var/www/canvas.imihoo.com
+# 注意：该服务器未安装 unzip，用 python3 解压
+python3 -c "import zipfile; zipfile.ZipFile('/tmp/canvas-deploy.zip').extractall('/var/www/canvas.imihoo.com')"
+rm -f /tmp/canvas-deploy.zip
+
+# 3) 修正属主
+chown -R www-data:www-data /var/www/canvas.imihoo.com
+
+# 4) 纯静态发版一般不需要动 nginx；如改过配置再执行
+nginx -t && nginx -s reload
+```
+
+### 4.4 回滚
+
+```bash
+STAMP=20260905_180419   # 换成要回滚的备份时间戳
+rm -rf /var/www/canvas.imihoo.com
+tar xzf /var/www/canvas.imihoo.com_${STAMP}.tar.gz -C /var/www
+chown -R www-data:www-data /var/www/canvas.imihoo.com
+```
+
+## 5. 验证部署结果
+
+由于本机公网出口对个别服务器 IP 的 TLS 握手可能不稳定（`curl` 报 `SSL_ERROR_SYSCALL` 时不代表服务器故障），**优先在服务器本机做回环验证**：
+
+```bash
+# 1) 首页（HTTP 200，且 index.html 大小与本地 web/dist/index.html 一致）
+curl -sk -o /dev/null -w "HTTP %{http_code}  %{size_download}B\n" https://canvas.imihoo.com/
+
+# 2) 首页引用的资源逐一 200（hash 文件名应与本地 web/dist/assets 一致）
+for f in $(grep -o 'assets/[^"]*' /var/www/canvas.imihoo.com/index.html); do
+  curl -sk -o /dev/null -w "%{http_code}  $f\n" "https://127.0.0.1/$f" -H "Host: canvas.imihoo.com"
+done
+
+# 3) 运行期配置
+curl -sk -o /dev/null -w "%{http_code}  config.js\n" https://127.0.0.1/config.js -H "Host: canvas.imihoo.com"
+
+# 4) SPA 路由回退：任意前端路由应返回 index.html（含 <title>无限画布</title>）
+curl -sk -H "Host: canvas.imihoo.com" https://127.0.0.1/canvas/abc123 | grep -o "<title>[^<]*"
+
+# 5) 内置工作流可下载（/guide 页依赖）
+curl -sk -o /dev/null -w "%{http_code}  workflows\n" \
+  "https://127.0.0.1/$(ls /var/www/canvas.imihoo.com/workflows/*.json | head -1 | xargs basename)" \
+  -H "Host: canvas.imihoo.com"
+
+# 6) 配置合法性
+nginx -t
+```
+
+全部为 200 且 index.html 引用的 `assets/index-*.js` / `*.css` hash 与本地 `web/dist/assets/` 一致，即部署成功。有公网条件时再从外部访问 `https://canvas.imihoo.com/` 复核一次。
+
+## 6. 注意事项
+
+- 服务器无 `unzip`，解压一律用 `python3 -c "import zipfile; ..."`；也可 `apt install unzip` 后改用 unzip。
+- `config.js` 是运行期配置：Docker 部署靠环境变量在容器启动时生成；静态部署如需启用统计，直接改 `/var/www/canvas.imihoo.com/config.js` 中对应 ID 即可（已被配置为 `no-store`，改完即时生效，无需重新构建）。
+- `web/dist` 与 `dist.zip` 等产物不进 Git（`.gitignore` 已忽略），每次发版必须重新构建，避免部署到过期产物。
+- 发版前保留 `/var/www/<域名>_<时间戳>.tar.gz` 备份是既定习惯，回滚依赖这些备份，清理磁盘时注意保留最近若干份。
+
+## 7. 公网多人实时协同部署
+
+> 详细的协同服务系统架构、systemd 守护进程、Nginx 反代与运维排查手册参见独立文档：`DEPLOY-Collaboration.md`。
+
+当项目部署在公网生产环境（如 `https://canvas.imihoo.com`）时，多人协同的运行架构如下：
+
+```
+                ┌───────────────────────────────┐
+                │   公网生产服务器 (114.55.54.9)   │
+                │                               │
+                │  Nginx (canvas.imihoo.com)    │
+                │    ├─ location / (前端静态资源) │
+                │    ├─ location /ws/collab ────┼───► 本地 Node 协同服务 (:3002)
+                │    └─ location /api/collab/ ──┼───► (实时信令广播 + 媒体资产流式中继)
+                └───────▲──────────────▲────────┘
+                        │              │
+       WSS/HTTPS 协同通信│              │ WSS/HTTPS 观看与下载
+                        │              │
+            ┌───────────┴───┐      ┌───┴──────────┐
+            │  房主 (Host)  │      │ 协作者 (Viewer)│
+            │  (创作者电脑)  │      │ (任意公网访客) │
+            └───────▲───────┘      └──────────────┘
+                    │ 本地直连 (127.0.0.1:8188)
+            ┌───────┴───────┐
+            │ 本地 ComfyUI  │ (算力与隐私留在房主本地，
+            │ (无需公网暴露) │  协作者零 GPU 门槛)
+            └───────────────┘
+```
+
+### 7.1 服务端部署（PM2 守护进程）
+
+服务器端只需要一个极其轻量的 Node 进程运行现有的 `web/server/standalone.mjs`（仅依赖 Node 原生模块与 `ws` 库）：
+
+```bash
+# 1) 在服务器上创建协同服务目录（如 /var/www/collab-server）
+mkdir -p /var/www/collab-server
+cd /var/www/collab-server
+
+# 2) 放置 standalone.mjs 和 collab-server.mjs（可从仓库 web/server/ 同步）
+# 3) 安装唯一依赖 ws
+npm init -y && npm install ws
+
+# 4) 通过 PM2 守护启动并设置开机自启
+pm2 start standalone.mjs --name canvas-collab -- --port 3002
+pm2 save
+pm2 startup
+```
+
+### 7.2 Nginx 反向代理配置
+
+在 `/etc/nginx/sites-available/canvas.imihoo.com` 的 `server { listen 443 ssl; ... }` 块中追加两段代理配置：
+
+```nginx
+    # 1) 多人实时协同 WebSocket 路由 (WSS)
+    location /ws/collab {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    # 2) 协同媒体资产中继 (支持大图片/长视频流式播放与原画下载)
+    location /api/collab/ {
+        proxy_pass http://127.0.0.1:3002;
+        proxy_set_header Host $host;
+        client_max_body_size 100M;
+        proxy_buffering off;
+    }
+```
+
+重载 Nginx 生效：
+
+```bash
+nginx -t && nginx -s reload
+```
+
+### 7.3 验证公网协同服务
+
+```bash
+# 1) 验证 Node 协同服务健康状态
+curl -I http://127.0.0.1:3002/api/collab/network-ip
+
+# 2) 验证 Nginx 外部中继接口（HTTP 200）
+curl -sk -I https://canvas.imihoo.com/api/collab/network-ip
+```
+

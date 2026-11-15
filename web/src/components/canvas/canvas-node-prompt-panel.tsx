@@ -1,0 +1,725 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, AtSign, LoaderCircle, Maximize2, Minimize2, RefreshCw, Square } from "lucide-react";
+import { Button, Modal, Tooltip } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { cn } from "@/lib/utils";
+
+import { AudioModelPicker } from "@/components/audio-model-picker";
+import { VideoModelPicker } from "@/components/video-model-picker";
+import { ImageModelPicker } from "@/components/image-model-picker";
+import { TextModelPicker } from "@/components/text-model-picker";
+import { decodeChannelModel, defaultConfig, encodeChannelModel, findWorkflow, getChannelWorkflows, isModelSupportedByHost, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { BUILTIN_VIDEO_WORKFLOW_MODELS, evaluateModelAvailability, getModelProfile, imageQwen21Profile, resolveModelIdFromWorkflowId, resolveVideoModelIdForMode, textQwen35Profile } from "@/services/api/models";
+import { getNodeResourceCounts } from "@/lib/canvas/canvas-node-geometry";
+import { canvasThemes } from "@/lib/canvas-theme";
+import { useThemeStore } from "@/stores/use-theme-store";
+import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { CanvasPromptLibrary } from "./canvas-prompt-library";
+import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
+import { CanvasPromptChipInput } from "./canvas-prompt-chip-input";
+import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
+import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
+import { CanvasNodeType, type CanvasGenerationIntent, type CanvasGenerationMode, type CanvasNodeData } from "@/types/canvas";
+import { getCanvasAllCategorizedResources, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
+import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
+
+export type CanvasNodeGenerationMode = CanvasGenerationMode;
+
+type CanvasNodePromptPanelProps = {
+    node: CanvasNodeData;
+    isRunning: boolean;
+    onPromptChange: (nodeId: string, prompt: string) => void;
+    onConfigChange: (nodeId: string, patch: Partial<CanvasNodeData["metadata"]>) => void;
+    onGenerate: (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string, intent?: CanvasGenerationIntent) => void;
+    onStop: (nodeId: string) => void;
+    mentionReferences?: CanvasResourceReference[];
+    nodes: CanvasNodeData[];
+    connectedNodes?: CanvasNodeData[];
+    onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
+    onConnectReference?: (fromNodeId: string, toNodeId: string) => boolean | Promise<boolean>;
+    onStartReferenceSelection?: (nodeId: string) => void;
+    onReorderReferences?: (toNodeId: string, orderedSourceNodeIds: string[]) => void;
+    onLocateNode?: (nodeId: string) => void;
+    onSettingsOpenChange?: (open: boolean) => void;
+    onImageSettingsOpenChange?: (open: boolean) => void;
+    modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
+};
+
+export function CanvasNodePromptPanel({
+    node,
+    nodes,
+    isRunning,
+    onPromptChange,
+    onConfigChange,
+    onGenerate,
+    onStop,
+    mentionReferences = [],
+    connectedNodes = [],
+    onDisconnectReference,
+    onConnectReference,
+    onStartReferenceSelection,
+    onReorderReferences,
+    onLocateNode,
+    onSettingsOpenChange,
+    onImageSettingsOpenChange,
+    modeOverride,
+}: CanvasNodePromptPanelProps) {
+    const handleSettingsOpenChange = onSettingsOpenChange || onImageSettingsOpenChange;
+    const { t } = useTranslation();
+    const globalConfig = useEffectiveConfig();
+    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const mode = modeOverride ?? defaultMode(node.type);
+    const config = buildNodeConfig(globalConfig, node, mode);
+    const nodeWorkflow = mode === "video" && node.metadata?.workflowId ? findWorkflow(globalConfig, node.metadata.channelId || globalConfig.channelId, node.metadata.workflowId) : undefined;
+    const workflowCategory = nodeWorkflow?.id === node.metadata?.workflowId ? nodeWorkflow?.category : undefined;
+    const videoTool = workflowCategory === "faceRefine" || workflowCategory === "depthVideo" ? workflowCategory : undefined;
+    const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
+    const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
+    const hasVideoContent = node.type === CanvasNodeType.Video && Boolean(node.metadata?.content);
+    const hasAudioContent = node.type === CanvasNodeType.Audio && Boolean(node.metadata?.content);
+    const hasSavedToolResult = Boolean(videoTool && hasVideoContent);
+    const savedVideoInput = node.metadata?.generationReferences?.find((reference) => reference.kind === "video");
+    const savedToolInputSummary = hasSavedToolResult ? (
+        <div className="mb-2 space-y-1 text-xs" style={{ color: theme.node.muted }}>
+            <div>{t("canvas.promptPanel.toolInputs", { title: nodes.find((input) => input.id === savedVideoInput?.nodeId)?.title || t("assets.kinds.video"), count: node.metadata?.generationReferences?.filter((reference) => reference.kind === "image").length || 0 })}</div>
+            <div className="text-[11px]">{t("canvas.promptPanel.toolInputsHint")}</div>
+        </div>
+    ) : null;
+    const isEditingExistingContent = hasTextContent || hasImageContent || hasVideoContent || hasAudioContent;
+    const canRepeat = node.metadata?.status === "success" || hasSavedToolResult;
+    const isGenerating = isRunning || node.metadata?.status === "loading";
+    const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
+    const [expanded, setExpanded] = useState(false);
+    const [isFullscreen, setIsFullscreen] = useState(false);
+    const triggerMentionRef = useRef<(() => void) | null>(null);
+
+    const connectedNodeIds = useMemo(() => new Set(connectedNodes.map((n) => n.id)), [connectedNodes]);
+    const categorizedResources = useMemo(() => {
+        return getCanvasAllCategorizedResources(node.id, nodes, connectedNodeIds);
+    }, [node.id, nodes, connectedNodeIds]);
+
+    const connectedResources = useMemo(() => {
+        let images = 0;
+        let videos = 0;
+        let audios = 0;
+        for (const src of connectedNodes) {
+            const counts = getNodeResourceCounts(src, nodes);
+            images += counts.images;
+            videos += counts.videos;
+            audios += counts.audios;
+        }
+        return { images, videos, audios };
+    }, [connectedNodes, nodes]);
+    const savedDraftImageCount = videoTool && !hasVideoContent && connectedResources.images === 0
+        ? node.metadata?.generationReferences?.filter((reference) => reference.kind === "image" && !nodes.some((input) => input.id === reference.nodeId)).length || 0
+        : 0;
+    const savedDraftReferenceHint = savedDraftImageCount > 0 ? <div className="mb-2 text-[11px]" style={{ color: theme.node.muted }}>{t("canvas.promptPanel.savedToolImages", { count: savedDraftImageCount })}</div> : null;
+
+    const videoModelAvailability = useMemo(() => {
+        if (mode !== "video" || videoTool) return { isAvailable: true, reasons: [] };
+        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift");
+        const profile = getModelProfile(effectiveModelId) || BUILTIN_VIDEO_WORKFLOW_MODELS[0];
+        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
+        return evaluateModelAvailability({
+            targetModel: profile,
+            connectedImages: connectedResources.images,
+            connectedVideos: connectedResources.videos,
+            connectedAudios: connectedResources.audios,
+            promptText: prompt,
+            activeChannel,
+        });
+    }, [mode, videoTool, node.metadata?.modelId, node.metadata?.workflowId, node.metadata?.videoMode, node.metadata?.channelId, config.videoMode, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+
+    const imageModelAvailability = useMemo(() => {
+        if (mode !== "image") return { isAvailable: true, reasons: [] };
+        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1";
+        const profile = getModelProfile(effectiveModelId) || imageQwen21Profile;
+        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
+        return evaluateModelAvailability({
+            targetModel: profile,
+            connectedImages: connectedResources.images,
+            connectedVideos: connectedResources.videos,
+            connectedAudios: connectedResources.audios,
+            promptText: prompt,
+            activeChannel,
+        });
+    }, [mode, node.metadata?.modelId, node.metadata?.workflowId, config.imageModel, node.metadata?.channelId, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+
+    const textModelAvailability = useMemo(() => {
+        if (mode !== "text") return { isAvailable: true, reasons: [] };
+        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35";
+        const profile = getModelProfile(effectiveModelId) || textQwen35Profile;
+        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
+        return evaluateModelAvailability({
+            targetModel: profile,
+            connectedImages: connectedResources.images,
+            connectedVideos: connectedResources.videos,
+            connectedAudios: connectedResources.audios,
+            promptText: prompt,
+            activeChannel,
+        });
+    }, [mode, node.metadata?.modelId, node.metadata?.workflowId, node.metadata?.channelId, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+
+    const isCurrentModelAvailable = mode === "video"
+        ? videoModelAvailability.isAvailable
+        : mode === "image"
+        ? imageModelAvailability.isAvailable
+        : mode === "text"
+        ? textModelAvailability.isAvailable
+        : true;
+    const currentModelUnavailabilityReasons = mode === "video"
+        ? videoModelAvailability.reasons
+        : mode === "image"
+        ? imageModelAvailability.reasons
+        : mode === "text"
+        ? textModelAvailability.reasons
+        : [];
+
+    // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
+    useEffect(() => {
+        setPrompt(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [node.id]);
+
+    const updatePrompt = (value: string) => {
+        setPrompt(value);
+        if (isEditingExistingContent) onConfigChange(node.id, { composerContent: value });
+        else onPromptChange(node.id, value);
+    };
+
+    const canSubmitEmptyPrompt = videoTool === "depthVideo" || (mode === "text" && connectedResources.images > 0);
+    const promptPlaceholder = videoTool === "faceRefine"
+        ? t("canvas.faceRefine.modal.promptPlaceholder")
+        : videoTool === "depthVideo"
+        ? t("canvas.promptPanel.depthVideoPrompt")
+        : mode === "text" && connectedResources.images > 0
+        ? "输入看图指令（留空默认执行生图提示词反推）..."
+        : t("canvas.promptPanel.mentionPlaceholder", "@搜索主体、图片、视频");
+
+    const submit = (intent: CanvasGenerationIntent = canRepeat ? "repeat" : "new") => {
+        const text = prompt.trim();
+        if ((!text && intent !== "repeat" && !canSubmitEmptyPrompt) || isGenerating) return;
+
+        // 视频生成前校验当前主机与模型多维约束（规范模式）
+        if (mode === "video") {
+            if (!videoModelAvailability.isAvailable) {
+                Modal.warning({
+                    title: "无法生成视频（存在不兼容项）",
+                    content: (
+                        <div className="space-y-2 pt-2 text-xs">
+                            <div>当前视频节点存在以下约束限制，请修正后再生成：</div>
+                            <div className="space-y-1 rounded bg-stone-100 p-2 dark:bg-stone-800">
+                                {videoModelAvailability.reasons.map((r, i) => (
+                                    <div key={i} className="flex items-start gap-1.5">
+                                        <span className="text-amber-500 font-bold">•</span>
+                                        <span>{r}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ),
+                    okText: "我知道了",
+                });
+                return;
+            }
+        }
+
+        // 图片生成前校验当前主机与模型多维约束（规范模式）
+        if (mode === "image") {
+            if (!imageModelAvailability.isAvailable) {
+                Modal.warning({
+                    title: "无法生成图片（存在不兼容项）",
+                    content: (
+                        <div className="space-y-2 pt-2 text-xs">
+                            <div>当前图片节点存在以下约束限制，请修正后再生成：</div>
+                            <div className="space-y-1 rounded bg-stone-100 p-2 dark:bg-stone-800">
+                                {imageModelAvailability.reasons.map((r, i) => (
+                                    <div key={i} className="flex items-start gap-1.5">
+                                        <span className="text-amber-500 font-bold">•</span>
+                                        <span>{r}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ),
+                    okText: "我知道了",
+                });
+                return;
+            }
+        }
+
+        onGenerate(node.id, mode, text, intent);
+    };
+
+    const openExpandedEditor = () => {
+        setExpanded(true);
+        setIsFullscreen(false);
+    };
+
+    const closeExpandedEditor = () => {
+        setExpanded(false);
+        setIsFullscreen(false);
+    };
+
+    return (
+        <div
+            data-canvas-no-zoom
+            className="flex min-h-0 flex-col rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            style={{ maxHeight: "var(--canvas-node-panel-max-height, none)", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+            onMouseDown={(event) => event.stopPropagation()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onWheel={(event) => event.stopPropagation()}
+        >
+            <div data-canvas-node-panel-body className="thin-scrollbar min-h-0 overflow-y-auto overscroll-contain">
+            {savedToolInputSummary || <CanvasNodeReferenceBar
+                nodeId={node.id}
+                nodes={nodes}
+                connectedNodes={connectedNodes}
+                onDisconnect={onDisconnectReference}
+                onStartSelection={() => {
+                    triggerMentionRef.current?.();
+                }}
+                onReorder={onReorderReferences}
+                onLocateNode={onLocateNode}
+            />}
+            {savedDraftReferenceHint}
+            {mode === "text" && connectedResources.images > 0 && (
+                <div className="mb-2 flex items-center gap-1.5 overflow-x-auto text-xs py-0.5">
+                    <span className="shrink-0 text-stone-400 dark:text-stone-500">快捷指令:</span>
+                    <button
+                        type="button"
+                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        onClick={() => updatePrompt("请根据参考图片反推一段适合用于 AI 生图的提示词。涵盖主体、构图、光影、色彩与质感。")}
+                    >
+                        生图反推
+                    </button>
+                    <button
+                        type="button"
+                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        onClick={() => updatePrompt("详细分析提取这张图片的视觉风格、艺术流派、配色方案与渲染材质。")}
+                    >
+                        风格提取
+                    </button>
+                    <button
+                        type="button"
+                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        onClick={() => updatePrompt("用详细的自然语言描述画面中的主体、人物姿态、镜头机位与环境分镜。")}
+                    >
+                        分镜描述
+                    </button>
+                </div>
+            )}
+            <CanvasPromptChipInput
+                value={prompt}
+                references={hasSavedToolResult ? [] : mentionReferences}
+                categorizedResources={categorizedResources}
+                showMotionPresets={mode === "video"}
+                onConnectResource={(sourceNodeId) => (onConnectReference ? onConnectReference(sourceNodeId, node.id) : true)}
+                triggerMentionRef={triggerMentionRef}
+                onChange={updatePrompt}
+                onSubmit={submit}
+                className="thin-scrollbar h-40 w-full cursor-text resize-none rounded-xl px-3 py-2 text-sm leading-5 outline-none"
+                style={{ background: "transparent", color: theme.node.text }}
+                placeholder={promptPlaceholder}
+            />
+            </div>
+
+            <div data-canvas-node-panel-actions className="mt-2 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2">
+                <div className="thin-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
+                    <Tooltip title={t("canvas.promptPanel.expandEditor")}>
+                        <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
+                    </Tooltip>
+                    {mode === "image" ? (
+                        <>
+                            <ImageModelPicker
+                                channelId={node.metadata?.channelId || config.channelId}
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1"}
+                                connectedImages={connectedResources.images}
+                                connectedVideos={connectedResources.videos}
+                                connectedAudios={connectedResources.audios}
+                                promptText={prompt}
+                                onChange={(nextChannelId, nextModelId) => {
+                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "t2i").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    onConfigChange(node.id, {
+                                        channelId: nextChannelId,
+                                        modelId: nextModelId,
+                                        workflowId: matchingWf?.id,
+                                    });
+                                }}
+                            />
+                            <CanvasImageSettingsPopover
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1"}
+                                config={config}
+                                placement="topLeft"
+                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
+                                onMissingConfig={() => openConfigDialog(true)}
+                                onOpenChange={handleSettingsOpenChange}
+                            />
+                        </>
+                    ) : mode === "video" ? videoTool ? (
+                        <span className="truncate text-xs" style={{ color: theme.node.placeholder }}>{t(videoTool === "faceRefine" ? "canvas.faceRefine.title" : "canvas.nodeToolbar.depthVideo")}</span>
+                    ) : (
+                        <>
+                            <VideoModelPicker
+                                channelId={node.metadata?.channelId || config.channelId}
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")}
+                                connectedImages={connectedResources.images}
+                                connectedVideos={connectedResources.videos}
+                                connectedAudios={connectedResources.audios}
+                                promptText={prompt}
+                                onChange={(nextChannelId, nextModelId, profile) => {
+                                    const nextVideoMode = profile.category === "frameVideo" ? "frame" : "omni";
+                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, profile.category).find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    onConfigChange(node.id, {
+                                        channelId: nextChannelId,
+                                        modelId: nextModelId,
+                                        videoMode: nextVideoMode,
+                                        workflowId: matchingWf?.id,
+                                    });
+                                }}
+                            />
+                            <CanvasVideoSettingsPopover
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")}
+                                size={node.metadata?.size || config.size}
+                                duration={node.metadata?.seconds || config.videoSeconds}
+                                videoMode={(node.metadata?.videoMode as "omni" | "frame") || (config.videoMode as "omni" | "frame")}
+                                onParamChange={(patch) => {
+                                    onConfigChange(node.id, patch);
+                                }}
+                                config={config}
+                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value, config, node.metadata?.modelId))}
+                                onOpenChange={handleSettingsOpenChange}
+                            />
+                        </>
+                    ) : mode === "audio" ? (
+                        <>
+                            <AudioModelPicker
+                                channelId={node.metadata?.channelId || config.channelId}
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "audio-minimax-music-3"}
+                                connectedImages={connectedResources.images}
+                                connectedVideos={connectedResources.videos}
+                                connectedAudios={connectedResources.audios}
+                                promptText={prompt}
+                                onChange={(nextChannelId, nextModelId) => {
+                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "audio").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    onConfigChange(node.id, {
+                                        channelId: nextChannelId,
+                                        modelId: nextModelId,
+                                        workflowId: matchingWf?.id,
+                                    });
+                                }}
+                            />
+                            <CanvasAudioSettingsPopover
+                                config={config}
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "audio-minimax-music-3"}
+                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))}
+                                onOpenChange={handleSettingsOpenChange}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <TextModelPicker
+                                channelId={node.metadata?.channelId || config.channelId}
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35"}
+                                connectedImages={connectedResources.images}
+                                connectedVideos={connectedResources.videos}
+                                connectedAudios={connectedResources.audios}
+                                promptText={prompt}
+                                onChange={(nextChannelId, nextModelId) => {
+                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "text").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    onConfigChange(node.id, {
+                                        channelId: nextChannelId,
+                                        modelId: nextModelId,
+                                        workflowId: matchingWf?.id,
+                                    });
+                                }}
+                            />
+                            <CanvasTextSettingsPopover
+                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35"}
+                                maxLength={node.metadata?.maxLength}
+                                thinking={node.metadata?.thinking}
+                                onParamChange={(patch) => onConfigChange(node.id, patch)}
+                                config={config}
+                                count={node.metadata?.textCount || 1}
+                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                onCountChange={(textCount) => onConfigChange(node.id, { textCount })}
+                                onOpenChange={handleSettingsOpenChange}
+                            />
+                        </>
+                    )}
+                    <Tooltip title={t("canvas.promptPanel.mentionResource", "召唤/引用画布资源 (@)")}>
+                        <Button
+                            type="text"
+                            className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
+                            style={{ color: theme.node.text }}
+                            icon={<AtSign className="size-3.5" />}
+                            onMouseDown={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                            }}
+                            onClick={() => triggerMentionRef.current?.()}
+                            aria-label="召唤/引用画布资源"
+                        />
+                    </Tooltip>
+                    <CanvasPromptLibrary onSelect={updatePrompt} />
+                </div>
+                {isGenerating ? (
+                    <Button type="primary" danger className="ml-auto !h-10 shrink-0 !rounded-full !px-3" onClick={() => onStop(node.id)} aria-label={t("canvas.promptPanel.stopGeneration")}>
+                        <span className="flex items-center gap-1.5">
+                            <LoaderCircle className="size-4 animate-spin" />
+                            <Square className="size-3.5 fill-current" />
+                            <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
+                        </span>
+                    </Button>
+                ) : videoTool ? (
+                    <Button
+                        type="primary"
+                        className="ml-auto !h-10 shrink-0 !rounded-full !px-4"
+                        icon={canRepeat ? <RefreshCw className="size-3.5" /> : undefined}
+                        disabled={!canRepeat && !prompt.trim() && !canSubmitEmptyPrompt}
+                        onClick={() => submit(canRepeat ? "repeat" : "new")}
+                    >
+                        {t(`canvas.promptPanel.${videoTool}${canRepeat ? "Repeat" : "Start"}`)}
+                    </Button>
+                ) : canRepeat ? (
+                    !isCurrentModelAvailable ? (
+                        <Tooltip
+                            title={
+                                <div className="space-y-1 text-xs">
+                                    <div className="font-semibold text-amber-300">无法再次生成（存在不兼容项）：</div>
+                                    {currentModelUnavailabilityReasons.map((r, i) => (
+                                        <div key={i}>• {r}</div>
+                                    ))}
+                                </div>
+                            }
+                        >
+                            <span>
+                                <Button
+                                    type="primary"
+                                    className="ml-auto !h-10 !rounded-full !px-4"
+                                    icon={<RefreshCw className="size-3.5" />}
+                                    disabled
+                                >
+                                    {t("canvas.promptPanel.repeatGeneration")}
+                                </Button>
+                            </span>
+                        </Tooltip>
+                    ) : (
+                        <Button
+                            type="primary"
+                            className="ml-auto !h-10 !rounded-full !px-4"
+                            icon={<RefreshCw className="size-3.5" />}
+                            onClick={() => submit("repeat")}
+                        >
+                            {t("canvas.promptPanel.repeatGeneration")}
+                        </Button>
+                    )
+                ) : (
+                    !isCurrentModelAvailable ? (
+                        <Tooltip
+                            title={
+                                <div className="space-y-1 text-xs">
+                                    <div className="font-semibold text-amber-300">无法生成（存在不兼容项）：</div>
+                                    {currentModelUnavailabilityReasons.map((r, i) => (
+                                        <div key={i}>• {r}</div>
+                                    ))}
+                                </div>
+                            }
+                        >
+                            <span>
+                                <Button
+                                    type="primary"
+                                    className="ml-auto !h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                                    disabled
+                                    aria-label={t("canvas.promptPanel.generate")}
+                                >
+                                    <ArrowUp className="size-4" />
+                                </Button>
+                            </span>
+                        </Tooltip>
+                    ) : (
+                        <Button
+                            type="primary"
+                            className="ml-auto !h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                            disabled={!prompt.trim() && !canSubmitEmptyPrompt}
+                            onClick={() => submit("new")}
+                            aria-label={t("canvas.promptPanel.generate")}
+                        >
+                            <ArrowUp className="size-4" />
+                        </Button>
+                    )
+                )}
+            </div>
+            <Modal
+                title={
+                    <div className="flex items-center justify-between pr-8">
+                        <span className="text-base font-semibold">{t("canvas.promptPanel.editorTitle")}</span>
+                        <Tooltip title={isFullscreen ? t("canvas.promptPanel.exitFullscreen") : t("canvas.promptPanel.fullscreen")}>
+                            <Button
+                                type="text"
+                                size="small"
+                                className="!flex !h-7 !w-7 !items-center !justify-center !rounded-lg !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/10"
+                                style={{ color: theme.node.text }}
+                                icon={isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                                onClick={() => setIsFullscreen((prev) => !prev)}
+                                aria-label={isFullscreen ? t("canvas.promptPanel.exitFullscreen") : t("canvas.promptPanel.fullscreen")}
+                            />
+                        </Tooltip>
+                    </div>
+                }
+                open={expanded}
+                centered={!isFullscreen}
+                width={isFullscreen ? "100vw" : 800}
+                style={isFullscreen ? { top: 0, margin: 0, maxWidth: "100vw", paddingBottom: 0 } : undefined}
+                wrapClassName={isFullscreen ? "!p-0" : undefined}
+                styles={{
+                    content: isFullscreen
+                        ? { height: "100vh", borderRadius: 0, display: "flex", flexDirection: "column", padding: "16px 24px" }
+                        : { display: "flex", flexDirection: "column" },
+                    body: isFullscreen
+                        ? { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflow: "hidden" }
+                        : { display: "flex", flexDirection: "column" },
+                }}
+                footer={
+                    <div className="flex items-center justify-between pt-2">
+                        <div className="flex items-center gap-3 text-xs" style={{ color: theme.node.placeholder }}>
+                            <CanvasPromptLibrary onSelect={updatePrompt} />
+                            <span>{t("canvas.promptPanel.charCount", { count: prompt.length })}</span>
+                        </div>
+                        <Button type="primary" className="!rounded-full !px-5" onClick={closeExpandedEditor}>
+                            {t("canvas.promptPanel.done")}
+                        </Button>
+                    </div>
+                }
+                onCancel={closeExpandedEditor}
+                destroyOnHidden
+            >
+                <div
+                    data-canvas-no-zoom
+                    className={cn("flex flex-col pt-2", isFullscreen ? "flex-1 min-h-0" : "")}
+                    onWheelCapture={(event) => event.stopPropagation()}
+                >
+                    {savedToolInputSummary || <CanvasNodeReferenceBar
+                        nodeId={node.id}
+                        nodes={nodes}
+                        connectedNodes={connectedNodes}
+                        onDisconnect={onDisconnectReference}
+                        onStartSelection={(nodeId) => {
+                            closeExpandedEditor();
+                            onStartReferenceSelection?.(nodeId);
+                        }}
+                        onReorder={onReorderReferences}
+                        onLocateNode={(targetId) => {
+                            closeExpandedEditor();
+                            onLocateNode?.(targetId);
+                        }}
+                    />}
+                    {savedDraftReferenceHint}
+                    <CanvasPromptChipInput
+                        value={prompt}
+                        references={hasSavedToolResult ? [] : mentionReferences}
+                        categorizedResources={categorizedResources}
+                        showMotionPresets={mode === "video"}
+                        onConnectResource={(sourceNodeId) => (onConnectReference ? onConnectReference(sourceNodeId, node.id) : true)}
+                        onChange={updatePrompt}
+                        containerClassName={isFullscreen ? "flex-1 min-h-0 flex flex-col" : ""}
+                        className={cn(
+                            "thin-scrollbar w-full cursor-text overflow-y-auto rounded-xl border p-4 text-[15px] leading-6 outline-none",
+                            isFullscreen ? "flex-1 min-h-[50vh] h-full" : "h-[52dvh] min-h-80"
+                        )}
+                        style={{ background: "transparent", borderColor: theme.toolbar.border, color: theme.node.text }}
+                        placeholder={promptPlaceholder}
+                    />
+                </div>
+            </Modal>
+        </div>
+    );
+}
+
+function defaultMode(type: CanvasNodeData["type"]): CanvasNodeGenerationMode {
+    return type === CanvasNodeType.Text ? "text" : type === CanvasNodeType.Video ? "video" : type === CanvasNodeType.Audio ? "audio" : "image";
+}
+
+function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: CanvasNodeGenerationMode): AiConfig {
+    const rawModel = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || node.metadata?.model;
+    const model = resolveModelForCapability(globalConfig, rawModel, mode);
+    const isFrame = node.metadata?.modelId === "video_minimax_h3_frame" || node.metadata?.modelId?.includes("frame") || model.toLowerCase().includes("frame") || model.includes("首尾帧");
+    const isOmni = node.metadata?.modelId === "video_minimax_h3_omni" || node.metadata?.modelId?.includes("omni") || model.toLowerCase().endsWith("comfyui video") || model.toLowerCase().includes("omni");
+    let videoMode = node.metadata?.videoMode;
+    if (mode === "video" && node.metadata?.workflowId) {
+        const wf = findWorkflow(globalConfig, node.metadata.channelId, node.metadata.workflowId);
+        if (wf?.category === "frameVideo") videoMode = "frame";
+        else if (wf?.category === "omniVideo") videoMode = "omni";
+    }
+    if (!videoMode) {
+        videoMode = isFrame ? "frame" : isOmni ? "omni" : globalConfig.videoMode || defaultConfig.videoMode || "omni";
+    }
+
+    return {
+        ...globalConfig,
+        model,
+        videoModel: mode === "video" ? model : globalConfig.videoModel,
+        imageModel: mode === "image" ? model : globalConfig.imageModel,
+        textModel: mode === "text" ? model : globalConfig.textModel,
+        audioModel: mode === "audio" ? model : globalConfig.audioModel,
+        videoMode,
+        reasoningEffort: node.metadata?.reasoningEffort || globalConfig.reasoningEffort || defaultConfig.reasoningEffort,
+        quality: node.metadata?.quality || globalConfig.quality || defaultConfig.quality,
+        size: node.metadata?.size || globalConfig.size || defaultConfig.size,
+        background: node.metadata?.background ?? globalConfig.background ?? defaultConfig.background,
+        videoSeconds: node.metadata?.seconds || globalConfig.videoSeconds || defaultConfig.videoSeconds,
+        audioSeconds: node.metadata?.seconds || globalConfig.audioSeconds || defaultConfig.audioSeconds || "60",
+        vquality: node.metadata?.vquality || globalConfig.vquality || defaultConfig.vquality,
+        videoGenerateAudio: node.metadata?.generateAudio || globalConfig.videoGenerateAudio || defaultConfig.videoGenerateAudio,
+        videoWatermark: node.metadata?.watermark || globalConfig.videoWatermark || defaultConfig.videoWatermark,
+        audioVoice: node.metadata?.audioVoice || globalConfig.audioVoice || defaultConfig.audioVoice,
+        audioFormat: node.metadata?.audioFormat || globalConfig.audioFormat || defaultConfig.audioFormat,
+        audioSpeed: node.metadata?.audioSpeed || globalConfig.audioSpeed || defaultConfig.audioSpeed,
+        audioInstructions: node.metadata?.audioInstructions || globalConfig.audioInstructions || defaultConfig.audioInstructions,
+        count: String(node.metadata?.count || (mode === "image" ? globalConfig.canvasImageCount || globalConfig.count : globalConfig.count) || defaultConfig.count),
+    };
+}
+
+function videoConfigPatch(key: keyof AiConfig, value: string, config?: AiConfig, currentModelId?: string) {
+    if (key === "videoSeconds") return { seconds: value };
+    if (key === "videoGenerateAudio") return { generateAudio: value };
+    if (key === "videoWatermark") return { watermark: value };
+    if (key === "videoMode") {
+        const patch: Record<string, unknown> = {
+            videoMode: value,
+            modelId: resolveVideoModelIdForMode(
+                currentModelId || config?.videoModel || config?.model,
+                value === "frame" ? "frame" : "omni",
+            ),
+        };
+        if (config) {
+            const channel = resolveModelChannel(config, config.model || config.videoModel);
+            if (value === "frame") {
+                const frameModel = channel.models.find((m) => m.name === "ComfyUI Frame Video" || m.name.toLowerCase().includes("frame") || m.name.includes("首尾帧"));
+                if (frameModel) patch.model = encodeChannelModel(channel.id, frameModel.name);
+            } else if (value === "omni") {
+                const omniModel = channel.models.find((m) => m.name === "ComfyUI Video" || (!m.name.toLowerCase().includes("frame") && !m.name.includes("首尾帧") && m.capability === "video"));
+                if (omniModel) patch.model = encodeChannelModel(channel.id, omniModel.name);
+            }
+        }
+        // 清空节点级工作流绑定：执行时 workflowId 优先于 modelId 派生，
+        // 若保留旧的类别默认工作流，切换后的模型（如 INT8 量化版）会被静默跳过。
+        patch.workflowId = undefined;
+        return patch;
+    }
+    return { [key]: value };
+}
+
+function audioConfigPatch(key: CanvasAudioSettingKey, value: string) {
+    if (key === "audioSeconds") return { seconds: value, audioSeconds: value };
+    return { [key]: value };
+}

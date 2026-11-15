@@ -1,0 +1,6 @@
+{
+  "title": "Development",
+  "root": true,
+  "defaultOpen": true,
+  "pages": ["local-development", "canvas-node-system", "comfyui-workflow-standard", "workflow-model-host-decoupling-spec", "multimodal-video-workflow-spec", "canvas-data-structure", "local-codex-canvas"]
+}

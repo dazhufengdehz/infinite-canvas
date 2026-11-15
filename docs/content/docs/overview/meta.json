@@ -1,0 +1,14 @@
+{
+  "title": "Overview",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "quick-start",
+    "workbuddy-connector",
+    "features",
+    "render",
+    "docker",
+    "third-party-prompt-repositories",
+    "[Live Demo](https://canvas.imihoo.com/)"
+  ]
+}
