@@ -55,6 +55,11 @@ function localCollabPlugin(): Plugin {
 export default defineConfig({
     base: process.env.VITE_BASE || "/",
     plugins: [react(), localPluginsManifest(), localCollabPlugin()],
+    server: {
+        watch: {
+            ignored: ["**/src-tauri/target/**"],
+        },
+    },
     resolve: {
         alias: {
             "@": resolve(webDir, "src"),
