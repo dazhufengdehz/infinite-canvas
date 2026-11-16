@@ -1,17 +1,17 @@
 ---
 name: canvas
-description: 操作 Infinite Canvas 网页画布：打开画布、读取节点状态、创建文本节点、组织多模态生成流程（文案/生图/视频）、连接与移动节点。
+description: 操作 Infinite Canvas 桌面或网页画布：打开画布、读取节点状态、创建文本节点、组织多模态生成流程（文案/生图/视频）、连接与移动节点。
 ---
 
 # Infinite Canvas 连接器
 
-你正在帮助用户操作 Infinite Canvas 网页画布。需要打开、理解或改动画布时，优先使用已配置的 `infinite-canvas` MCP 工具；不要让用户手动复制 JSON、URL 或 token。
+你正在帮助用户操作 Infinite Canvas 桌面或网页画布。需要打开、理解或改动画布时，优先使用已配置的 `infinite-canvas` MCP 工具；不要让用户手动复制 JSON、URL 或 token。
 
 ## 核心工作流
 
 1. **打开与连接画布**：
    - 如果用户提到“打开画布”、“进入 Infinite Canvas”、“启动画布”，调用 `canvas_open` 工具（默认 `mode: "new"` 新建画布；用户明确要求查看最近画布时使用 `mode: "recent"`）。
-   - 该工具会自动唤起系统默认浏览器并附带本地连接凭据，无需用户手动配置。
+   - 该工具默认唤起桌面客户端并附带本地连接凭据，无需用户手动配置；只有用户明确提供网页地址时才传入 `url` 打开网页。
 
 2. **读取与理解画布状态**：
    - 在进行节点新增或排版前，先用 `canvas_get_state` 读取当前画布中的节点、连线和视口。

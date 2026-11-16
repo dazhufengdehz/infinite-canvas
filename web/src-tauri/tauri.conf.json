@@ -21,6 +21,13 @@
             }
         ]
     },
+    "plugins": {
+        "deep-link": {
+            "desktop": {
+                "schemes": ["infinite-canvas"]
+            }
+        }
+    },
     "bundle": {
         "active": true,
         "targets": "all",

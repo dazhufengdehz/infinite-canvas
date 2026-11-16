@@ -7,6 +7,13 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Desktop-first `canvas_open` launching:
+  - Without a desktop client that supports `infinite-canvas://`, the default call must explain that installation is required and must not fall back to the web. An explicitly provided `url` must still open the requested web canvas in the system browser.
+  - After installing the new NSIS package, call `new`, `recent`, and `choose` separately. Confirm cold starts create only one client and one Sidecar, automatically connect the local Agent, and never create two projects from duplicate deep-link events in `new` mode.
+  - Minimize the running client and call the tool again. Confirm the original window is restored and focused without creating another project or Sidecar, and that MCP can still read the current canvas state.
+  - On Windows, install the client under a path containing Chinese characters and call the tool without `url`. Confirm the registered executable is resolved correctly and the installed desktop client opens instead of failing on a garbled path.
+  - While one project is connected, call `new` again. Confirm the Agent reconnects instead of retaining the previous SSE connection, the new project shows `WorkBuddy connected`, and `canvas_get_state` returns the new project; duplicate deep-link events must not create an extra project.
+
 - Desktop storage health-check recovery:
   - Start the Windows desktop client from the new NSIS package and confirm the bundled Sidecar listens on port `18080` even when launched through a `\\?\` extended resource path. Create, save, and reopen a canvas without manually starting Node.
   - Trigger one storage connection failure while the Sidecar is unavailable or port `18080` is temporarily occupied. Restore the Sidecar and create a canvas again without restarting the client. Confirm it probes `127.0.0.1:18080/api/health` again instead of reusing the initial failure.

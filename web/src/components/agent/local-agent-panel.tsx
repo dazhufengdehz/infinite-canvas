@@ -190,6 +190,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
     const attachmentUrlsRef = useRef(new Set<string>());
     const clientIdRef = useRef("");
     const [clientReady, setClientReady] = useState(false);
+    const [connectionRevision, setConnectionRevision] = useState(0);
     const loadThreadsSequenceRef = useRef(0);
     const threadMessagesRef = useRef(new Map<string, AgentChatItem[]>());
     const authoritativeHistoryTurnsRef = useRef(new Set<string>());
@@ -617,7 +618,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             loadThreadsSequenceRef.current += 1;
             useAgentSkillStore.getState().reset();
         };
-    }, [agentProvider, applyConversationState, applyWorkspaceChange, clientReady, enabled, endpoint, loadSkills, loadThreads, message, setAgentState, token]);
+    }, [agentProvider, applyConversationState, applyWorkspaceChange, clientReady, connectionRevision, enabled, endpoint, loadSkills, loadThreads, message, setAgentState, token]);
 
     useEffect(() => {
         if (connected && agentProvider === "codex") void loadThreads();
@@ -1036,6 +1037,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         }
         errorLoggedRef.current = false;
         setAgentState({ url: bootstrap.url.replace(/\/$/, ""), token: bootstrap.token, enabled: true, connected: false, silentConnect: true, fragmentBootstrap: true, confirmTools: false, activity: rt("connecting"), connectError: "", activeTab: "setup" });
+        setConnectionRevision((revision) => revision + 1);
     }, [hash, navigate, setAgentState]);
 
     useEffect(() => {

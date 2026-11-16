@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [调整] `canvas_open` 默认通过桌面深链唤起 Infinite Canvas 客户端并支持单实例聚焦与自动连接，仅显式传入 `url` 时打开网页。
++ [修复] 修复桌面深链切换画布后 Agent 未重连导致 MCP 继续读取旧项目，以及 Windows 中文安装路径下桌面客户端无法唤起的问题。
 + [修复] 修复 Windows 桌面端使用扩展资源路径启动 Sidecar 时主模块判断失败、服务静默退出导致无法创建画布的问题。
 + [修复] 修复桌面端首次存储健康检查失败后结果被永久缓存，Sidecar 恢复后仍无法创建画布的问题。
 + [新增] 本地 Agent 新增可持久化的 WorkBuddy / Codex / Trae 提供方选择，支持 Trae CLI 文本与图片对话、任务中断及 Trae IDE/CLI 通过 MCP 双向操作画布。

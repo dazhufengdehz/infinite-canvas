@@ -59,7 +59,7 @@ Infinite Canvas 提供了专属的 WorkBuddy 官方连接器（Connector），�
 ```text
 进入我最近打开的 Infinite Canvas 工程
 ```
-AI 将自动调用 `canvas_open` 唤醒系统默认浏览器访问 `https://canvas.imihoo.com/canvas`，并自动携带本地配对 Token 完成直连。
+AI 将自动调用 `canvas_open`，通过 `infinite-canvas://` 唤起已安装的桌面客户端，并自动携带本地配对 Token 完成直连。只有显式传入 `url` 时才打开网页画布；未安装桌面端会明确提示，不会静默回退网页。
 
 ### 2. 读取与理解画布结构
 ```text
@@ -91,7 +91,7 @@ AI 将自动调用 `canvas_open` 唤醒系统默认浏览器访问 `https://canv
 
 | 工具名称 | 功能说明 |
 | :--- | :--- |
-| `canvas_open` | 跨平台打开系统浏览器进入 Infinite Canvas 画布（支持 `new` / `recent` / `choose` 模式），并自动完成凭据注入与配对 |
+| `canvas_open` | 默认唤起桌面客户端（支持 `new` / `recent` / `choose` 模式），显式传入 `url` 时打开网页，并自动完成凭据注入与配对 |
 | `canvas_get_state` | 获取当前画布所有节点、连线关系及视口信息 |
 | `canvas_get_selection` | 获取当前画布中被用户鼠标选中的节点集合 |
 | `canvas_create_text_node` | 创建单个文本内容节点 |

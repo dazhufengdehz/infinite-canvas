@@ -57,7 +57,7 @@ Open Infinite Canvas
 ```text
 Open my most recent Infinite Canvas project
 ```
-WorkBuddy calls `canvas_open` to open `https://canvas.imihoo.com/canvas` in your default browser with connection credentials injected automatically.
+WorkBuddy calls `canvas_open` to launch the installed desktop client through `infinite-canvas://` with connection credentials injected automatically. A web canvas is opened only when `url` is explicitly provided; a missing desktop client produces an explicit error without silently falling back to the web.
 
 ### 2. Read & Understand Board State
 ```text
@@ -89,7 +89,7 @@ Connect the selected image to a video generation node for a 5-second camera moti
 
 | Tool Name | Description |
 | :--- | :--- |
-| `canvas_open` | Opens Infinite Canvas in the default browser (supports `new`, `recent`, and `choose` modes) and injects credentials |
+| `canvas_open` | Launches the desktop client by default (supports `new`, `recent`, and `choose` modes), opens the web only for an explicit `url`, and injects credentials |
 | `canvas_get_state` | Retrieves nodes, connections, and viewport bounds from the canvas |
 | `canvas_get_selection` | Gets all currently selected nodes on the board |
 | `canvas_create_text_node` | Adds a single text node to the canvas |

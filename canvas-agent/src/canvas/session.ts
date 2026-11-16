@@ -3,7 +3,7 @@ import type { ServerResponse } from "node:http";
 
 import type { AgentAttachment } from "../agent/types.js";
 import { logger } from "../utils/logger.js";
-import { openCanvasInBrowser } from "../utils/browser.js";
+import { openCanvas } from "../utils/browser.js";
 import { buildCanvasToolRequest, fitAttachmentNodeSize } from "./operations.js";
 import type { ToolName } from "./schemas.js";
 import { compactCanvasState, compactNode, isToolName, nextCanvasX, parseToolInput } from "./tools.js";
@@ -39,7 +39,7 @@ const SITE_TOOLS = new Set<ToolName>([
     "generation_get_status",
 ]);
 
-/** 管理网页画布连接、状态、附件和工具请求。 */
+/** 管理桌面或网页画布连接、状态、附件和工具请求。 */
 export class CanvasSession {
     private clients = new Map<string, ServerResponse>();
     private clientFocusOrder = new Map<string, number>();
@@ -73,7 +73,7 @@ export class CanvasSession {
         return this.clients.has(this.targetClientId) ? this.canvasStates.get(this.targetClientId) || null : null;
     }
 
-    /** 获取当前 turn 绑定或最近激活的网页客户端。 */
+    /** 获取当前 turn 绑定或最近激活的画布客户端。 */
     private get targetClientId() {
         return this.boundClientId || this.activeClientId;
     }
@@ -317,7 +317,7 @@ export class CanvasSession {
 
     /** 将指定网页设为最近激活的工具目标。 */
     activateClient(clientId: string) {
-        if (!this.clients.has(clientId)) throw new Error("当前网页未连接");
+        if (!this.clients.has(clientId)) throw new Error("当前画布客户端未连接");
         this.activeClientId = clientId;
         this.clientFocusOrder.set(clientId, ++this.focusSequence);
         logger.debug("Canvas client activated", { clientId });
@@ -325,7 +325,7 @@ export class CanvasSession {
 
     /** 将当前 Agent turn 固定绑定到指定网页。 */
     bindClient(clientId: string) {
-        if (!this.clients.has(clientId)) throw new Error("当前网页未连接");
+        if (!this.clients.has(clientId)) throw new Error("当前画布客户端未连接");
         this.boundClientId = clientId;
         logger.debug("Canvas client bound to turn", { clientId });
     }
@@ -442,9 +442,9 @@ export class CanvasSession {
         if (!isToolName(name)) throw new Error(`未知工具：${String(name)}`);
         logger.info("MCP tool called", { name, input: rawInput, targetClientId: this.targetClientId });
         const input = parseToolInput(name, rawInput) as Record<string, unknown>;
-        if (name === "canvas_open") return openCanvasInBrowser(input as { mode?: "new" | "recent" | "choose"; url?: string });
+        if (name === "canvas_open") return openCanvas(input as { mode?: "new" | "recent" | "choose"; url?: string });
         if (SITE_TOOLS.has(name)) {
-            if (!this.clients.size) throw new Error("当前没有已连接网页");
+            if (!this.clients.size) throw new Error("当前没有已连接客户端");
             return await this.requestCanvasTool(name, input);
         }
         const readTool = ["canvas_get_state", "canvas_get_selection", "canvas_export_snapshot"].includes(name);

@@ -1,6 +1,6 @@
 # @zhuyichuan/canvas-agent
 
-Infinite Canvas 本地伴生服务与 MCP 连接器。为 **WorkBuddy** 及其他兼容 MCP（Model Context Protocol）协议的 AI 客户端提供与 Infinite Canvas 网页画布的实时协同与操作能力。
+Infinite Canvas 本地伴生服务与 MCP 连接器。为 **WorkBuddy** 及其他兼容 MCP（Model Context Protocol）协议的 AI 客户端提供与 Infinite Canvas 桌面端或网页画布的实时协同与操作能力。
 
 - 官方线上站点：[https://canvas.imihoo.com](https://canvas.imihoo.com)
 - 源码仓库：[https://github.com/ZhuYichuan/infinite-canvas](https://github.com/ZhuYichuan/infinite-canvas)
@@ -10,7 +10,7 @@ Infinite Canvas 本地伴生服务与 MCP 连接器。为 **WorkBuddy** 及其�
 ## 功能特性
 
 1. **WorkBuddy 官方连接器支持**：作为 WorkBuddy MCP Server，支持在 WorkBuddy 对话中通过自然语言打开画布、读取节点状态、创建排版、编排多模态生成流程。
-2. **跨平台自动唤起**：提供 `canvas_open` 工具，可自动在系统默认浏览器中打开指定模式（新建、最近、选择）的画布页面并自动携带连接凭据完成配对。
+2. **跨平台自动唤起**：提供 `canvas_open` 工具，默认通过 `infinite-canvas://` 唤起桌面客户端并自动携带连接凭据完成配对；显式传入 `url` 时才在系统默认浏览器打开网页画布。未安装桌面端时会明确提示，不会静默回退网页。
 3. **本地 HTTP / SSE 通信服务**：为网页端提供本地桥接服务（默认端口 `17371`），保障画布与本地 AI 交互的低延迟与高安全性。
 4. **多模态流程编排**：支持文本、图片、视频节点的动态生成流程组装与属性注入。
 
@@ -78,7 +78,7 @@ npx -y @zhuyichuan/canvas-agent --debug
 
 | 工具名称 | 描述 |
 | :--- | :--- |
-| `canvas_open` | 跨平台打开系统浏览器进入 Infinite Canvas 画布（支持 `new` / `recent` / `choose` 模式），并自动完成本地凭据携带与连接 |
+| `canvas_open` | 默认唤起 Infinite Canvas 桌面客户端（支持 `new` / `recent` / `choose` 模式），显式传入 `url` 时打开网页，并自动完成本地凭据携带与连接 |
 | `canvas_get_state` | 读取当前画布完整状态（所有节点列表、连线关系、视口位置） |
 | `canvas_get_selection` | 获取用户当前在画布中选中的节点集合 |
 | `canvas_create_text_node` | 在画布指定位置创建单个文本卡片节点 |

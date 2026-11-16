@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 
 import { toolDescriptions, toolInputSchemas, toolNames, type ToolName } from "../canvas/schemas.js";
 import { AGENT_PROMPT, loadConfig, type CanvasAgentConfig, VERSION } from "../config.js";
-import { openCanvasInBrowser } from "../utils/browser.js";
+import { openCanvas } from "../utils/browser.js";
 
 type CanvasAgentToolResponse = { ok?: boolean; result?: unknown; error?: string };
 
@@ -66,6 +66,9 @@ async function postCanvasAgentTool(config: CanvasAgentConfig, name: ToolName, in
     if (autoStart) {
         await ensureServerStarted(config);
     }
+    if (name === "canvas_open") {
+        return openCanvas((input as { mode?: "new" | "recent" | "choose"; url?: string }) || {});
+    }
 
     let res: Response;
     try {
@@ -75,9 +78,6 @@ async function postCanvasAgentTool(config: CanvasAgentConfig, name: ToolName, in
             body: JSON.stringify({ name, input }),
         });
     } catch {
-        if (name === "canvas_open") {
-            return openCanvasInBrowser((input as { mode?: "new" | "recent" | "choose"; url?: string }) || {});
-        }
         throw new Error(`本地 Canvas Agent 服务未启动或无法连接（${config.url}）。请先调用 canvas_open 工具启动并打开画布，或在终端运行 npx -y @zhuyichuan/canvas-agent。`);
     }
 
