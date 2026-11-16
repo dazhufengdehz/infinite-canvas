@@ -16,7 +16,7 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
 import { deleteStoredMedia, getMediaBlob, resolveMediaUrl } from "@/services/file-storage";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
-import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
+import { createVideoCandidate, createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 import { boolConfig, modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -27,7 +27,9 @@ import i18n from "@/i18n";
 type GeneratedVideo = {
     id: string;
     url: string;
-    storageKey: string;
+    storageKey?: string;
+    sourceToken?: string;
+    candidateId?: string;
     posterUrl?: string;
     posterStorageKey?: string;
     durationMs: number;
@@ -241,18 +243,19 @@ export default function VideoPage() {
     };
 
     const downloadVideo = async (video: GeneratedVideo) => {
-        const blob = await getMediaBlob(video.storageKey);
+        const blob = video.storageKey ? await getMediaBlob(video.storageKey) : null;
         saveAs(blob || video.url, "video.mp4");
     };
 
-    const saveResultToAssets = (video: GeneratedVideo) => {
+    const saveResultToAssets = async (video: GeneratedVideo) => {
+        const stored = video.storageKey ? video : await storeGeneratedVideo({ url: video.url, token: video.sourceToken, mimeType: video.mimeType });
         addAsset({
             kind: "video",
             title: t("videoWorkbench.resultTitle"),
-            coverUrl: video.posterUrl || "",
+            coverUrl: stored.posterUrl || "",
             tags: [],
             source: t("videoWorkbench.source"),
-            data: { url: video.url, storageKey: video.storageKey, posterUrl: video.posterUrl, posterStorageKey: video.posterStorageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+            data: { url: stored.url, storageKey: stored.storageKey, posterUrl: stored.posterUrl, posterStorageKey: stored.posterStorageKey, width: stored.width, height: stored.height, bytes: stored.bytes, mimeType: stored.mimeType },
             metadata: { source: "video-page", prompt },
         });
         message.success(t("common.addedToAssets"));
@@ -322,18 +325,18 @@ export default function VideoPage() {
             for (let attempt = 0; attempt < 120; attempt += 1) {
                 const state = await pollVideoGenerationTask(configOverride || taskConfig, log.task);
                 if (state.status === "completed") {
-                    const stored = await storeGeneratedVideo(state.result);
+                    const candidate = await createVideoCandidate(state.result);
                     const nextVideo: GeneratedVideo = {
                         id: nanoid(),
-                        url: stored.url,
-                        storageKey: stored.storageKey,
-                        posterUrl: stored.posterUrl,
-                        posterStorageKey: stored.posterStorageKey,
+                        url: candidate.url!,
+                        sourceToken: candidate.token,
+                        candidateId: candidate.candidateId,
+                        posterUrl: candidate.posterUrl,
                         durationMs: Date.now() - log.createdAt,
-                        width: stored.width || 1280,
-                        height: stored.height || 720,
-                        bytes: stored.bytes,
-                        mimeType: stored.mimeType,
+                        width: candidate.width,
+                        height: candidate.height,
+                        bytes: 0,
+                        mimeType: candidate.mimeType || "video/mp4",
                     };
                     setResults([{ id: nextVideo.id, status: "success", video: nextVideo }]);
                     if (agentTaskId) updateAgentTask(agentTaskId, { status: "succeeded", successCount: 1, failCount: 0, error: undefined });

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -123,6 +124,31 @@ test("项目和媒体路径拒绝非法 ID 与路径穿越", async (t) => {
     assert.equal(missing.status, 404);
     assert.equal(missing.headers.get("content-type"), "application/json; charset=utf-8");
     assert.equal(typeof (await missing.json()).error, "string");
+});
+
+test("远程候选采用时转发 token、保留响应 MIME 并流式写入独立媒体", async (t) => {
+    const base = await setup(t);
+    let authorization = "";
+    const upstream = createServer((req, res) => {
+        authorization = req.headers.authorization || "";
+        res.writeHead(200, { "Content-Type": "image/webp" });
+        res.end("candidate-image");
+    });
+    await new Promise((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    t.after(async () => {
+        upstream.closeAllConnections();
+        await new Promise((resolve) => upstream.close(resolve));
+    });
+
+    const sourceUrl = `http://127.0.0.1:${upstream.address().port}/view?filename=candidate.webp&type=output`;
+    const storageKey = "image:p_project_1_adopted_1";
+    const adopted = await fetch(`${base}/api/storage/media/adopt`, json("POST", { targetStorageKey: storageKey, sourceUrl, token: "secret-token" }));
+    assert.equal(adopted.status, 200);
+    assert.equal(authorization, "Bearer secret-token");
+
+    const stored = await fetch(`${base}/api/storage/media/${encodeURIComponent(storageKey)}`);
+    assert.equal(stored.headers.get("content-type"), "image/webp");
+    assert.equal(await stored.text(), "candidate-image");
 });
 
 test("媒体复制保留原文件并复制对应 poster", async (t) => {

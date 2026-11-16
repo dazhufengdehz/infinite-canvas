@@ -33,8 +33,10 @@ for (const direct of [true, false]) {
             ? await requestComfyuiAudio({ config: defaultConfig, prompt: "测试音频", seed: 42, jobId: existingJobId, onProgress })
             : await requestAudioGeneration(defaultConfig, "测试音频", { seed: 42, jobId: existingJobId, onProgress });
         expect(result.jobId).toBe(existingJobId);
-        expect(result.blob.type).toBe("audio/wav");
-        expect(result.blob.size).toBeGreaterThan(0);
+        expect(result.url).toContain("/view?");
+        expect(result.url).toContain("result.wav");
+        expect(result.mimeType).toBe("audio/wav");
+        expect(vi.mocked(fetch).mock.calls.some(([input]) => new URL(String(input)).pathname === "/view")).toBe(false);
         expect(fetch).toHaveBeenCalledWith(expect.stringContaining(`/history/${existingJobId}`), expect.anything());
         expect(vi.mocked(fetch).mock.calls.some(([input]) => new URL(String(input)).pathname === "/prompt")).toBe(false);
         expect(onProgress).not.toHaveBeenCalledWith("submitted", expect.anything());

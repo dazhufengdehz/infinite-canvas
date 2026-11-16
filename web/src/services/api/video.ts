@@ -3,8 +3,9 @@ import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
 import { dataUrlToFile } from "@/lib/image-utils";
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { adoptMediaFile, readVideoMeta, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
+import { candidatePosterUrl, hasStorageServer, putStorageBlob } from "@/services/api/storage";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelChannel, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { requestComfyuiVideo, submitComfyuiVideoJob, pollComfyuiVideoJob } from "./comfyui";
@@ -31,7 +32,8 @@ export type VideoRequestOptions = {
 };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
-export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
+export type VideoGenerationResult = { blob?: Blob; url?: string; token?: string; mimeType?: string };
+export type VideoCandidate = VideoGenerationResult & { candidateId: string; posterUrl?: string; width: number; height: number; durationMs?: number };
 export type VideoGenerationTask = { id: string; provider: "openai" | "plugin" | "comfyui"; model: string };
 export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
 
@@ -69,7 +71,7 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
         jobId: options?.jobId,
         onProgress: options?.onProgress,
     });
-    return { url: res.url, mimeType: res.mimeType };
+    return { url: res.url, token: res.token, mimeType: res.mimeType };
 }
 
 export async function createVideoGenerationTask(config: AiConfig, prompt: string, references: ReferenceImage[] = [], options?: VideoRequestOptions): Promise<VideoGenerationTask> {
@@ -141,15 +143,25 @@ function videoPluginResult(result: unknown): VideoGenerationResult {
     throw new Error(apiText("scriptNoVideo"));
 }
 
-export async function storeGeneratedVideo(result: VideoGenerationResult, ownerId = "assets"): Promise<UploadedFile> {
-    if (result.blob) return uploadMediaFile(result.blob, "video", ownerId);
-    if (result.url) {
-        try {
-            return await uploadMediaFile(result.url, "video", ownerId);
-        } catch {
-            return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
+export async function createVideoCandidate(result: VideoGenerationResult): Promise<VideoCandidate> {
+    if (!result.url) throw new Error(apiText("noPlayableVideo"));
+    const candidateId = nanoid();
+    const meta = await readVideoMeta(result.url);
+    let posterUrl: string | undefined;
+    if (meta.poster) {
+        if (await hasStorageServer()) {
+            await putStorageBlob(`/candidate-posters/${encodeURIComponent(candidateId)}`, meta.poster);
+            posterUrl = candidatePosterUrl(candidateId);
+        } else {
+            posterUrl = URL.createObjectURL(meta.poster);
         }
     }
+    return { ...result, candidateId, posterUrl, width: meta.width, height: meta.height, durationMs: meta.durationMs };
+}
+
+export async function storeGeneratedVideo(result: VideoGenerationResult, ownerId = "assets"): Promise<UploadedFile> {
+    if (result.blob) return uploadMediaFile(result.blob, "video", ownerId);
+    if (result.url) return adoptMediaFile({ url: result.url, token: result.token, mimeType: result.mimeType || "video/mp4" }, "video", ownerId);
     throw new Error(apiText("noPlayableVideo"));
 }
 

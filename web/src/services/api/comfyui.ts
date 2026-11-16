@@ -1983,6 +1983,20 @@ export async function pollJob(
 /**
  * Download an asset from ComfyUI /view endpoint and convert it to a data URL.
  */
+export function comfyuiAssetUrl(assetIdOrFilename: string, baseUrl: string, options?: { subfolder?: string; type?: string }) {
+    if (assetIdOrFilename.startsWith("http://") || assetIdOrFilename.startsWith("https://")) return assetIdOrFilename;
+    if (assetIdOrFilename.startsWith("/view?") || assetIdOrFilename.startsWith("/api/view?")) return `${normalizeBaseUrl(baseUrl)}${assetIdOrFilename}`;
+    let filename = assetIdOrFilename;
+    let subfolder = options?.subfolder || "";
+    if (!subfolder && filename.includes("/")) {
+        const parts = filename.split("/");
+        filename = parts.pop() || filename;
+        subfolder = parts.join("/");
+    }
+    const type = options?.type || "output";
+    return `${normalizeBaseUrl(baseUrl)}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
+}
+
 export async function downloadAsset(
     assetIdOrFilename: string,
     baseUrl: string,
@@ -1991,24 +2005,7 @@ export async function downloadAsset(
 ): Promise<{ blob: Blob; dataUrl: string }> {
     const headers: Record<string, string> = {};
     if (token) headers.Authorization = `Bearer ${token}`;
-
-    let url: string;
-    if (assetIdOrFilename.startsWith("http://") || assetIdOrFilename.startsWith("https://")) {
-        url = assetIdOrFilename;
-    } else if (assetIdOrFilename.startsWith("/view?") || assetIdOrFilename.startsWith("/api/view?")) {
-        url = `${normalizeBaseUrl(baseUrl)}${assetIdOrFilename}`;
-    } else {
-        let filename = assetIdOrFilename;
-        let subfolder = options?.subfolder || "";
-        if (!subfolder && filename.includes("/")) {
-            const parts = filename.split("/");
-            filename = parts.pop() || filename;
-            subfolder = parts.join("/");
-        }
-        const type = options?.type || "output";
-        url = `${normalizeBaseUrl(baseUrl)}/view?filename=${encodeURIComponent(filename)}&subfolder=${encodeURIComponent(subfolder)}&type=${encodeURIComponent(type)}`;
-    }
-
+    const url = comfyuiAssetUrl(assetIdOrFilename, baseUrl, options);
     let response = await comfyuiFetch(url, { headers }, baseUrl);
     if (!response.ok && response.status === 404) {
         let altUrl = "";
@@ -2072,7 +2069,7 @@ export type ComfyuiGenerationLog = {
     durationMs: number;
     status: "success" | "failed";
     imageCount?: number;
-    images?: Array<{ id: string; dataUrl: string; seed?: number }>;
+    images?: ComfyuiImageResult["items"];
     errorMessage?: string;
     seed?: number;
 };
@@ -2127,7 +2124,7 @@ export interface ComfyuiImageRequest {
 }
 
 export interface ComfyuiImageResult {
-    items: Array<{ id: string; dataUrl: string; seed?: number }>;
+    items: Array<{ id: string; dataUrl: string; sourceToken?: string; seed?: number }>;
     jobId: string;
     seed?: number;
 }
@@ -2296,11 +2293,7 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
             throw new ComfyuiError(i18n.t("comfyui.noImageOutput"));
         }
 
-        const items: Array<{ id: string; dataUrl: string; seed?: number }> = [];
-        for (const assetId of resultAssetIds) {
-            const { dataUrl } = await downloadAsset(assetId, baseUrl, token);
-            items.push({ id: nanoid(), dataUrl, seed });
-        }
+        const items: ComfyuiImageResult["items"] = resultAssetIds.map((assetId) => ({ id: nanoid(), dataUrl: comfyuiAssetUrl(assetId, baseUrl), sourceToken: token, seed }));
 
         if (!req.skipLog) void logImageGeneration({ model: requestConfig.model, prompt: req.prompt, provider: "comfyui", jobId, durationMs: Date.now() - startedAt, status: "success", imageCount: items.length, images: items, seed }).catch(() => undefined);
         return { items, jobId, seed };
@@ -2476,12 +2469,8 @@ export async function requestComfyuiInpaint(req: ComfyuiInpaintRequest): Promise
             throw new ComfyuiError(i18n.t("comfyui.noImageOutput"));
         }
 
-        // 5. Download outputs
-        const items: Array<{ id: string; dataUrl: string; seed?: number }> = [];
-        for (const assetId of resultAssetIds) {
-            const { dataUrl } = await downloadAsset(assetId, baseUrl, token);
-            items.push({ id: nanoid(), dataUrl, seed });
-        }
+        // 5. Keep lightweight remote output candidates.
+        const items: ComfyuiImageResult["items"] = resultAssetIds.map((assetId) => ({ id: nanoid(), dataUrl: comfyuiAssetUrl(assetId, baseUrl), sourceToken: token, seed }));
 
         if (!req.skipLog) void logImageGeneration({ model: "ComfyUI Inpaint", prompt: req.prompt, provider: "comfyui", jobId, durationMs: Date.now() - startedAt, status: "success", imageCount: items.length, images: items, seed }).catch(() => undefined);
         return { items, jobId, seed };
@@ -2946,13 +2935,9 @@ export async function requestComfyuiText(req: ComfyuiTextRequest): Promise<{ tex
     }
 }
 
-/**
- * Download a video asset's content from ComfyUI /view endpoint and return as data URL.
- */
-export async function downloadComfyuiVideo(assetId: string, baseUrl: string, token?: string): Promise<{ dataUrl: string; mimeType: string }> {
-    const { blob, dataUrl } = await downloadAsset(assetId, baseUrl, token);
-    const mimeType = blob.type || "video/mp4";
-    return { dataUrl, mimeType };
+/** Return a lightweight remote reference without downloading the video. */
+export function getComfyuiVideoCandidate(assetId: string, baseUrl: string): { url: string; mimeType: string } {
+    return { url: comfyuiAssetUrl(assetId, baseUrl), mimeType: "video/mp4" };
 }
 
 /**
@@ -3593,7 +3578,7 @@ export async function pollComfyuiVideoJob(
     token?: string,
     signal?: AbortSignal,
     onProgress?: (status: string, detail?: Record<string, unknown>) => void,
-): Promise<{ url: string; mimeType: string }> {
+): Promise<{ url: string; mimeType: string; token?: string }> {
     const assetIds = await pollJob(jobId, baseUrl, token, signal, Date.now() + JOB_TIMEOUT_MS, collectVideoAssetIds, onProgress);
     if (!assetIds) {
         throw new ComfyuiAbortedError();
@@ -3601,11 +3586,10 @@ export async function pollComfyuiVideoJob(
     if (assetIds.length === 0) {
         throw new ComfyuiError(i18n.t("comfyui.noVideoOutput"));
     }
-    const { dataUrl, mimeType } = await downloadComfyuiVideo(assetIds[0], baseUrl, token);
-    return { url: dataUrl, mimeType };
+    return { ...getComfyuiVideoCandidate(assetIds[0], baseUrl), token };
 }
 
-export async function requestComfyuiVideo(req: ComfyuiVideoRequest): Promise<{ url: string; mimeType: string; jobId: string }> {
+export async function requestComfyuiVideo(req: ComfyuiVideoRequest): Promise<{ url: string; mimeType: string; token?: string; jobId: string }> {
     const rawModel = req.model || req.config.videoModel || req.config.model;
     const channel = resolveVideoRequestChannel(req, rawModel);
     const baseUrl = (channel.comfyuiProxyUrl || "").trim();
@@ -3626,7 +3610,7 @@ export async function requestComfyuiVideo(req: ComfyuiVideoRequest): Promise<{ u
         }
 
         const polling = pollComfyuiVideoJob(jobId, baseUrl, token, signal, req.onProgress);
-        let waiting: Promise<{ url: string; mimeType: string }> = polling;
+        let waiting: Promise<{ url: string; mimeType: string; token?: string }> = polling;
         if (signal) {
             // `{ once: true }` keeps the cancel call idempotent across repeated aborts;
             // the timeout path never reaches this listener. Aborting rejects the race
@@ -3677,8 +3661,9 @@ export type ComfyuiAudioRequest = {
 };
 
 export type ComfyuiAudioResult = {
-    blob: Blob;
-    dataUrl: string;
+    url: string;
+    token?: string;
+    mimeType: string;
     seed: number;
     jobId: string;
 };
@@ -3762,10 +3747,10 @@ export async function requestComfyuiAudio(req: ComfyuiAudioRequest): Promise<Com
         }
 
         const targetAssetId = audioOutput.id || (audioOutput.filename ? `/api/view?filename=${encodeURIComponent(audioOutput.filename)}&type=${encodeURIComponent(audioOutput.type || "output")}&subfolder=${encodeURIComponent(audioOutput.subfolder || "")}` : "");
-        const downloaded = await downloadAsset(targetAssetId, baseUrl, token);
         return {
-            blob: downloaded.blob,
-            dataUrl: downloaded.dataUrl,
+            url: comfyuiAssetUrl(targetAssetId, baseUrl),
+            token,
+            mimeType: audioOutput.content_type || (/\.wav$/i.test(audioOutput.filename || "") ? "audio/wav" : "audio/mpeg"),
             seed,
             jobId,
         };

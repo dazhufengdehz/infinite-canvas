@@ -102,7 +102,7 @@ it("keeps the built-in face workflow's video frames, original audio, stitch base
 });
 
 for (const resume of [false, true]) {
-    it(`${resume ? "resumes an accepted" : "submits a new"} tool task and polls/downloads only from its explicitly selected channel`, async () => {
+    it(`${resume ? "resumes an accepted" : "submits a new"} tool task and polls only from its explicitly selected channel`, async () => {
         const req = request();
         const other = { ...req.config.channels[0], id: "original", name: "原渠道", comfyuiProxyUrl: "http://original-host:8188" };
         req.config = { ...req.config, channelId: other.id, channels: [other, ...req.config.channels] };
@@ -112,7 +112,8 @@ for (const resume of [false, true]) {
         const apiCalls = vi.mocked(fetch).mock.calls.filter(([input]) => String(input).startsWith("http:"));
         expect(apiCalls.every(([input]) => String(input).startsWith("http://tool-host:8188/"))).toBe(true);
         expect(apiCalls.some(([input]) => String(input).includes(`/history/${result.jobId}`))).toBe(true);
-        expect(apiCalls.some(([input]) => String(input).includes("/view?"))).toBe(true);
+        expect(result.url).toContain("/view?");
+        expect(apiCalls.some(([input]) => String(input).includes("/view?"))).toBe(false);
         expect(apiCalls.filter(([input]) => String(input).endsWith("/prompt"))).toHaveLength(resume ? 0 : 1);
     });
 }

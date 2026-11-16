@@ -11,7 +11,7 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { getModelProfile } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { copyImageFile, uploadImage } from "@/services/image-storage";
+import { adoptGeneratedImage, copyImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
 import { readProject } from "@/services/project-storage";
 import { nanoid } from "nanoid";
@@ -3035,7 +3035,7 @@ function InfiniteCanvasPage() {
                         onProgress: (status, detail) => setNodes((prev) => updateNodeGenerationProgress(prev, childId, status, detail)),
                     },
                 ).then((items) => items[0]);
-                const uploaded = await uploadImage(image.dataUrl, projectId);
+                const uploaded = await adoptGeneratedImage(image, projectId);
                 const size = fitNodeSize(uploaded.width, uploaded.height, node.width, node.height);
                 setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
             } catch (error) {
@@ -3414,7 +3414,7 @@ function InfiniteCanvasPage() {
                     const image = refs.length
                         ? await requestEdit({ ...generationConfig, count: "1" }, context.prompt, refs, undefined, { signal: controller.signal, seed: nextSeed, onProgress }).then((items) => items[0])
                         : await requestGeneration({ ...generationConfig, count: "1" }, context.prompt, { signal: controller.signal, seed: nextSeed, onProgress }).then((items) => items[0]);
-                    const uploaded = await uploadImage(image.dataUrl, projectId);
+                    const uploaded = await adoptGeneratedImage(image, projectId);
                     setNodes((prev) =>
                         prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, ...imageMetadata(uploaded), prompt: scene, composerContent: undefined, model: generationConfig.model, status: NODE_STATUS_SUCCESS, errorDetails: undefined, seed: image.seed ?? nextSeed } } : node)),
                     );
@@ -3608,7 +3608,7 @@ function InfiniteCanvasPage() {
                                           seed: slotSeed,
                                           onProgress: handleBatchProgress,
                                       }).then((items) => items[0]);
-                                const uploaded = await uploadImage(image.dataUrl, projectId);
+                                const uploaded = await adoptGeneratedImage(image, projectId);
                                 const item: CanvasNodeImage = {
                                     id: imageId,
                                     status: NODE_STATUS_SUCCESS,
@@ -3936,7 +3936,7 @@ function InfiniteCanvasPage() {
                             channelId: sourceNode?.metadata?.channelId,
                             workflowId: sourceNode?.metadata?.workflowId,
                         });
-                        const audio = await storeGeneratedAudio(result.blob, "mp3", projectId);
+                        const audio = await storeGeneratedAudio(result, projectId);
                         setNodes((prev) =>
                             prev.map((node) =>
                                 node.id === audioId
@@ -4372,7 +4372,7 @@ function InfiniteCanvasPage() {
                         channelId: node.metadata?.channelId,
                         workflowId: node.metadata?.workflowId,
                     });
-                    const audio = await storeGeneratedAudio(result.blob, "mp3", projectId);
+                    const audio = await storeGeneratedAudio(result, projectId);
                     setNodes((prev) =>
                         prev.map((item) =>
                             item.id === node.id
@@ -4412,7 +4412,7 @@ function InfiniteCanvasPage() {
                               jobId: resumeJobId,
                               onProgress: handleRetryProgress,
                           }).then((items) => items[0]);
-                    const uploadedImage = await uploadImage(image.dataUrl, projectId);
+                    const uploadedImage = await adoptGeneratedImage(image, projectId);
                     const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
                     const retryImage: CanvasNodeImage = {
                         id: imageId || node.metadata?.primaryImageId || nanoid(),

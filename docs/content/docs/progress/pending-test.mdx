@@ -7,6 +7,12 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- ComfyUI 候选媒体与采用复制：
+  - 在生图和视频工作台完成生成，确认历史记录仅保存远程候选引用；图片不转为 Data URL，视频只额外保存 WebP 封面，生成完成时不会完整下载原媒体到浏览器或项目目录。画布音频结果同样不再经过完整 Blob，而是在生成成功后直接采用到当前项目。
+  - 在生图工作台将候选「添加为参考图」或「保存到素材」，在视频工作台将候选「保存到素材」，确认此时才通过 Sidecar 写入独立媒体文件，JPG、PNG、WebP 等格式保持真实 MIME，刷新后仍可读取。
+  - 在画布生成或重试图片、视频、音频，确认成功结果归入当前项目；采用期间 ComfyUI 的访问 token 仅用于服务端请求，不写入媒体 URL。
+  - 未采用候选时检查项目与素材目录不出现原媒体副本；采用后下载、播放和作为后续 ComfyUI 输入均使用已落盘媒体。
+
 - 本地磁盘存储与项目按需加载：
   - 在 Sidecar 存储模式下创建、重命名、保存和删除项目，确认项目列表只读取摘要，进入单个项目后才加载完整节点与连线；刷新后数据仍从磁盘恢复。
   - 上传图片、视频和音频后检查磁盘媒体文件，验证媒体 GET/HEAD 与 Range 请求可正常读取，项目保存revision冲突时不会被静默覆盖。

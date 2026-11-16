@@ -971,7 +971,7 @@ describe("requestComfyuiImage", () => {
         const result = requestComfyuiImage({ config: buildComfyuiConfig(), model: "comfy::ComfyUI T2I", prompt: "一只猫", size: "1024x768" });
         await expect(result).resolves.toMatchObject({
             jobId: "job_1",
-            items: [{ id: expect.any(String), dataUrl: "data:image/png;base64,ZmFrZS1wbmc=" }],
+            items: [{ id: expect.any(String), dataUrl: expect.stringContaining("/api/view?filename=out.png") }],
         });
         expect(fetchMock.mock.calls.every(([url]) => !String(url).endsWith("/queue") && !String(url).endsWith("/interrupt"))).toBe(true);
     });
@@ -1191,9 +1191,9 @@ describe("native ComfyUI video validation", () => {
         const res = await pollComfyuiVideoJob("job_multi", "http://10.7.8.12:8188");
         expect(res).toBeDefined();
         const viewCalls = fetchMock.mock.calls.filter((c: unknown[]) => typeof c[0] === "string" && (c[0].includes("/view?") || c[0].includes("/api/view?")));
-        expect(viewCalls.length).toBeGreaterThan(0);
-        expect(viewCalls[0][0]).toContain("filename=depth_generated.mp4");
-        expect(viewCalls[0][0]).toContain("type=output");
+        expect(viewCalls.length).toBe(0);
+        expect(res.url).toContain("filename=depth_generated.mp4");
+        expect(res.url).toContain("type=output");
     });
 });
 

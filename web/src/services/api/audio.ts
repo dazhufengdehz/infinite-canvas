@@ -2,7 +2,7 @@ import axios from "axios";
 
 import i18n from "@/i18n";
 import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, normalizeAudioVoiceValue } from "@/lib/audio-generation";
-import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
+import { adoptMediaFile, type UploadedFile } from "@/services/file-storage";
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
 import { requestComfyuiAudio, type ComfyuiAudioRequest } from "./comfyui";
@@ -36,7 +36,7 @@ export async function requestAudioGeneration(
     config: AiConfig,
     prompt: string,
     options?: AudioRequestOptions,
-): Promise<{ blob: Blob; seed: number; jobId: string }> {
+): Promise<{ url: string; token?: string; mimeType: string; seed: number; jobId: string }> {
     const res = await requestComfyuiAudio({
         config,
         prompt,
@@ -49,7 +49,7 @@ export async function requestAudioGeneration(
         jobId: options?.jobId,
         onProgress: options?.onProgress,
     });
-    return { blob: res.blob, seed: res.seed, jobId: res.jobId };
+    return { url: res.url, token: res.token, mimeType: res.mimeType, seed: res.seed, jobId: res.jobId };
 }
 
 async function audioPluginBlob(result: unknown, format: string): Promise<Blob> {
@@ -66,9 +66,8 @@ async function audioPluginBlob(result: unknown, format: string): Promise<Blob> {
     return blob.type.startsWith("audio/") ? blob : new Blob([blob], { type: audioMimeType(format) });
 }
 
-export async function storeGeneratedAudio(blob: Blob, format = "mp3", ownerId = "assets"): Promise<UploadedFile> {
-    const audio = blob.type.startsWith("audio/") ? blob : new Blob([blob], { type: audioMimeType(format) });
-    return uploadMediaFile(audio, "audio", ownerId);
+export async function storeGeneratedAudio(result: { url: string; token?: string; mimeType?: string }, ownerId = "assets"): Promise<UploadedFile> {
+    return adoptMediaFile({ ...result, mimeType: result.mimeType || "audio/mpeg" }, "audio", ownerId);
 }
 
 function assertAudioConfig(config: AiConfig, model: string) {

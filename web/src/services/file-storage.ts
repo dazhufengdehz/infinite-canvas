@@ -24,6 +24,25 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", own
     return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta, posterUrl, posterStorageKey };
 }
 
+export async function adoptMediaFile(source: { url: string; token?: string; mimeType?: string }, prefix: "video" | "audio", ownerId = "assets"): Promise<UploadedFile> {
+    if (!(await hasStorageServer())) return uploadMediaFile(source.url, prefix, ownerId);
+    const storageKey = scopedStorageKey(prefix, ownerId);
+    await storageRequest("/media/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetStorageKey: storageKey, sourceUrl: source.url, token: source.token, mimeType: source.mimeType }),
+    });
+    const url = storageMediaUrl(storageKey);
+    const meta = prefix === "video" ? await readVideoMeta(url) : await readAudioMeta(url);
+    let posterUrl: string | undefined;
+    let posterStorageKey: string | undefined;
+    if ("poster" in meta && meta.poster) {
+        posterStorageKey = storageKey.replace(/^[^:]+:/, "poster:");
+        posterUrl = await setMediaBlob(posterStorageKey, meta.poster);
+    }
+    return { url, storageKey, bytes: 0, mimeType: source.mimeType || (prefix === "video" ? "video/mp4" : "audio/mpeg"), ...meta, posterUrl, posterStorageKey };
+}
+
 export async function resolveMediaUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
     if (await hasStorageServer()) return storageMediaUrl(storageKey);
@@ -168,7 +187,7 @@ export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()
     return keys;
 }
 
-function readVideoMeta(url: string) {
+export function readVideoMeta(url: string) {
     return new Promise<{ width: number; height: number; durationMs?: number; poster?: Blob }>((resolve) => {
         const video = document.createElement("video");
         let settled = false;

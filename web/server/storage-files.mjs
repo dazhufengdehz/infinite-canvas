@@ -279,7 +279,7 @@ export function createStorage(dataDir) {
                 throw new StorageError(502, "远程媒体下载失败");
             }
             if (!response.ok || !response.body) throw new StorageError(502, "远程媒体下载失败");
-            return saveMedia(storageKey, Readable.fromWeb(response.body), mimeType);
+            return saveMedia(storageKey, Readable.fromWeb(response.body), mimeType || response.headers.get("content-type"));
         },
 
         async saveCandidatePoster(id, input) {
