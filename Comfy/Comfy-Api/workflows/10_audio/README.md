@@ -5,7 +5,6 @@
 ## 包含文件
 
 - [API 格式工作流（画布直连执行）](./audio_minimax_music_3_api.json)
-- [UI 可视化工作流（ComfyUI 导入查看编辑）](./audio_minimax_music_3_workflow.json)
 
 ---
 
@@ -22,8 +21,8 @@
 
 | 模型类别 | 推荐权重文件路径 | 下载来源与说明 |
 | :--- | :--- | :--- |
-| **Diffusion Model (DiT)** | `models/diffusion_models/minimax_music3_dit_fp16.safetensors`<br/>*(低显存可选: `minimax_music3_dit_int8_convrot.safetensors`)* | [HuggingFace: Comfy-Org/MiniMax-Music-3](https://huggingface.co/Comfy-Org/MiniMax-Music-3/tree/main/diffusion_models) |
-| **Text Encoder** | `models/text_encoders/minimax_music3_text_encoder_pruned_int8_convrot.safetensors`<br/>*(全量可选: `minimax_music3_text_encoder_bf16.safetensors`)* | [HuggingFace: Comfy-Org/MiniMax-Music-3](https://huggingface.co/Comfy-Org/MiniMax-Music-3/tree/main/text_encoders) |
+| **Diffusion Model (DiT)** | `models/diffusion_models/minimax_music3_dit_fp32.safetensors` | [HuggingFace: Comfy-Org/MiniMax-Music-3](https://huggingface.co/Comfy-Org/MiniMax-Music-3/tree/main/diffusion_models) |
+| **Text Encoder** | `models/clip/minimax_music3_text_encoder_bf16.safetensors` | [HuggingFace: Comfy-Org/MiniMax-Music-3](https://huggingface.co/Comfy-Org/MiniMax-Music-3/tree/main/text_encoders) |
 | **Audio VAE** | `models/vae/minimax_music3_dav.safetensors` | [HuggingFace: Comfy-Org/MiniMax-Music-3](https://huggingface.co/Comfy-Org/MiniMax-Music-3/resolve/main/vae/minimax_music3_dav.safetensors) |
 
 > **目录结构参考**：
@@ -31,10 +30,9 @@
 > 📂 ComfyUI/
 > └── 📂 models/
 >     ├── 📂 diffusion_models/
->     │   ├── minimax_music3_dit_fp16.safetensors
->     │   └── minimax_music3_dit_int8_convrot.safetensors  # 低显存推荐
->     ├── 📂 text_encoders/
->     │   └── minimax_music3_text_encoder_pruned_int8_convrot.safetensors
+>     │   └── minimax_music3_dit_fp32.safetensors
+>     ├── 📂 clip/
+>     │   └── minimax_music3_text_encoder_bf16.safetensors
 >     └── 📂 vae/
 >         └── minimax_music3_dav.safetensors
 > ```

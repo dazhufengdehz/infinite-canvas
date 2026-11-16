@@ -9,10 +9,22 @@ import {
     useEffectiveConfig,
     type WorkflowCategory,
 } from "@/stores/use-config-store";
-import { canvasThemes } from "@/lib/canvas-theme";
-import { useThemeStore } from "@/stores/use-theme-store";
-
 import type { ComfyWorkflowItem } from "@/services/api/comfyui-default-workflows";
+
+const CATEGORY_LABELS: Record<WorkflowCategory, string> = {
+    omniVideo: "全能参考视频",
+    frameVideo: "首尾帧视频",
+    faceRefine: "视频人脸修复",
+    depthVideo: "深度视频提取",
+    t2i: "文生图",
+    i2i: "参考图生图",
+    inpaint: "局部重绘",
+    text: "文本生成",
+    audio: "音频生成",
+    superResolve: "超分辨率",
+    angle: "多角度",
+    upscale: "高清放大",
+};
 
 export type ChannelWorkflowPickerProps = {
     category: WorkflowCategory | WorkflowCategory[];
@@ -33,7 +45,6 @@ export function ChannelWorkflowPicker({
 }: ChannelWorkflowPickerProps) {
     const config = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
-    const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
     const channels = useMemo(() => config.channels || [], [config.channels]);
 
@@ -67,7 +78,11 @@ export function ChannelWorkflowPicker({
 
     // 若当前传入的 channelId 或 workflowId 与实际计算不一致，自动校准
     useEffect(() => {
-        if (!activeChannel || !activeWorkflow) return;
+        if (!activeChannel) return;
+        if (!activeWorkflow) {
+            if (workflowId || activeChannel.id !== channelId) onChange(activeChannel.id, "", undefined);
+            return;
+        }
         if (activeChannel.id !== channelId || activeWorkflow.id !== workflowId) {
             onChange(activeChannel.id, activeWorkflow.id, activeWorkflow);
         }
@@ -91,58 +106,18 @@ export function ChannelWorkflowPicker({
     };
 
     const workflowOptions = useMemo(() => {
-        if (!Array.isArray(category) || category.length <= 1) {
-            return workflows.map((wf) => ({
-                value: wf.id,
-                label: (
-                    <span className="flex items-center gap-1 text-xs">
-                        <Workflow className="size-3 shrink-0 text-blue-500" />
-                        <span className="truncate">{wf.name}</span>
-                        {wf.isDefault && <span className="text-[10px] text-stone-400">·默认</span>}
-                    </span>
-                ),
-            }));
-        }
-
-        const categoryLabels: Record<string, string> = {
-            omniVideo: "全能参考视频",
-            frameVideo: "首尾帧视频",
-            faceRefine: "视频人脸修复",
-            depthVideo: "深度视频提取",
-            t2i: "文生图",
-            i2i: "参考图生图",
-            inpaint: "局部重绘",
-            text: "文本生成",
-            audio: "音频生成",
-            superResolve: "超分辨率",
-            angle: "多角度",
-            upscale: "高清放大",
-        };
-
-        const groups: Record<string, typeof workflows> = {};
-        for (const cat of category) {
-            groups[cat] = [];
-        }
-        for (const wf of workflows) {
-            if (!groups[wf.category]) groups[wf.category] = [];
-            groups[wf.category].push(wf);
-        }
-
-        return Object.entries(groups)
-            .filter(([, wfs]) => wfs.length > 0)
-            .map(([catKey, wfs]) => ({
-                label: <span className="text-[11px] font-semibold text-stone-400">{categoryLabels[catKey] || catKey}</span>,
-                options: wfs.map((wf) => ({
-                    value: wf.id,
-                    label: (
-                        <span className="flex items-center gap-1 text-xs">
-                            <Workflow className="size-3 shrink-0 text-blue-500" />
-                            <span className="truncate">{wf.name}</span>
-                            {wf.isDefault && <span className="text-[10px] text-stone-400">·默认</span>}
-                        </span>
-                    ),
-                })),
-            }));
+        const showCategory = Array.isArray(category) && category.length > 1;
+        return workflows.map((wf) => ({
+            value: wf.id,
+            label: (
+                <span className="flex items-center gap-1 text-xs">
+                    <Workflow className="size-3 shrink-0 text-blue-500" />
+                    <span className="truncate">{wf.name}</span>
+                    {showCategory && <span className="shrink-0 text-[10px] text-stone-400">·{CATEGORY_LABELS[wf.category]}</span>}
+                    {wf.isDefault && <span className="shrink-0 text-[10px] text-stone-400">·默认</span>}
+                </span>
+            ),
+        }));
     }, [category, workflows]);
 
     if (!channels.length) {

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ComfyuiAbortedError, requestComfyuiVideo, resetComfyuiBatchPollers, submitComfyuiVideoJob, type ComfyuiVideoRequest } from "@/services/api/comfyui";
 import { defaultConfig, type AiConfig, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
-import faceRefineWorkflow from "@/assets/workflows/video_h3_face_refine_api.json";
+import faceRefineWorkflow from "@/assets/workflows/H3_Face_Refine_Auto_Select_Api.json";
 
 vi.mock("localforage", () => ({ default: { createInstance: () => ({ setItem: vi.fn(async () => undefined), getItem: vi.fn(async () => null) }) } }));
 
@@ -12,6 +12,7 @@ const toolWorkflow = {
     "3": { class_type: "LoadImage", inputs: { image: "stale.png" }, _meta: { title: "ref_image_01" } },
     "4": { class_type: "LoadVideo", inputs: { file: "stale.mp4" }, _meta: { title: "ref_video_01" } },
     "5": { class_type: "GetVideoComponents", inputs: { video: ["4", 0] } },
+    "6": { class_type: "SaveVideo", inputs: {}, _meta: { title: "output_video" } },
 };
 const image = { id: "face", name: "face.png", type: "image/png", dataUrl: "data:image/png;base64,AA==" };
 const video = { id: "source", name: "source.mp4", type: "video/mp4", url: "blob:source-video" };
@@ -21,8 +22,8 @@ function request(category: WorkflowCategory = "faceRefine", model = "custom"): C
         id: "selected", name: "工具渠道", baseUrl: "", apiKey: "", apiFormat: "comfyui", models: [],
         comfyuiProxyUrl: "http://tool-host:8188", workflows: [{ id: "tool", name: "tool", category, json: toolWorkflow, createdAt: 0 }],
     };
-    const config: AiConfig = { ...defaultConfig, channels: [channel], channelId: channel.id, size: "1280x736", videoMode: "frame", videoModel: model };
-    return { config, model, prompt: "修复人物面部", channelId: channel.id, workflowId: "tool", videoMode: "frame", references: [image], referenceVideos: [video] };
+    const config: AiConfig = { ...defaultConfig, channels: [channel], channelId: channel.id, size: "1280x736", videoMode: "omni", videoModel: model };
+    return { config, model, prompt: "修复人物面部", channelId: channel.id, workflowId: "tool", videoMode: "omni", references: [image], referenceVideos: [video] };
 }
 
 beforeEach(() => {
@@ -48,8 +49,8 @@ beforeEach(() => {
 afterEach(() => { resetComfyuiBatchPollers(); vi.unstubAllGlobals(); });
 
 for (const category of ["faceRefine", "depthVideo"] as const) {
-    it(`binds ${category}'s original video despite an inherited frame model and frame mode`, async () => {
-        const req = request(category, "frame-video-minimax-h3-fp8-4step-pdmd");
+    it(`binds ${category}'s original video despite an inherited omni model and omni mode`, async () => {
+        const req = request(category, "omni-video-minimax-h3-ms-v10");
         if (category === "depthVideo") { req.prompt = ""; req.references = []; }
         await expect(submitComfyuiVideoJob(req)).resolves.toMatchObject({ jobId: "tool-job" });
         const post = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/prompt"))!;
@@ -89,7 +90,7 @@ it("uses the explicitly selected tool channel for both workflow and API endpoint
 });
 
 it("keeps the built-in face workflow's video frames, original audio, stitch base and size inputs connected", async () => {
-    const req = request("faceRefine", "frame-video-minimax-h3-fp8-4step-pdmd");
+    const req = request("faceRefine", "omni-video-minimax-h3-ms-v10");
     req.config.channels[0].workflows![0].json = faceRefineWorkflow;
     await expect(submitComfyuiVideoJob(req)).resolves.toMatchObject({ jobId: "tool-job" });
     const post = vi.mocked(fetch).mock.calls.find(([input]) => String(input).endsWith("/prompt"))!;

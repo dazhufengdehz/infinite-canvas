@@ -9,7 +9,6 @@
 ## 包含文件
 
 - [API 格式工作流（画布直连执行）](./depth_video_api.json)
-- [UI 可视化工作流（ComfyUI 导入查看编辑）](./depth_video_workflow.json)
 
 ---
 

@@ -47,7 +47,7 @@ export function CanvasTextSettingsPopover({
     const [open, setOpen] = useState(false);
     const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
 
-    const profile = getModelProfile(modelId || "text-qwen-35");
+    const profile = getModelProfile(modelId);
     const textConfig = profile?.capabilityConfig?.textConfig;
     const hasConfig = Boolean(textConfig?.maxLength || textConfig?.thinkingSupported);
 

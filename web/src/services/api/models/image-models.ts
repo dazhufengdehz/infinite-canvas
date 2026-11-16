@@ -114,78 +114,91 @@ export function parseImageSizeTierAndRatio(sizeStr?: string): { tier: ImageResol
     return { tier: "1k", ratio: "1:1", width: def.width, height: def.height };
 }
 
-/**
- * 1. Qwen-Image-2.1 全能生图 (默认主推模型)
- * 原生支持文生图及最多 10 张多参考图协同构图与风格融合
- */
-export const imageQwen21Profile: WorkflowModelProfile = {
-    id: "image-qwen-2.1",
-    name: "Qwen-Image 2.1 全能",
+const IMAGE_SIZE = {
+    parameter: "aspect_ratio",
+    values: IMAGE_STANDARD_ASPECT_RATIOS,
+    default: "512x512",
+    allowCustom: true,
+} as const;
+
+const IMAGE_TOOLS = { maskEdit: true, reversePrompt: true } as const;
+
+function imageReferences(minImages: number, maxImages: number) {
+    return {
+        promptMaxChars: 20000,
+        minImages,
+        maxImages,
+        maskSupported: false,
+        minVideos: 0,
+        maxVideos: 0,
+        maxAudios: 0,
+    };
+}
+
+export const imageQwenProfile: WorkflowModelProfile = {
+    id: "image-qwen",
+    name: "Qwen Image 全能生图",
     capability: "image",
     protocol: "comfyui",
     category: "t2i",
-    capabilityConfig: {
-        version: 1,
-        references: {
-            promptMaxChars: 20000,
-            minImages: 0,
-            maxImages: 10,
-            maskSupported: false,
-            minVideos: 0,
-            maxVideos: 0,
-            maxAudios: 0,
-        },
-        size: {
-            parameter: "aspect_ratio",
-            values: IMAGE_STANDARD_ASPECT_RATIOS,
-            default: "512x512",
-            allowCustom: true,
-        },
-    },
+    capabilityConfig: { version: 1, references: imageReferences(0, 9), size: IMAGE_SIZE },
     slotMapping: {
         prompt: "prompt",
         seed: "seed",
         width: "width",
         height: "height",
-        images: "ref_image_01..10",
-        output: "out_image",
+        images: "ref_image_01..09",
+        output: "output_image",
     },
-    description: "Qwen-Image 2.1 全能生图，原生支持文生图及最多 10 张多参考图构图与风格融合。",
-    supportedTools: {
-        maskEdit: true,
-        reversePrompt: true,
-    },
+    description: "Qwen Image 全能文生图与图生图，最多支持 9 张参考图。",
+    supportedTools: IMAGE_TOOLS,
 };
 
-/**
- * 2. Z-Image-Turbo 极速文生图
- * SVD / Lumina2 架构，极速出片，纯文生图，不支持外部参考图
- */
+export const imageQwen4x4Profile: WorkflowModelProfile = {
+    id: "image-qwen-4x4",
+    name: "Qwen Image 4×4 图生图",
+    capability: "image",
+    protocol: "comfyui",
+    category: "i2i",
+    capabilityConfig: { version: 1, references: imageReferences(1, 1), size: IMAGE_SIZE },
+    slotMapping: {
+        prompt: "prompt",
+        seed: "seed",
+        width: "width",
+        height: "height",
+        images: "ref_image_01",
+        output: "output_image",
+    },
+    description: "Qwen Image 单参考图图生图，可在提示词中使用 @ 引用图片。",
+    supportedTools: IMAGE_TOOLS,
+};
+
+export const imageMossProfile: WorkflowModelProfile = {
+    id: "image-moss",
+    name: "Moss Image 文生图",
+    capability: "image",
+    protocol: "comfyui",
+    category: "t2i",
+    capabilityConfig: { version: 1, references: imageReferences(0, 0), size: IMAGE_SIZE },
+    slotMapping: {
+        prompt: "prompt",
+        seed: "seed",
+        width: "width",
+        height: "height",
+        output: "output_image",
+    },
+    description: "Moss Image 文生图工作流。",
+    supportedTools: IMAGE_TOOLS,
+};
+
 export const imageZTurboProfile: WorkflowModelProfile = {
     id: "image-z-turbo",
-    name: "Z-Image Turbo 极速",
+    name: "Z-Image-Turbo 文生图",
     capability: "image",
     protocol: "comfyui",
     category: "t2i",
     steps: 8,
-    capabilityConfig: {
-        version: 1,
-        references: {
-            promptMaxChars: 20000,
-            minImages: 0,
-            maxImages: 0,
-            maskSupported: false,
-            minVideos: 0,
-            maxVideos: 0,
-            maxAudios: 0,
-        },
-        size: {
-            parameter: "aspect_ratio",
-            values: ["1:1", "4:3", "3:4", "16:9", "9:16"],
-            default: "512x512",
-            allowCustom: true,
-        },
-    },
+    capabilityConfig: { version: 1, references: imageReferences(0, 0), size: IMAGE_SIZE },
     slotMapping: {
         prompt: "prompt",
         seed: "seed",
@@ -193,102 +206,13 @@ export const imageZTurboProfile: WorkflowModelProfile = {
         height: "height",
         output: "output_image",
     },
-    description: "Z-Image-Turbo 极速文生图，仅需数步即可成片，纯文生图，不支持参考图输入。",
-    supportedTools: {
-        maskEdit: true,
-        reversePrompt: true,
-    },
+    description: "Z-Image-Turbo 极速文生图，不支持参考图输入。",
+    supportedTools: IMAGE_TOOLS,
 };
 
-/**
- * 3. Flux2.Dev 图生图与双图融合
- * 深度图生图与双图融合，最多支持 2 张参考图（单图垫图或双图融合）
- */
-export const imageFlux2DevProfile: WorkflowModelProfile = {
-    id: "image-flux2-dev",
-    name: "Flux2.Dev 垫图与双图融合",
-    capability: "image",
-    protocol: "comfyui",
-    category: "i2i",
-    steps: 20,
-    capabilityConfig: {
-        version: 1,
-        references: {
-            promptMaxChars: 20000,
-            minImages: 0,
-            maxImages: 2,
-            maskSupported: false,
-            minVideos: 0,
-            maxVideos: 0,
-            maxAudios: 0,
-        },
-        size: {
-            parameter: "aspect_ratio",
-            values: IMAGE_STANDARD_ASPECT_RATIOS,
-            default: "512x512",
-            allowCustom: true,
-        },
-    },
-    slotMapping: {
-        prompt: "prompt",
-        seed: "seed",
-        width: "width",
-        height: "height",
-        images: "ref_image_01..02",
-        output: "output_image",
-    },
-    description: "Flux2.Dev 深度图生图与双图融合，支持 1~2 张参考图的角色/风格融合与图像重绘。",
-    supportedTools: {
-        maskEdit: true,
-        reversePrompt: true,
-    },
-};
-
-/**
- * 4. Qwen-Image 局部编辑重绘
- * 专用于蒙版涂抹局部重绘，严格需要 2 张参考图：一张原图 + 一张蒙版
- * 遵循工作流驱动原则：工作流中没有独立的 width/height 槽位（底图尺寸自适应），UI 不暴露尺寸调整
- */
-export const imageQwenInpaintProfile: WorkflowModelProfile = {
-    id: "image-qwen-inpaint",
-    name: "Qwen-Image 局部编辑",
-    capability: "image",
-    protocol: "comfyui",
-    category: "inpaint",
-    steps: 20,
-    capabilityConfig: {
-        version: 1,
-        references: {
-            promptMaxChars: 20000,
-            minImages: 2,
-            maxImages: 2,
-            maskSupported: true,
-            minVideos: 0,
-            maxVideos: 0,
-            maxAudios: 0,
-        },
-        // 尺寸自适应原图，工作流无独立尺寸节点，不配置 size，驱动 UI 彻底隐藏尺寸面板
-    },
-    slotMapping: {
-        prompt: "prompt",
-        seed: "seed",
-        images: "ref_image_01, ref_mask",
-        mask: "ref_mask",
-        output: "output_image",
-    },
-    description: "Qwen-Image 局部编辑重绘，严格需要两张参考图（一张原图 + 一张蒙版），底图尺寸自适应，界面无需尺寸调节。",
-    supportedTools: {
-        maskEdit: true,
-        reversePrompt: true,
-    },
-};
-
-/**
- * 系统内置图片模型清单
- */
 export const IMAGE_WORKFLOW_MODELS: WorkflowModelProfile[] = [
-    imageQwen21Profile,
+    imageQwenProfile,
+    imageQwen4x4Profile,
+    imageMossProfile,
     imageZTurboProfile,
-    imageFlux2DevProfile,
-    imageQwenInpaintProfile,
 ];

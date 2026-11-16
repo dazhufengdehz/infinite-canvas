@@ -1,109 +1,79 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_VIDEO_WORKFLOW_MODELS, evaluateModelAvailability, getModelProfile } from "@/services/api/models";
+import {
+    BUILTIN_VIDEO_WORKFLOW_MODELS,
+    evaluateModelAvailability,
+    getModelProfile,
+    videoMinimaxH3OmniProfile,
+} from "@/services/api/models";
 import { isModelSupportedByHost } from "@/stores/use-config-store";
 import type { ModelChannel } from "@/types/config";
 
-describe("VideoModelPicker Data Contract & Hierarchy", () => {
-    it("BUILTIN_VIDEO_WORKFLOW_MODELS contains 4 FP8 + 4 INT8 models without BF16", () => {
-        expect(BUILTIN_VIDEO_WORKFLOW_MODELS).toHaveLength(8);
-        const ids = BUILTIN_VIDEO_WORKFLOW_MODELS.map((m) => m.id);
-        expect(ids).toContain("omni-video-minimax-h3-fp8-4step-pdmd");
-        expect(ids).toContain("omni-video-minimax-h3-fp8");
-        expect(ids).toContain("frame-video-minimax-h3-fp8-4step-pdmd");
-        expect(ids).toContain("frame-video-minimax-h3-fp8");
-        expect(ids).toContain("omni-video-minimax-h3-int8-4step-pdmd");
-        expect(ids).toContain("frame-video-minimax-h3-int8-4step-pdmd");
-        expect(ids).toContain("omni-video-minimax-h3-int8-6step-pika");
-        expect(ids).toContain("frame-video-minimax-h3-int8-6step-pika");
-
-        // Ensure BF16 models are purged
-        ids.forEach((id) => {
-            expect(id).not.toContain("bf16");
+describe("VideoModelPicker Data Contract", () => {
+    it("registers the MS_V10 omni video profile", () => {
+        expect(BUILTIN_VIDEO_WORKFLOW_MODELS).toEqual([videoMinimaxH3OmniProfile]);
+        expect(videoMinimaxH3OmniProfile.id).toBe("omni-video-minimax-h3-ms-v10");
+        expect(videoMinimaxH3OmniProfile.category).toBe("omniVideo");
+        expect(videoMinimaxH3OmniProfile.capabilityConfig.references).toMatchObject({
+            minImages: 0,
+            maxImages: 9,
+            minVideos: 0,
+            maxVideos: 3,
+            maxAudios: 3,
         });
     });
 
-    it("model profile names are human readable and unique without raw IDs", () => {
-        const names = BUILTIN_VIDEO_WORKFLOW_MODELS.map((model) => {
-            expect(model.name).not.toBe("video_minimax_h3_omni");
-            expect(model.name).not.toBe("video_minimax_h3_frame");
-            expect(model.name.length).toBeGreaterThan(0);
-            return model.name;
-        });
-        expect(new Set(names).size).toBe(names.length);
-    });
-
-    it("all video models define tags: [5, 10, 15] in capabilityConfig.duration for quick presets", () => {
-        BUILTIN_VIDEO_WORKFLOW_MODELS.forEach((model) => {
-            expect(model.capabilityConfig.duration).toBeDefined();
-            expect(model.capabilityConfig.duration?.tags).toEqual([5, 10, 15]);
-            expect(model.capabilityConfig.duration?.default).toBe(5);
-            expect(model.capabilityConfig.duration?.min).toBe(1);
-            expect(model.capabilityConfig.duration?.max).toBe(15);
+    it("defines duration quick presets and bounds", () => {
+        expect(videoMinimaxH3OmniProfile.capabilityConfig.duration).toMatchObject({
+            tags: [5, 10, 15],
+            default: 5,
+            min: 1,
+            max: 15,
         });
     });
 
-    it("isModelSupportedByHost correctly flags supported vs unsupported models for hosts", () => {
-        const hostWithOmniOnly: ModelChannel = {
+    it("checks host support using the current profile ID", () => {
+        const host: ModelChannel = {
             id: "host-rtx3060",
             name: "RTX 3060 8G 算力机",
             baseUrl: "http://192.168.1.100:8188",
             apiKey: "",
             apiFormat: "comfyui",
             models: [],
-            supportedModelIds: ["omni-video-minimax-h3-fp8-4step-pdmd"],
+            supportedModelIds: ["omni-video-minimax-h3-ms-v10"],
         };
-
-        expect(isModelSupportedByHost(hostWithOmniOnly, "omni-video-minimax-h3-fp8-4step-pdmd")).toBe(true);
-        expect(isModelSupportedByHost(hostWithOmniOnly, "frame-video-minimax-h3-fp8-4step-pdmd")).toBe(false);
+        expect(isModelSupportedByHost(host, videoMinimaxH3OmniProfile.id)).toBe(true);
+        expect(isModelSupportedByHost(host, "another-video-profile")).toBe(false);
     });
 
-    it("getModelProfile resolves both new canonical IDs and legacy aliases seamlessly", () => {
-        const canonical = getModelProfile("omni-video-minimax-h3-fp8-4step-pdmd");
-        expect(canonical).toBeDefined();
-        expect(canonical?.id).toBe("omni-video-minimax-h3-fp8-4step-pdmd");
-
-        const legacyOmni = getModelProfile("video_minimax_h3_omni");
-        expect(legacyOmni?.id).toBe("omni-video-minimax-h3-fp8-4step-pdmd");
-
-        const legacyFrame = getModelProfile("video_minimax_h3_frame");
-        expect(legacyFrame?.id).toBe("frame-video-minimax-h3-fp8-4step-pdmd");
+    it("resolves canonical IDs, workflow IDs and category aliases", () => {
+        expect(getModelProfile(videoMinimaxH3OmniProfile.id)).toEqual(videoMinimaxH3OmniProfile);
+        expect(getModelProfile("builtin-omni-video-minimax-h3-ms-v10")).toEqual(videoMinimaxH3OmniProfile);
+        expect(getModelProfile("omniVideo")).toEqual(videoMinimaxH3OmniProfile);
     });
 
-    it("evaluates candidate model availability with image over-quota (Frame video disabled with 3 images)", () => {
-        const frameModel = BUILTIN_VIDEO_WORKFLOW_MODELS.find((m) => m.category === "frameVideo")!;
-        const omniModel = BUILTIN_VIDEO_WORKFLOW_MODELS.find((m) => m.category === "omniVideo")!;
-
-        const frameCheck = evaluateModelAvailability({
-            targetModel: frameModel,
-            connectedImages: 3,
-            connectedVideos: 0,
-            connectedAudios: 0,
-            promptText: "",
+    it("allows the full 9 images + 3 videos + 3 audios contract", () => {
+        const available = evaluateModelAvailability({
+            targetModel: videoMinimaxH3OmniProfile,
+            connectedImages: 9,
+            connectedVideos: 3,
+            connectedAudios: 3,
+            promptText: "cinematic scene",
         });
-        expect(frameCheck.isAvailable).toBe(false);
-        expect(frameCheck.reasons).toContain("已连接 3 张参考图，该模型最多支持 2 张");
+        expect(available.isAvailable).toBe(true);
+        expect(available.reasons).toEqual([]);
 
-        const omniCheck = evaluateModelAvailability({
-            targetModel: omniModel,
-            connectedImages: 3,
-            connectedVideos: 0,
-            connectedAudios: 0,
-            promptText: "",
+        const overQuota = evaluateModelAvailability({
+            targetModel: videoMinimaxH3OmniProfile,
+            connectedImages: 10,
+            connectedVideos: 4,
+            connectedAudios: 4,
+            promptText: "cinematic scene",
         });
-        expect(omniCheck.isAvailable).toBe(true);
-        expect(omniCheck.reasons).toEqual([]);
-    });
-
-    it("evaluates candidate model availability with video connection (Frame video disabled)", () => {
-        const frameModel = BUILTIN_VIDEO_WORKFLOW_MODELS.find((m) => m.category === "frameVideo")!;
-        const check = evaluateModelAvailability({
-            targetModel: frameModel,
-            connectedImages: 2,
-            connectedVideos: 1,
-            connectedAudios: 0,
-            promptText: "",
-        });
-        expect(check.isAvailable).toBe(false);
-        expect(check.reasons).toContain("该模型不支持参考视频，当前已连接 1 个视频");
+        expect(overQuota.isAvailable).toBe(false);
+        expect(overQuota.reasons).toEqual([
+            "已连接 10 张参考图，该模型最多支持 9 张",
+            "已连接 4 个参考视频，该模型最多支持 3 个",
+            "已连接 4 个参考音频，该模型最多支持 3 个",
+        ]);
     });
 });

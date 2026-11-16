@@ -4,15 +4,6 @@ import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import { findWorkflow, getDefaultWorkflow, modelOptionName, resolveModelChannel, resolveModelRequestConfig, type AiConfig, type ChannelModel, type ComfyWorkflowItem, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
 import {
-    DEFAULT_COMFYUI_FRAME_VIDEO_WORKFLOW,
-    DEFAULT_COMFYUI_I2I_WORKFLOW,
-    DEFAULT_COMFYUI_INPAINT_WORKFLOW,
-    DEFAULT_COMFYUI_T2I_WORKFLOW,
-    DEFAULT_COMFYUI_TEXT_WORKFLOW,
-    DEFAULT_COMFYUI_VIDEO_WORKFLOW,
-    getWorkflowForModelProfile,
-} from "./comfyui-default-workflows";
-import {
     buildProgressTopology,
     ComfyuiProgressChannel,
 } from "./comfyui-progress-channel";
@@ -453,8 +444,8 @@ export function generateRandomSeed(): number {
  */
 const BINDING_TITLE_TO_INPUT_SLOT: Record<string, Record<string, string>> = {
     prompt: { CLIPTextEncode: "text", PrimitiveStringMultiline: "value", PrimitiveString: "value", TextEncodeBooguEdit: "prompt", TextEncodeQwenImageEditPlus: "prompt" },
-    width: { PrimitiveInt: "value", PrimitiveFloat: "value" },
-    height: { PrimitiveInt: "value", PrimitiveFloat: "value" },
+    width: { PrimitiveInt: "value", PrimitiveFloat: "value", Int: "Number" },
+    height: { PrimitiveInt: "value", PrimitiveFloat: "value", Int: "Number" },
     seed: { KSampler: "seed", KSamplerAdvanced: "noise_seed", PrimitiveInt: "value", PrimitiveFloat: "value" },
     ref_image: { LoadImage: "image", LoadImageMask: "image" },
     ref_mask: { LoadImage: "image", LoadImageMask: "image" },
@@ -489,10 +480,10 @@ export function applyBindings(workflow: ComfyuiWorkflowJson, params: ComfyuiBind
             value = params[title];
         } else if (title === "width" && params.width !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.width[record.class_type] || ("value" in record.inputs ? "value" : "width" in record.inputs ? "width" : undefined);
-            value = params.width;
+            value = slot === "Number" ? String(params.width) : params.width;
         } else if (title === "height" && params.height !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.height[record.class_type] || ("value" in record.inputs ? "value" : "height" in record.inputs ? "height" : undefined);
-            value = params.height;
+            value = slot === "Number" ? String(params.height) : params.height;
         } else if (title === "duration" && params.duration !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.duration[record.class_type] || ("value" in record.inputs ? "value" : "duration" in record.inputs ? "duration" : "Number" in record.inputs ? "Number" : undefined);
             value = slot === "Number" ? String(params.duration) : params.duration;
@@ -2373,13 +2364,15 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
               ? getDefaultWorkflow(channel, requestedCategory)
               : undefined;
         const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, CUSTOM_WORKFLOW_CATEGORIES.image);
-        const channelWorkflow = isI2i
-            ? (channelModel && isI2iWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
-              channel.comfyuiI2iWorkflow ||
-              channel.models.find((m) => isI2iWorkflowModel(m))?.comfyuiWorkflow
-            : (channelModel && isT2iWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
-              channel.comfyuiT2iWorkflow ||
-              channel.models.find((m) => isT2iWorkflowModel(m))?.comfyuiWorkflow;
+        const channelWorkflow = Array.isArray(channel.workflows)
+            ? undefined
+            : isI2i
+              ? (channelModel && isI2iWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
+                channel.comfyuiI2iWorkflow ||
+                channel.models.find((m) => isI2iWorkflowModel(m))?.comfyuiWorkflow
+              : (channelModel && isT2iWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
+                channel.comfyuiT2iWorkflow ||
+                channel.models.find((m) => isT2iWorkflowModel(m))?.comfyuiWorkflow;
 
         const modelProfile = customExecution
             ? undefined
@@ -2391,13 +2384,10 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
                 size: req.size,
             });
         }
-        const profileWorkflow = modelProfile ? getWorkflowForModelProfile(modelProfile.id) : undefined;
         const workflow = targetWorkflowItem
             ? { json: targetWorkflowItem.json }
             : channelWorkflow
             ? { json: channelWorkflow.json }
-            : profileWorkflow
-            ? { json: profileWorkflow.json }
             : undefined;
         if (!workflow) throw new ComfyuiNoWorkflowError(i18n.t("comfyui.noWorkflow", { model: requestModel }));
         const baseUrl = (channel.comfyuiProxyUrl || "").trim();
@@ -2575,15 +2565,13 @@ export async function requestComfyuiInpaint(req: ComfyuiInpaintRequest): Promise
         if (customExecution) {
             validateModelExecution(customExecution.profile, { imagesCount: 2 });
         }
-        const profileWorkflow = modelProfile ? getWorkflowForModelProfile(modelProfile.id) : undefined;
-        const inpaintWorkflow =
-            targetWorkflowItem
-                ? { json: targetWorkflowItem.json }
-                : profileWorkflow
-                ? { json: profileWorkflow.json }
-                : (channelModel && isInpaintWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
-                  channel.comfyuiInpaintWorkflow ||
-                  channel.models.find((m) => isInpaintWorkflowModel(m))?.comfyuiWorkflow;
+        const inpaintWorkflow = targetWorkflowItem
+            ? { json: targetWorkflowItem.json }
+            : Array.isArray(channel.workflows)
+              ? undefined
+              : (channelModel && isInpaintWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
+                channel.comfyuiInpaintWorkflow ||
+                channel.models.find((m) => isInpaintWorkflowModel(m))?.comfyuiWorkflow;
         if (!inpaintWorkflow) {
             throw new ComfyuiNoWorkflowError(i18n.t("comfyui.noInpaintWorkflow"));
         }
@@ -2999,12 +2987,13 @@ export async function requestComfyuiText(req: ComfyuiTextRequest): Promise<{ tex
         if (customExecution) {
             validateModelExecution(customExecution.profile, { imagesCount: req.imageDataUrl ? 1 : 0 });
         }
-        const textWorkflow =
-            targetWorkflowItem
-                ? { json: targetWorkflowItem.json }
-                : (channelModel && isTextWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
-                  channel.comfyuiTextWorkflow ||
-                  channel.models.find((m) => isTextWorkflowModel(m))?.comfyuiWorkflow;
+        const textWorkflow = targetWorkflowItem
+            ? { json: targetWorkflowItem.json }
+            : Array.isArray(channel.workflows)
+              ? undefined
+              : (channelModel && isTextWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
+                channel.comfyuiTextWorkflow ||
+                channel.models.find((m) => isTextWorkflowModel(m))?.comfyuiWorkflow;
 
         if (!textWorkflow) {
             throw new ComfyuiNoWorkflowError(i18n.t("comfyui.noTextWorkflow"));
@@ -3693,21 +3682,17 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
         });
     }
 
-    const profileWorkflow = modelProfile ? getWorkflowForModelProfile(modelProfile.id) : undefined;
-    const videoWorkflow =
-        targetWorkflowItem
-            ? { json: targetWorkflowItem.json }
-            : profileWorkflow
-            ? { json: profileWorkflow.json }
-            : videoMode === "frame"
+    const videoWorkflow = targetWorkflowItem
+        ? { json: targetWorkflowItem.json }
+        : Array.isArray(channel.workflows)
+          ? undefined
+          : videoMode === "frame"
             ? (channelModel && isFrameVideoWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
               channel.comfyuiFrameVideoWorkflow ||
-              channel.models.find((m) => isFrameVideoWorkflowModel(m))?.comfyuiWorkflow ||
-              DEFAULT_COMFYUI_FRAME_VIDEO_WORKFLOW
+              channel.models.find((m) => isFrameVideoWorkflowModel(m))?.comfyuiWorkflow
             : (channelModel && isOmniVideoWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
               channel.comfyuiVideoWorkflow ||
-              channel.models.find((m) => isOmniVideoWorkflowModel(m))?.comfyuiWorkflow ||
-              DEFAULT_COMFYUI_VIDEO_WORKFLOW;
+              channel.models.find((m) => isOmniVideoWorkflowModel(m))?.comfyuiWorkflow;
 
     if (!videoWorkflow) {
         throw new ComfyuiNoWorkflowError(i18n.t(videoMode === "frame" ? "comfyui.noFrameVideoWorkflow" : "comfyui.noVideoWorkflow"));
@@ -3959,10 +3944,7 @@ export async function requestComfyuiAudio(req: ComfyuiAudioRequest): Promise<Com
         : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || rawModel || "audio-minimax-music-3");
 
     let workflowItem = targetWorkflowItem;
-    if (!workflowItem && modelProfile) {
-        workflowItem = getWorkflowForModelProfile(modelProfile.id);
-    }
-    if (!workflowItem && channel.comfyuiAudioWorkflow) {
+    if (!workflowItem && !Array.isArray(channel.workflows) && channel.comfyuiAudioWorkflow) {
         workflowItem = {
             id: `${channel.id}-audio-workflow`,
             name: channel.comfyuiAudioWorkflow.name,

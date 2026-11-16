@@ -1,8 +1,8 @@
 import type { ComfyWorkflowItem, ModelChannel, WorkflowCategory } from "@/stores/use-config-store";
 import { audioMinimaxMusic3Profile } from "./audio-models";
-import { imageQwen21Profile } from "./image-models";
+import { imageQwenProfile } from "./image-models";
 import type { WorkflowCapabilityConfig, WorkflowModelProfile } from "./types";
-import { videoMinimaxH3OmniInt8SelfLiftProfile } from "./video-minimax-h3-omni";
+import { videoMinimaxH3OmniProfile } from "./video-minimax-h3-omni";
 
 export const CUSTOM_WORKFLOW_CATEGORIES: Record<"image" | "video" | "audio" | "text", WorkflowCategory[]> = {
     image: ["t2i", "i2i", "inpaint", "superResolve", "angle", "upscale"],
@@ -54,14 +54,14 @@ export function buildCustomWorkflowProfile(workflow: ComfyWorkflowItem): Workflo
     const hasSize = isEasy || (slots.has("width") && slots.has("height"));
     const size = hasSize
         ? capability === "video"
-            ? videoMinimaxH3OmniInt8SelfLiftProfile.capabilityConfig.size
+            ? videoMinimaxH3OmniProfile.capabilityConfig.size
             : capability === "image"
-              ? imageQwen21Profile.capabilityConfig.size
+              ? imageQwenProfile.capabilityConfig.size
               : undefined
         : undefined;
     const duration = isEasy || slots.has("duration")
         ? capability === "video"
-            ? videoMinimaxH3OmniInt8SelfLiftProfile.capabilityConfig.duration
+            ? videoMinimaxH3OmniProfile.capabilityConfig.duration
             : capability === "audio"
               ? audioMinimaxMusic3Profile.capabilityConfig.duration
               : undefined

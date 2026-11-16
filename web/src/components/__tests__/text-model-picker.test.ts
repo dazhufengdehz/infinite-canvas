@@ -100,7 +100,7 @@ describe("TextModelPicker Data Contract & Unified Qwen-3.5 Multimodal Constraint
             apiKey: "",
             apiFormat: "comfyui" as const,
             models: [],
-            supportedModelIds: ["image-qwen-2.1", "text-custom-other"], // explicitly configured text model does not include text-qwen-35
+            supportedModelIds: ["image-qwen", "text-custom-other"], // explicitly configured text model does not include text-qwen-35
         };
 
         const check = evaluateModelAvailability({

@@ -1,5 +1,5 @@
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type ConnectionHandle } from "@/types/canvas";
-import { getModelProfile, imageQwen21Profile, textQwen35Profile, videoMinimaxH3OmniProfile } from "@/services/api/models";
+import { getModelProfile, imageQwenProfile, textQwen35Profile, videoMinimaxH3OmniProfile } from "@/services/api/models";
 import { getGroupResourceNodes } from "@/lib/canvas/canvas-resource-references";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
 
@@ -171,7 +171,7 @@ export function validateInputConnection(
         toNode.type === CanvasNodeType.Video
             ? videoMinimaxH3OmniProfile
             : toNode.type === CanvasNodeType.Image
-            ? imageQwen21Profile
+            ? imageQwenProfile
             : toNode.type === CanvasNodeType.Text
             ? textQwen35Profile
             : undefined
@@ -256,7 +256,7 @@ export function getConnectionRejectionDetail(
         toNode.type === CanvasNodeType.Video
             ? videoMinimaxH3OmniProfile
             : toNode.type === CanvasNodeType.Image
-            ? imageQwen21Profile
+            ? imageQwenProfile
             : toNode.type === CanvasNodeType.Text
             ? textQwen35Profile
             : undefined
@@ -342,7 +342,7 @@ export function findInvalidNodeConnections(
     if (!toNode) return invalidIds;
 
     const modelId = toNode.metadata?.modelId || toNode.metadata?.videoMode || toNode.metadata?.model;
-    const profile = getModelProfile(modelId) || (toNode.type === CanvasNodeType.Video ? videoMinimaxH3OmniProfile : toNode.type === CanvasNodeType.Image ? imageQwen21Profile : undefined);
+    const profile = getModelProfile(modelId) || (toNode.type === CanvasNodeType.Video ? videoMinimaxH3OmniProfile : toNode.type === CanvasNodeType.Image ? imageQwenProfile : undefined);
     if (!profile?.capabilityConfig.references) return invalidIds;
 
     const refs = profile.capabilityConfig.references;

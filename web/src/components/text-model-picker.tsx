@@ -3,18 +3,14 @@ import { AlertTriangle, HelpCircle, Sparkles, Workflow } from "lucide-react";
 import { useMemo } from "react";
 
 import {
-    BUILTIN_TEXT_WORKFLOW_MODELS,
-    buildCustomWorkflowProfile,
+    buildWorkflowModelProfiles,
     CUSTOM_WORKFLOW_CATEGORIES,
     evaluateModelAvailability,
-    findCustomWorkflowProfile,
-    getModelProfile,
-    textQwen35Profile,
     type WorkflowModelProfile,
 } from "@/services/api/models";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { getDefaultWorkflow, useEffectiveConfig } from "@/stores/use-config-store";
+import { getChannelWorkflows, getDefaultWorkflow, useEffectiveConfig } from "@/stores/use-config-store";
 
 export type TextModelPickerProps = {
     channelId?: string;
@@ -56,26 +52,23 @@ export function TextModelPicker({
         return (channelId ? channels.find((c) => c.id === channelId) : null) || channels[0];
     }, [channels, channelId]);
 
+    const activeProfiles = useMemo(
+        () => buildWorkflowModelProfiles(getChannelWorkflows(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.text)),
+        [activeChannel],
+    );
     const activeProfile = useMemo(() => {
-        if (modelId) {
-            const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, modelId, CUSTOM_WORKFLOW_CATEGORIES.text);
-            if (profile) return profile;
-        }
-        const defaultWf = activeChannel ? getDefaultWorkflow(activeChannel, "text") : undefined;
-        if (defaultWf) {
-            const profile = getModelProfile(defaultWf.id) || findCustomWorkflowProfile(activeChannel, defaultWf.id, CUSTOM_WORKFLOW_CATEGORIES.text);
-            if (profile) return profile;
-        }
-        return textQwen35Profile;
-    }, [modelId, activeChannel]);
-    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile.id));
+        const selected = activeProfiles.find((profile) => profile.id === modelId);
+        if (selected) return selected;
+        const defaultWf = getDefaultWorkflow(activeChannel, "text");
+        const defaultProfile = defaultWf ? buildWorkflowModelProfiles([defaultWf])[0] : undefined;
+        return activeProfiles.find((profile) => profile.id === defaultProfile?.id) || activeProfiles[0];
+    }, [modelId, activeProfiles, activeChannel]);
+    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile?.id));
 
     const options = useMemo(() => {
         const orderedChannels = [activeChannel, ...channels.filter((channel) => channel.id !== activeChannel.id)];
-        return orderedChannels.flatMap((channel) => [
-            ...BUILTIN_TEXT_WORKFLOW_MODELS,
-            ...(channel.workflows || []).filter((workflow) => !workflow.isBuiltin && CUSTOM_WORKFLOW_CATEGORIES.text.includes(workflow.category)).map(buildCustomWorkflowProfile),
-        ].map((model) => {
+        return orderedChannels.flatMap((channel) =>
+            buildWorkflowModelProfiles(getChannelWorkflows(channel, CUSTOM_WORKFLOW_CATEGORIES.text)).map((model) => {
             const isCustom = Boolean(channel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === model.id));
             const availability = evaluateModelAvailability({
                 targetModel: model,
@@ -155,18 +148,20 @@ export function TextModelPicker({
     }, [activeChannel, channels, connectedImages, connectedVideos, connectedAudios, promptText]);
 
     const selectValue = useMemo(() => {
-        return JSON.stringify([activeChannel.id, activeProfile.id]);
-    }, [activeChannel.id, activeProfile.id]);
+        return activeProfile ? JSON.stringify([activeChannel.id, activeProfile.id]) : undefined;
+    }, [activeChannel.id, activeProfile]);
 
     const handleSelectChange = (value: string) => {
         const [selectedChannelId, selectedModelId] = JSON.parse(value) as [string, string];
         const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) || activeChannel;
-        const found = getModelProfile(selectedModelId) || findCustomWorkflowProfile(selectedChannel, selectedModelId, CUSTOM_WORKFLOW_CATEGORIES.text);
+        const found = buildWorkflowModelProfiles(getChannelWorkflows(selectedChannel, CUSTOM_WORKFLOW_CATEGORIES.text))
+            .find((profile) => profile.id === selectedModelId);
         if (!found) return;
         onChange(selectedChannelId, found.id, found);
     };
 
     const activeAvailability = useMemo(() => {
+        if (!activeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
             targetModel: activeProfile,
             connectedImages,
@@ -180,6 +175,7 @@ export function TextModelPicker({
     return (
         <Select
             value={selectValue}
+            placeholder="暂无工作流"
             options={options}
             onChange={handleSelectChange}
             popupMatchSelectWidth={false}
@@ -195,8 +191,8 @@ export function TextModelPicker({
             }}
             labelRender={() => (
                 <div className="flex items-center gap-1.5 truncate max-w-[170px]">
-                    {activeIsCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(activeProfile.id)}
-                    <span className="font-semibold text-xs truncate">{activeProfile.name}</span>
+                    {activeIsCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(activeProfile?.id || "")}
+                    <span className="font-semibold text-xs truncate">{activeProfile?.name || "暂无工作流"}</span>
                     {!activeAvailability.isAvailable && (
                         <Tooltip
                             title={

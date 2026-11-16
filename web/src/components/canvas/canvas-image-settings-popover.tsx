@@ -8,7 +8,7 @@ import { useDeferredOutsideClick } from "./use-deferred-outside-click";
 import { ImageSettingsPanel, imageSizeLabel } from "@/components/image-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { getModelProfile, imageQwen21Profile, type WorkflowModelProfile } from "@/services/api/models";
+import { type WorkflowModelProfile } from "@/services/api/models";
 import type { AiConfig } from "@/stores/use-config-store";
 
 type CanvasImageSettingsPopoverProps = {
@@ -34,9 +34,7 @@ export function CanvasImageSettingsPopover({ modelId, profile: profileProp, conf
     const [open, setOpen] = useState(false);
     const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
     const count = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
-    const profile = profileProp || getModelProfile(modelId) || imageQwen21Profile;
-    const hasSizeConfig = Boolean(profile.capabilityConfig.size);
-    const activeSize = config.size || profile.capabilityConfig.size?.default || "auto";
+    const profile = profileProp;
     const updateOpen = (nextOpen: boolean) => {
         setOpen(nextOpen);
         onOpenChangeRef.current?.(nextOpen);
@@ -50,6 +48,9 @@ export function CanvasImageSettingsPopover({ modelId, profile: profileProp, conf
         onSyncPosition: () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null),
     });
 
+    if (!profile) return null;
+    const hasSizeConfig = Boolean(profile.capabilityConfig.size);
+    const activeSize = config.size || profile.capabilityConfig.size?.default || "auto";
     const panel = open && buttonRect ? (
         <ImageSettingsPortal
             buttonRect={buttonRect}

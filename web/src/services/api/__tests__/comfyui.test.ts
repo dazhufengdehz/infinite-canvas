@@ -5,7 +5,7 @@ import { adaptWorkflowModelPaths, applyBindings, applyTextBindings, cancelJob, c
 import { buildCustomWorkflowProfile } from "@/services/api/models";
 import type { ComfyuiWorkflowJson } from "@/services/api/comfyui";
 import { defaultConfig, findWorkflow, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
-import { DEFAULT_BUILTIN_COMFYUI_DEPTH_VIDEO_WORKFLOW, DEFAULT_BUILTIN_COMFYUI_FACE_REFINE_WORKFLOW, DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW } from "@/services/api/comfyui-default-workflows";
+import { DEFAULT_BUILTIN_COMFYUI_DEPTH_VIDEO_WORKFLOW, DEFAULT_BUILTIN_COMFYUI_FACE_REFINE_WORKFLOW, DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW } from "@/services/api/comfyui-default-workflows";
 
 // The generation log store the service writes to (same localforage structure as image-storage).
 const { comfyuiLogStore } = vi.hoisted(() => ({
@@ -843,7 +843,7 @@ function buildComfyuiConfig(options?: { withWorkflow?: boolean; workflow?: Comfy
     return { ...defaultConfig, channels: [channel], model: "comfy::ComfyUI T2I", imageModel: "comfy::ComfyUI T2I", models: ["comfy::ComfyUI T2I"] };
 }
 
-function buildFrameVideoConfig(): AiConfig {
+function buildVideoConfig(): AiConfig {
     const workflow: ComfyuiWorkflowJson = {
         "1": { inputs: { text: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "prompt" } },
     };
@@ -853,11 +853,11 @@ function buildFrameVideoConfig(): AiConfig {
         baseUrl: "",
         apiKey: "",
         apiFormat: "comfyui",
-        models: [{ name: "ComfyUI Frame Video", capability: "video", comfyuiWorkflow: { name: "frame", json: workflow, createdAt: 0 } }],
+        models: [{ name: "ComfyUI Video", capability: "video", comfyuiWorkflow: { name: "omni", json: workflow, createdAt: 0 } }],
         comfyuiProxyUrl: "http://10.7.8.12:8188",
         comfyuiProxyToken: "tok",
     };
-    return { ...defaultConfig, channels: [channel], model: "comfy::ComfyUI Frame Video", videoModel: "comfy::ComfyUI Frame Video", models: ["comfy::ComfyUI Frame Video"] };
+    return { ...defaultConfig, channels: [channel], model: "comfy::ComfyUI Video", videoModel: "comfy::ComfyUI Video", models: ["comfy::ComfyUI Video"] };
 }
 
 function nativeFlowWith(jobStatus: "success" | "error", extra?: Record<string, unknown>) {
@@ -1180,7 +1180,7 @@ describe("custom ComfyUI workflow execution", () => {
                 "4": { inputs: { value: 512 }, class_type: "PrimitiveInt", _meta: { title: "cached_width" } },
             },
         }];
-        const result = await requestComfyuiImage({ config, model: "image-qwen-2.1", channelId: "comfy", workflowId: "custom-image", prompt: "新提示", size: "not-a-size", seed: 42, skipLog: true });
+        const result = await requestComfyuiImage({ config, model: "image-qwen", channelId: "comfy", workflowId: "custom-image", prompt: "新提示", size: "not-a-size", seed: 42, skipLog: true });
         expect(result.jobId).toBe("job_1");
         const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/prompt"))!;
         const body = JSON.parse(String((init as RequestInit).body)) as { prompt: Record<string, TestWorkflowNode> };
@@ -1205,7 +1205,7 @@ describe("custom ComfyUI workflow execution", () => {
                 "5": { inputs: { value: 5 }, class_type: "PrimitiveInt", _meta: { title: "cached_duration" } },
             },
         }];
-        await expect(submitComfyuiVideoJob({ config, model: "omni-video-minimax-h3-int8-6step-selflift", channelId: "comfy", workflowId: "custom-video", prompt: "自定义动画" })).resolves.toMatchObject({ jobId: "video-job" });
+        await expect(submitComfyuiVideoJob({ config, model: "omni-video-minimax-h3-ms-v10", channelId: "comfy", workflowId: "custom-video", prompt: "自定义动画" })).resolves.toMatchObject({ jobId: "video-job" });
         const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
         const body = JSON.parse(String(init.body)) as { prompt: Record<string, TestWorkflowNode> };
         expect(body.prompt["1"].inputs.value).toBe("自定义动画");
@@ -1255,19 +1255,6 @@ describe("native ComfyUI video validation", () => {
         vi.unstubAllGlobals();
     });
 
-    it("rejects more than two frame images before upload or submission", async () => {
-        const references = ["1", "2", "3"].map((id) => ({ id, name: `${id}.png`, type: "image/png", dataUrl: `data:image/png;base64,${id}` }));
-        await expect(submitComfyuiVideoJob({ config: buildFrameVideoConfig(), prompt: "动画", videoMode: "frame", references })).rejects.toThrow("最多支持 2 张参考图");
-        expect(fetchMock).not.toHaveBeenCalled();
-    });
-
-    it("rejects video or audio references in frame mode before upload or submission", async () => {
-        const references = [{ id: "1", name: "1.png", type: "image/png", dataUrl: "data:image/png;base64,1" }];
-        const referenceVideos = [{ id: "video-1", name: "video.mp4", type: "video/mp4", url: "blob:video" }];
-        await expect(submitComfyuiVideoJob({ config: buildFrameVideoConfig(), prompt: "动画", videoMode: "frame", references, referenceVideos })).rejects.toThrow("不支持视频或音频参考");
-        expect(fetchMock).not.toHaveBeenCalled();
-    });
-
     it("submits video job with model profile and default workflow successfully", async () => {
         fetchMock.mockImplementation(async (url: string) => {
             if (String(url).includes("/prompt")) {
@@ -1281,9 +1268,9 @@ describe("native ComfyUI video validation", () => {
         });
 
         const result = await submitComfyuiVideoJob({
-            config: { ...buildFrameVideoConfig(), size: "1280x736" },
+            config: { ...buildVideoConfig(), size: "1280x736" },
             prompt: "生成一段超酷动画",
-            model: "omni-video-minimax-h3-fp8-4step-pdmd",
+            model: "omni-video-minimax-h3-ms-v10",
             videoMode: "omni",
         });
 
@@ -1363,7 +1350,7 @@ describe("collectVideoAssetIds prioritization", () => {
 
 describe("validateComfyuiWorkflow & findWorkflow", () => {
     it("validates built-in t2i workflow successfully", () => {
-        const result = validateComfyuiWorkflow(DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json, "t2i");
+        const result = validateComfyuiWorkflow(DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, "t2i");
         expect(result.ok).toBe(true);
     });
 
@@ -1409,7 +1396,7 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
 
     it("rejects t2i workflow containing forbidden inpaint ref_mask slot", () => {
         const wfWithMask = {
-            ...DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json,
+            ...DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json,
             "999": { class_type: "LoadImage", inputs: {}, _meta: { title: "ref_mask" } },
         };
         const result = validateComfyuiWorkflow(wfWithMask as unknown as ComfyuiWorkflowJson, "t2i");
@@ -1424,8 +1411,8 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
                 {
                     ...defaultConfig.channels[0],
                     workflows: [
-                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json, isDefault: false },
-                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json, isDefault: true },
+                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: false },
+                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: true },
                     ],
                 },
             ],
@@ -1441,8 +1428,8 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
                 {
                     ...defaultConfig.channels[0],
                     workflows: [
-                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json, isDefault: false },
-                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW.json, isDefault: true },
+                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: false },
+                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: true },
                     ],
                 },
             ],
@@ -1452,10 +1439,10 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
     });
 });
 
-describe("Qwen-Image-2.1 and submitJob validation", () => {
-    it("safely binds Qwen-Image-2.1 for text-to-image without cascade deleting nodes", async () => {
-        const qwenJson = (await import("@/assets/workflows/qwen_image_21_api.json")).default;
-        const bound = applyBindings(qwenJson as unknown as ComfyuiWorkflowJson, {
+describe("QRw_D and submitJob validation", () => {
+    it("binds QRw_D for text-to-image and prunes every unused reference slot", async () => {
+        const qrwJson = (await import("@/assets/workflows/QRw_D.json")).default;
+        const bound = applyBindings(qrwJson as unknown as ComfyuiWorkflowJson, {
             prompt: "ancient chinese portrait",
             width: 1024,
             height: 1024,
@@ -1463,14 +1450,17 @@ describe("Qwen-Image-2.1 and submitJob validation", () => {
         });
 
         expect(Object.keys(bound).length).toBe(14);
-        expect(bound["481"]).toBeDefined(); // SaveImageAdvanced
-        expect((bound["510"]?.inputs as Record<string, unknown>)?.switch).toBe(true);
-        expect((bound["512"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toBeUndefined();
+        expect(bound["534"]).toBeDefined();
+        expect((bound["508"]?.inputs as Record<string, unknown>)?.value).toBe("ancient chinese portrait");
+        expect((bound["481"]?.inputs as Record<string, unknown>)?.seed).toBe(42);
+        expect((bound["533"]?.inputs as Record<string, unknown>)?.Number).toBe("1024");
+        expect((bound["532"]?.inputs as Record<string, unknown>)?.Number).toBe("1024");
+        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toBeUndefined();
     });
 
-    it("safely binds Qwen-Image-2.1 for image-to-image with reference image and custom size (honoring EmptyLatentImage)", async () => {
-        const qwenJson = (await import("@/assets/workflows/qwen_image_21_api.json")).default;
-        const bound = applyBindings(qwenJson as unknown as ComfyuiWorkflowJson, {
+    it("binds one QRw_D reference image and keeps the remaining slots pruned", async () => {
+        const qrwJson = (await import("@/assets/workflows/QRw_D.json")).default;
+        const bound = applyBindings(qrwJson as unknown as ComfyuiWorkflowJson, {
             prompt: "portrait based on photo",
             width: 1024,
             height: 1024,
@@ -1479,25 +1469,24 @@ describe("Qwen-Image-2.1 and submitJob validation", () => {
         });
 
         expect(Object.keys(bound).length).toBe(15);
-        expect(bound["481"]).toBeDefined();
-        // 指定了宽高尺寸时，保持 switch = true 走 EmptyLatentImage 遵循指定尺寸
-        expect((bound["510"]?.inputs as Record<string, unknown>)?.switch).toBe(true);
-        expect((bound["512"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toEqual(["495", 0]);
-        expect((bound["512"]?.inputs as Record<string, unknown>)?.["images.image_2"]).toBeUndefined();
+        expect(bound["534"]).toBeDefined();
+        expect((bound["529"]?.inputs as Record<string, unknown>)?.image).toBe("uploaded_asset.png");
+        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toEqual(["529", 0]);
+        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_2"]).toBeUndefined();
     });
 
-    it("safely binds Qwen-Image-2.1 for image-to-image without custom size (falling back to reference latent)", async () => {
-        const qwenJson = (await import("@/assets/workflows/qwen_image_21_api.json")).default;
-        const bound = applyBindings(qwenJson as unknown as ComfyuiWorkflowJson, {
+    it("keeps QRw_D's original dimensions when no custom size is provided", async () => {
+        const qrwJson = (await import("@/assets/workflows/QRw_D.json")).default;
+        const bound = applyBindings(qrwJson as unknown as ComfyuiWorkflowJson, {
             prompt: "portrait based on photo",
             seed: 42,
             refImages: ["uploaded_asset.png"],
         });
 
         expect(Object.keys(bound).length).toBe(15);
-        expect(bound["481"]).toBeDefined();
-        // 未指定尺寸时，切到 switch = false 走参考图 Latent
-        expect((bound["510"]?.inputs as Record<string, unknown>)?.switch).toBe(false);
+        expect((bound["533"]?.inputs as Record<string, unknown>)?.Number).toBe("1920");
+        expect((bound["532"]?.inputs as Record<string, unknown>)?.Number).toBe("1088");
+        expect((bound["482"]?.inputs as Record<string, unknown>)?.switch).toEqual(["512", 0]);
     });
 
     it("rejects empty workflow in submitJob", async () => {

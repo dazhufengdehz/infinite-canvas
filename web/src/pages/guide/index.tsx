@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { App, Button, Card, Divider, Dropdown, Segmented, Select, Tag, Tooltip } from "antd";
-import type { MenuProps } from "antd";
+import { App, Button, Card, Divider, Segmented, Select, Tag, Tooltip } from "antd";
 import {
     AlertCircle,
     ArrowRight,
     Check,
     CheckCircle2,
-    ChevronDown,
     Copy,
     Download,
     ExternalLink,
@@ -35,7 +33,7 @@ import { type ModelChannel, useConfigStore } from "@/stores/use-config-store";
 const CORS_FLAG = '--enable-cors-header "*"';
 const LAUNCH_CMD_EXAMPLE = 'python.exe main.py --listen 0.0.0.0 --enable-manager --enable-cors-header "*"';
 
-// 5 大通用基础必备扩展插件
+// 6 大通用基础必备扩展插件
 export const CORE_PLUGINS = [
     {
         name: "Comfyui-kktools",
@@ -56,7 +54,7 @@ export const CORE_PLUGINS = [
         repo: "M1kep/ComfyLiterals",
         url: "https://github.com/M1kep/ComfyLiterals",
         desc: "字面量、常数类型及动态参数输入端口节点",
-        usedBy: "首尾帧视频 / 全能参考视频 / 音乐生成",
+        usedBy: "全能参考视频 / 音乐生成",
     },
     {
         name: "ComfyUI-UniversalToolkit",
@@ -70,7 +68,14 @@ export const CORE_PLUGINS = [
         repo: "chflame163/ComfyUI_LayerStyle",
         url: "https://github.com/chflame163/ComfyUI_LayerStyle",
         desc: "图层样式合成与局部重绘遮罩 (Mask) 处理",
-        usedBy: "局部编辑 (Inpaint) 工作流",
+        usedBy: "图像与遮罩处理",
+    },
+    {
+        name: "comfyui-SelfLift",
+        repo: "facok/comfyui-SelfLift",
+        url: "https://github.com/facok/comfyui-SelfLift",
+        desc: "MiniMax H3 渐进式潜空间超分采样器",
+        usedBy: "MS_V10 全能参考视频",
     },
 ];
 
@@ -113,6 +118,7 @@ export const CLONE_CORE_PLUGINS_CMD = [
     "git clone https://github.com/M1kep/ComfyLiterals.git",
     "git clone https://github.com/whmc76/ComfyUI-UniversalToolkit.git",
     "git clone https://github.com/chflame163/ComfyUI_LayerStyle.git",
+    "git clone https://github.com/facok/comfyui-SelfLift.git",
 ].join("\n");
 
 export const CLONE_ADVANCED_PLUGINS_CMD = [
@@ -137,9 +143,6 @@ type WorkflowVariant = {
     badgeColor?: string;
     baseModel: string;
     description: string;
-    // UI 可视化工作流可能暂时缺失（等待从 ComfyUI 重新导出），缺失时手册只提供 API 下载
-    uiFileName?: string;
-    uiDownloadUrl?: string;
     apiFileName: string;
     apiDownloadUrl: string;
     models: WorkflowModelSpec[];
@@ -160,43 +163,61 @@ const WORKFLOWS: WorkflowItem[] = [
         id: "t2i",
         name: "文生图工作流 (T2I)",
         category: "image",
-        defaultVariantId: "qwen21",
+        defaultVariantId: "qrw-d",
         variants: [
             {
-                id: "qwen21",
-                label: "Qwen-Image-2.1 旗舰版",
-                badge: "25 步旗舰 / 两栖",
+                id: "qrw-d",
+                label: "Qwen Image 全能生图",
+                badge: "T2I / I2I · 最多 9 图",
                 badgeColor: "purple",
-                baseModel: "Qwen-Image-2.1 BF16",
-                description: "依托 8B 级 Qwen3-VL 视觉语言大模型引导，对复杂长句、多主体关系与古风细节具备强大理解力；未连参考图时天然作为纯文生图工作流运行。",
-                uiFileName: "qwen_image_21_api.json",
-                uiDownloadUrl: "/workflows/qwen_image_21_api.json",
-                apiFileName: "qwen_image_21_api.json",
-                apiDownloadUrl: "/workflows/qwen_image_21_api.json",
+                baseModel: "Qwen Image 2.1 BF16",
+                description: "QRw_D 全能工作流，同时支持文生图与多图参考图生图，未连接参考图时直接按提示词生成。",
+                apiFileName: "QRw_D.json",
+                apiDownloadUrl: "/workflows/QRw_D.json",
+                plugins: [
+                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
+                ],
                 models: [
                     { category: "扩散模型", folder: "models/diffusion_models/", files: ["qwen_image_2.1_bf16.safetensors"] },
-                    { category: "多模态CLIP", folder: "models/clip/", files: ["qwen3vl_8b_bf16.safetensors"] },
+                    { category: "多模态 CLIP", folder: "models/clip/", files: ["qwen3vl_8b_bf16.safetensors"] },
                     { category: "VAE", folder: "models/vae/", files: ["qwen_image_2.1_vae_bf16.safetensors"] },
                 ],
-                tips: "大模型级提示词遵循；内置 QwenImage21Cache 加速缓存；无参考图连线时自动作为纯文生图运行。",
+                tips: "同一文件也用于图生图；最多连接 9 张参考图，未使用的参考槽位会在提交前自动移除。",
+            },
+            {
+                id: "moss",
+                label: "Moss Image 文生图",
+                badge: "INT8 · 纯文生图",
+                badgeColor: "cyan",
+                baseModel: "Moss Image INT8",
+                description: "moss_image 文生图工作流，使用 Moss Image 扩散模型与 Qwen3.5 文本编码器。",
+                apiFileName: "moss_image.json",
+                apiDownloadUrl: "/workflows/moss_image.json",
+                plugins: [
+                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
+                ],
+                models: [
+                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["moss_image_sft_int8_convrot.safetensors"] },
+                    { category: "文本编码器", folder: "models/clip/", files: ["qwen3.5_9b_w4a8_gptq.safetensors"] },
+                    { category: "VAE", folder: "models/vae/", files: ["flux2-vae_small.safetensors"] },
+                ],
+                tips: "该工作流不接收参考图；包含 TextGenerate 与 PreviewAny 节点，请安装对应文本和通用工具插件。",
             },
             {
                 id: "turbo",
-                label: "Z-Image-Turbo 极速版",
-                badge: "4~8 步极速",
+                label: "Z-Image-Turbo 文生图",
+                badge: "极速 · 纯文生图",
                 badgeColor: "blue",
-                baseModel: "Z-Image-Turbo Int8",
-                description: "基于 Z-Image-Turbo 极速出图架构，在保持极快采样速度的同时生成高画质图像，适合画布快速创意发散与秒级反馈。",
-                uiFileName: "z_image_turbo_workflow.json",
-                uiDownloadUrl: "/workflows/z_image_turbo_workflow.json",
+                baseModel: "Z-Image-Turbo BF16",
+                description: "z_image_turbo_api 文生图工作流，适合在画布中快速进行创意发散。",
                 apiFileName: "z_image_turbo_api.json",
                 apiDownloadUrl: "/workflows/z_image_turbo_api.json",
                 models: [
-                    { category: "VAE", folder: "models/vae/", files: ["ae.safetensors"] },
                     { category: "扩散模型", folder: "models/diffusion_models/", files: ["z_image_turbo_bf16.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen_3_4b.safetensors"] },
+                    { category: "文本编码器", folder: "models/clip/", files: ["qwen_3_4b.safetensors"] },
+                    { category: "VAE", folder: "models/vae/", files: ["ae.safetensors"] },
                 ],
-                tips: "标准原生节点即可运行，显存最低仅需 8GB；ComfyUI 需确保支持新版 Qwen 文本编码器。",
+                tips: "该工作流不接收参考图，使用 ComfyUI 原生节点即可运行。",
             },
         ],
     },
@@ -204,74 +225,45 @@ const WORKFLOWS: WorkflowItem[] = [
         id: "i2i",
         name: "图生图工作流 (I2I)",
         category: "image",
-        defaultVariantId: "qwen21",
+        defaultVariantId: "qrw-d",
         variants: [
             {
-                id: "qwen21",
-                label: "Qwen-Image-2.1 多图参考",
-                badge: "最多10张参考图",
-                badgeColor: "cyan",
-                baseModel: "Qwen-Image-2.1 BF16",
-                description: "原生支持最多 10 张图片联合垫图与多模态特征融合；未连满的插槽在提交时自动剪除，完全无参考图时自动回退为纯文生图。",
-                uiFileName: "qwen_image_21_api.json",
-                uiDownloadUrl: "/workflows/qwen_image_21_api.json",
-                apiFileName: "qwen_image_21_api.json",
-                apiDownloadUrl: "/workflows/qwen_image_21_api.json",
+                id: "qrw-d",
+                label: "Qwen Image 全能生图",
+                badge: "最多 9 张参考图",
+                badgeColor: "purple",
+                baseModel: "Qwen Image 2.1 BF16",
+                description: "QRw_D 全能图生图工作流，支持多图参考，与文生图共用同一份 JSON。",
+                apiFileName: "QRw_D.json",
+                apiDownloadUrl: "/workflows/QRw_D.json",
+                plugins: [
+                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
+                ],
                 models: [
                     { category: "扩散模型", folder: "models/diffusion_models/", files: ["qwen_image_2.1_bf16.safetensors"] },
-                    { category: "多模态CLIP", folder: "models/clip/", files: ["qwen3vl_8b_bf16.safetensors"] },
+                    { category: "多模态 CLIP", folder: "models/clip/", files: ["qwen3vl_8b_bf16.safetensors"] },
                     { category: "VAE", folder: "models/vae/", files: ["qwen_image_2.1_vae_bf16.safetensors"] },
                 ],
-                tips: "显式提供 ref_image_01 ~ ref_image_10 插槽；系统提交时智能自适应剪除未连线节点。",
+                tips: "图片节点中同一 Profile 只显示一次；根据是否连接参考图自动执行文生图或图生图。",
             },
             {
-                id: "flux",
-                label: "Flux2.Dev 风格迁移",
-                badge: "8~16 步 Turbo",
-                badgeColor: "purple",
-                baseModel: "Flux2.Dev FP8",
-                description: "基于 Flux2.Dev Flow Matching 架构，支持在画布中连接多张参考图进行风格迁移、融合推演与高质量图生图。",
-                uiFileName: "flux2_dev_i2i_workflow.json",
-                uiDownloadUrl: "/workflows/flux2_dev_i2i_workflow.json",
-                apiFileName: "flux2_dev_i2i_api.json",
-                apiDownloadUrl: "/workflows/flux2_dev_i2i_api.json",
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["Flux2TurboComfyv2.safetensors"] },
-                    { category: "VAE", folder: "models/vae/", files: ["flux2-vae.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["flux2_dev_fp8mixed.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["mistral_3_small_flux2_fp8.safetensors"] },
-                ],
-                tips: "Flow Matching 架构顶级质感，推荐 16GB 以上显存；显存较小可配置 ComfyUI 启动参数 --lowvram。",
-            },
-        ],
-    },
-    {
-        id: "inpaint",
-        name: "局部编辑工作流 (Inpaint)",
-        category: "image",
-        defaultVariantId: "qwen_inpaint",
-        variants: [
-            {
-                id: "qwen_inpaint",
-                label: "Qwen-Image 局部重绘",
-                badge: "4 步 Lightning",
+                id: "qrw-4x4",
+                label: "Qwen Image 4×4 图生图",
+                badge: "单参考图 · @ 引用",
                 badgeColor: "cyan",
-                baseModel: "Qwen-Image Inpaint",
-                description: "专为无限画布局部涂抹修图设计，接收前端遮罩图（ref_mask），借助 Qwen 2.5-VL 视觉理解实现无缝边缘贴合与局部内容修改替换。",
-                uiFileName: "qwen_image_inpaint_workflow.json",
-                uiDownloadUrl: "/workflows/qwen_image_inpaint_workflow.json",
-                apiFileName: "qwen_image_inpaint_api.json",
-                apiDownloadUrl: "/workflows/qwen_image_inpaint_api.json",
+                baseModel: "Qwen Image 2.1 BF16",
+                description: "QRw_4×4 单参考图图生图工作流，可在提示词中使用 @ 引用图片。",
+                apiFileName: "QRw_4×4.json",
+                apiDownloadUrl: "/workflows/QRw_4×4.json",
                 plugins: [
-                    { name: "ComfyUI_LayerStyle", url: "https://github.com/chflame163/ComfyUI_LayerStyle" },
+                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
                 ],
                 models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["Qwen-Image-Lightning-4steps-V1.0.safetensors"] },
-                    { category: "VAE", folder: "models/vae/", files: ["qwen_image_vae.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["qwen_image_fp8_e4m3fn.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen_2.5_vl_7b_fp8_scaled.safetensors"] },
+                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["qwen_image_2.1_bf16.safetensors"] },
+                    { category: "多模态 CLIP", folder: "models/clip/", files: ["qwen3vl_8b_bf16.safetensors"] },
+                    { category: "VAE", folder: "models/vae/", files: ["qwen_image_2.1_vae_bf16.safetensors"] },
                 ],
-                tips: "画布节点涂抹生成的白色 Mask 会自动送入 ref_mask 槽位；依赖 ComfyUI_LayerStyle 插件处理遮罩与图层边缘融合。",
+                tips: "需要连接 1 张参考图，不支持纯文生图或额外参考图。",
             },
         ],
     },
@@ -288,8 +280,6 @@ const WORKFLOWS: WorkflowItem[] = [
                 badgeColor: "green",
                 baseModel: "Qwen3.5 4B BF16",
                 description: "用于无限画布中的多模态文本生成、提示词润色扩写与画面反推，由本地端侧 4B 轻量大语言模型直接驱动，仅需 4G~6G 显存。",
-                uiFileName: "qwen3_5_text_workflow.json",
-                uiDownloadUrl: "/workflows/qwen3_5_text_workflow.json",
                 apiFileName: "qwen3_5_text_api.json",
                 apiDownloadUrl: "/workflows/qwen3_5_text_api.json",
                 plugins: [
@@ -307,200 +297,30 @@ const WORKFLOWS: WorkflowItem[] = [
         id: "ref_video",
         name: "全能参考视频工作流 (Omni Video)",
         category: "video",
-        defaultVariantId: "pdmd",
+        defaultVariantId: "ms-v10",
         variants: [
             {
-                id: "pdmd",
-                label: "FP8 4步 PDMD (极速版)",
-                badge: "4 步极速 / EasyCache",
+                id: "ms-v10",
+                label: "MiniMax H3 MS_V10",
+                badge: "9 图 + 3 视频 + 3 音频",
                 badgeColor: "orange",
-                baseModel: "MiniMax H3 ref2va (FP8 + PDMD LoRA)",
-                description: "挂载 PDMD 4步蒸馏 LoRA 与 ComfyUI 原生 EasyCache 特征缓存加速，仅需 4 步采样秒级出片，大幅降低耗时与显存门槛。",
-                uiFileName: "minimax_h3_ref2v_4step_pdmd_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_ref2v_4step_pdmd_workflow.json",
-                apiFileName: "minimax_h3_ref2v_4step_pdmd_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_ref2v_4step_pdmd_api.json",
+                baseModel: "MiniMax H3 INT8 + SelfLift",
+                description: "MS_V10 全能参考视频工作流，支持文生视频、图生视频与多模态参考，使用 SelfLift 渐进式潜空间超分采样。",
+                apiFileName: "MS_V10.json",
+                apiDownloadUrl: "/workflows/MS_V10.json",
                 plugins: [
                     { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes" },
                     { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
+                    { name: "comfyui-SelfLift", url: "https://github.com/facok/comfyui-SelfLift" },
                 ],
                 models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_ref2va_pruned_fp8_scaled.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
+                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["Cobijada_H3_Hybrid_Uncensored_pruned_hybrid_int8_convrot_pruned.safetensors"] },
+                    { category: "文本编码器", folder: "models/clip/", files: ["qwen3vl_32b_minimax_h3_int8_convrot.safetensors"] },
+                    { category: "视频 / 音频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_int8_convrot.safetensors", "minimax_h3_audio_vae_fp32.safetensors"] },
+                    { category: "潜空间超分模型", folder: "models/latent_upscaler/", files: ["MiniMax-H3/minimax_h3_latent_upscaler_3d_conv_v1_fp16.safetensors"] },
+                    { category: "LoRA", folder: "models/loras/", files: ["minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy.safetensors", "H3_Combat_V2.safetensors", "FrameRush-Minimax-V2_c2-st1500.safetensors", "H3-Licon-VBVR-I2V.safetensors"] },
                 ],
-                tips: "挂载 4 步 PDMD 蒸馏 LoRA + EasyCache 特征缓存，耗时极短；支持最多 9 图 + 3 视频 + 3 音频参考。",
-            },
-            {
-                id: "fp8_20",
-                label: "FP8 20步 (消费级推荐)",
-                badge: "20 步标准 / 显存优化",
-                badgeColor: "gold",
-                baseModel: "MiniMax H3 ref2va (FP8)",
-                description: "显存优化版，适合 RTX 3090/4090 或 16G~24G 单卡，提供标准 20 步稳健采样与原生音画同步生成。",
-                uiFileName: "minimax_h3_ref2va_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_ref2va_workflow.json",
-                apiFileName: "minimax_h3_ref2va_fp8_20step_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_ref2va_fp8_20step_api.json",
-                plugins: [
-                    { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes" },
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_ref2va_pruned_fp8_scaled.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "标准消费级显存优化版，未连满的多模态插槽提交前自动优雅剔除。",
-            },
-            {
-                id: "int8_4step",
-                label: "INT8 4步 PDMD (无 FP8 硬件)",
-                badge: "4 步极速 / INT8 旋转量化",
-                badgeColor: "orange",
-                baseModel: "MiniMax H3 ref2va (INT8 ConvRot + PDMD LoRA)",
-                description: "底模替换为 INT8 旋转量化权重，不依赖 FP8 硬件加速，适合未启用 FP8 算子的运行环境；采样参数与 FP8 4步 PDMD 完全一致。",
-                uiFileName: "minimax_h3_ref2v_int8_convrot_4step_pdmd_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_ref2v_int8_convrot_4step_pdmd_workflow.json",
-                apiFileName: "minimax_h3_ref2v_int8_convrot_4step_pdmd_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_ref2v_int8_convrot_4step_pdmd_api.json",
-                plugins: [
-                    { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes" },
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_ref2va_int8_convrot.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "INT8 旋转量化底模（全量未剪枝，约 34 GB）+ 4 步 PDMD 蒸馏 LoRA + EasyCache；其余插件与权重同 FP8 4步 PDMD。",
-            },
-            {
-                id: "int8_6step_pika",
-                label: "INT8 6步 Pika (质感版)",
-                badge: "6 步 Pika / INT8 旋转量化",
-                badgeColor: "orange",
-                baseModel: "MiniMax H3 ref2va (INT8 ConvRot + Pika Flex LoRA)",
-                description: "底模同 INT8 旋转量化权重，蒸馏 LoRA 换为 Pika Flex（采样 6 步，由工作流内 step 节点控制），同样接入 EasyCache；相对 4 步 PDMD 换取更充分的细节与光影演变。",
-                // UI 图与 API 副本不同源，待从 ComfyUI 重新导出后补充 UI 下载项
-                apiFileName: "minimax_h3_ref2v_int8_convrot_6step_pika_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_ref2v_int8_convrot_6step_pika_api.json",
-                plugins: [
-                    { name: "ComfyUI-KJNodes", url: "https://github.com/kijai/ComfyUI-KJNodes" },
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["pika_h3_flex_ref2va_v1_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_ref2va_int8_convrot.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "INT8 旋转量化底模（全量未剪枝，约 34 GB）+ Pika Flex 6 步蒸馏 LoRA（约 1.96 GB）+ EasyCache；UI 可视化工作流待补。",
-            },
-        ],
-    },
-    {
-        id: "frame_video",
-        name: "首尾帧视频工作流 (FL2V)",
-        category: "video",
-        defaultVariantId: "pdmd",
-        variants: [
-            {
-                id: "pdmd",
-                label: "FP8 4步 PDMD (极速版)",
-                badge: "4 步极速插值",
-                badgeColor: "orange",
-                baseModel: "MiniMax H3 fl2va (FP8 + PDMD LoRA)",
-                description: "显存优化底模，挂载 PDMD 4步蒸馏 LoRA，仅需 4 步极速完成首尾两帧的平滑插值演化，大幅缩短生成等待耗时。",
-                uiFileName: "minimax_h3_fl2va_fp8_4step_pdmd_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_fl2va_fp8_4step_pdmd_workflow.json",
-                apiFileName: "minimax_h3_fl2va_fp8_4step_pdmd_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_fl2va_fp8_4step_pdmd_api.json",
-                plugins: [
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_fl2va_pruned_fp8_scaled.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "输入首尾两帧精准锚定运镜与动作插值；依赖 ComfyLiterals 节点。",
-            },
-            {
-                id: "fp8_20",
-                label: "FP8 20步 (消费级推荐)",
-                badge: "20 步标准 / 显存优化",
-                badgeColor: "gold",
-                baseModel: "MiniMax H3 fl2va (FP8)",
-                description: "显存优化版，适合 RTX 3090/4090 或 16G~24G 单卡，提供标准 20 步稳健首尾帧视频生成。",
-                uiFileName: "minimax_h3_fl2va_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_fl2va_workflow.json",
-                apiFileName: "minimax_h3_fl2va_fp8_20step_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_fl2va_fp8_20step_api.json",
-                plugins: [
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_fl2va_pruned_fp8_scaled.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "标准 20 步首尾帧插值，音画同步输出。",
-            },
-            {
-                id: "int8_4step",
-                label: "INT8 4步 PDMD (无 FP8 硬件)",
-                badge: "4 步极速 / INT8 旋转量化",
-                badgeColor: "orange",
-                baseModel: "MiniMax H3 fl2va (INT8 ConvRot + PDMD LoRA)",
-                description: "底模替换为 INT8 旋转量化权重，不依赖 FP8 硬件加速，适合未启用 FP8 算子的运行环境；首尾帧插值参数与 FP8 4步 PDMD 完全一致。",
-                uiFileName: "minimax_h3_fl2va_int8_convrot_4step_pdmd_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_fl2va_int8_convrot_4step_pdmd_workflow.json",
-                apiFileName: "minimax_h3_fl2va_int8_convrot_4step_pdmd_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_fl2va_int8_convrot_4step_pdmd_api.json",
-                plugins: [
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["minimax_h3_pdmd_4step_lora_avg_rank_57_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_fl2va_int8_convrot.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "INT8 旋转量化底模（全量未剪枝，约 34 GB）+ 4 步 PDMD 蒸馏 LoRA；依赖 ComfyLiterals 节点。",
-            },
-            {
-                id: "int8_6step_pika",
-                label: "INT8 6步 Pika (质感版)",
-                badge: "6 步 Pika / INT8 旋转量化",
-                badgeColor: "orange",
-                baseModel: "MiniMax H3 fl2va (INT8 ConvRot + Pika Flex LoRA)",
-                description: "底模同 INT8 旋转量化权重，蒸馏 LoRA 换为 Pika Flex（采样 6 步，由工作流内 step 节点控制）；首尾帧插槽与参数同 4 步 PDMD，换取更充分的细节与平滑过渡。",
-                uiFileName: "minimax_h3_fl2va_int8_convrot_6step_pika_workflow.json",
-                uiDownloadUrl: "/workflows/minimax_h3_fl2va_int8_convrot_6step_pika_workflow.json",
-                apiFileName: "minimax_h3_fl2va_int8_convrot_6step_pika_api.json",
-                apiDownloadUrl: "/workflows/minimax_h3_fl2va_int8_convrot_6step_pika_api.json",
-                plugins: [
-                    { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
-                ],
-                models: [
-                    { category: "LoRA", folder: "models/loras/", files: ["pika_h3_flex_fl2va_v1_bf16.safetensors"] },
-                    { category: "扩散模型", folder: "models/diffusion_models/", files: ["minimax_h3_fl2va_int8_convrot.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"] },
-                    { category: "视频 VAE", folder: "models/vae/", files: ["minimax_h3_video_vae_fp16.safetensors"] },
-                    { category: "音频 VAE", folder: "models/vae/", files: ["minimax_h3_audio_vae_fp32.safetensors"] },
-                ],
-                tips: "INT8 旋转量化底模（全量未剪枝，约 34 GB）+ Pika Flex 6 步蒸馏 LoRA（约 1.96 GB）；采样步数由 step 节点控制。",
+                tips: "最多输入 9 张图、3 段视频和 3 段音频；必须安装 comfyui-SelfLift 及 MiniMax H3 Easy 相关节点。",
             },
         ],
     },
@@ -517,8 +337,6 @@ const WORKFLOWS: WorkflowItem[] = [
                 badgeColor: "cyan",
                 baseModel: "Video Depth Anything Small",
                 description: "「复制走位与运镜，不复制演员与画风」：将输入参考视频转为时序连贯稳定的灰度深度视频（近白远黑），保留人物空间站位、肢体动作与摄像机运镜轨迹，彻底剥离演员外貌与画风，生成的深度视频可无缝作为 MiniMax H3 或 ControlNet 的强结构参考。",
-                uiFileName: "depth_video_workflow.json",
-                uiDownloadUrl: "/workflows/depth_video_workflow.json",
                 apiFileName: "depth_video_api.json",
                 apiDownloadUrl: "/workflows/depth_video_api.json",
                 plugins: [
@@ -544,16 +362,14 @@ const WORKFLOWS: WorkflowItem[] = [
                 badgeColor: "magenta",
                 baseModel: "MiniMax Music 03 (DiT)",
                 description: "基于 MiniMax Music 03 音频扩散大模型，支持全风格人声歌曲、BGM 伴奏与纯器乐生成；双文本驱动（caption 编曲风格 + lyrics 曲式歌词标签）；内置切块解码防爆显存。",
-                uiFileName: "audio_minimax_music_3_workflow.json",
-                uiDownloadUrl: "/workflows/audio_minimax_music_3_workflow.json",
                 apiFileName: "audio_minimax_music_3_api.json",
                 apiDownloadUrl: "/workflows/audio_minimax_music_3_api.json",
                 plugins: [
                     { name: "ComfyLiterals", url: "https://github.com/M1kep/ComfyLiterals" },
                 ],
                 models: [
-                    { category: "DiT扩散模型", folder: "models/diffusion_models/", files: ["minimax_music3_dit_fp16.safetensors"] },
-                    { category: "文本编码器", folder: "models/text_encoders/", files: ["minimax_music3_text_encoder_pruned_int8_convrot.safetensors"] },
+                    { category: "DiT 扩散模型", folder: "models/diffusion_models/", files: ["minimax_music3_dit_fp32.safetensors"] },
+                    { category: "文本编码器", folder: "models/clip/", files: ["minimax_music3_text_encoder_bf16.safetensors"] },
                     { category: "音频 VAE", folder: "models/vae/", files: ["minimax_music3_dav.safetensors"] },
                 ],
                 tips: "⚠️ ComfyUI 核心版本需更新至 v0.31.0+（原生集成 MiniMaxMusic3 节点）；在 lyrics 中使用 [intro]、[verse]、[chorus]、[inst] 控制曲式结构。",
@@ -573,8 +389,6 @@ const WORKFLOWS: WorkflowItem[] = [
                 badgeColor: "volcano",
                 baseModel: "MiniMax H3 ref2va + Turbo LoRA + YOLO",
                 description: "专为解决 AI 视频中远景小脸崩坏、五官模糊扭曲、运镜面部抽搐闪烁设计；YOLO 时序追踪裁剪 + 原生口型音频锁 + 依据面部像素绝对尺寸逐帧动态去噪 + 逆几何变换无缝羽化缝合。",
-                uiFileName: "H3_Face_Refine_Auto_Select_workflow.json",
-                uiDownloadUrl: "/workflows/H3_Face_Refine_Auto_Select_workflow.json",
                 apiFileName: "H3_Face_Refine_Auto_Select_Api.json",
                 apiDownloadUrl: "/workflows/H3_Face_Refine_Auto_Select_Api.json",
                 plugins: [
@@ -767,17 +581,9 @@ export default function GuidePage() {
             const zipFiles: Array<{ name: string; data: BlobPart }> = [];
             const collectedFiles = new Set<string>();
 
-            // 收集所有 9 大能力矩阵下的全部变体文件（包括 UI 与 API 格式）
+            // 收集全部内置 API JSON，并自动去除跨分类共用的 QRw_D。
             for (const wf of WORKFLOWS) {
                 for (const variant of wf.variants) {
-                    if (variant.uiFileName && variant.uiDownloadUrl && !collectedFiles.has(variant.uiFileName)) {
-                        collectedFiles.add(variant.uiFileName);
-                        const res = await fetch(variant.uiDownloadUrl);
-                        if (res.ok) {
-                            const text = await res.text();
-                            zipFiles.push({ name: `ui_workflows/${variant.uiFileName}`, data: text });
-                        }
-                    }
                     if (!collectedFiles.has(variant.apiFileName)) {
                         collectedFiles.add(variant.apiFileName);
                         const res = await fetch(variant.apiDownloadUrl);
@@ -792,19 +598,17 @@ export default function GuidePage() {
             const readmeContent = [
                 "# Infinite Canvas · ComfyUI 官方全套内置工作流资产包",
                 "",
-                "本压缩包收录了 Infinite Canvas 官方推荐的全部 9 大能力矩阵工作流：",
-                "- ui_workflows/: ComfyUI 可视化工作流（可直接拖拽入本地 ComfyUI Web 界面查看节点连线并调试）",
-                "- api_workflows/: ComfyUI API 格式工作流（用于系统设置内模型渠道绑定与直接调度）",
+                "本压缩包收录 Infinite Canvas 当前内置的 9 份 ComfyUI API 工作流：",
+                "- api_workflows/: 用于本地 ComfyUI 调试与系统渠道调度的 API 格式 JSON。",
                 "",
                 "==================================================",
-                "9 大能力矩阵与模型放置清单：",
+                "7 类工作流与模型放置清单：",
                 "==================================================",
                 ...WORKFLOWS.map((wf) => {
                     const variantDetails = wf.variants.map((v) => {
                         return [
                             `  * 规格: ${v.label} [${v.badge}]`,
                             `    - 核心底模: ${v.baseModel}`,
-                            `    - UI 连线文件: ${v.uiFileName ?? "（待补导出）"}`,
                             `    - API 格式文件: ${v.apiFileName}`,
                             `    - 依赖模型放置:`,
                             ...v.models.map((m) => `      [${m.category}] ${m.folder}: ${m.files.join(", ")}`),
@@ -818,7 +622,7 @@ export default function GuidePage() {
                 "==================================================",
                 "必备核心扩展插件清单：",
                 "==================================================",
-                "1. 通用必备 5 大基础插件（克隆至 custom_nodes/ 目录）：",
+                "1. 通用必备 6 大基础插件（克隆至 custom_nodes/ 目录）：",
                 ...CORE_PLUGINS.map((p, idx) => `   ${idx + 1}. ${p.name} (${p.url}) - ${p.desc} [${p.usedBy}]`),
                 "",
                 "   [一键克隆基础插件命令]：",
@@ -837,8 +641,8 @@ export default function GuidePage() {
                 "2. 音频生成 (MiniMax Music 03) 依赖 ComfyUI 核心版本 >= v0.31.0+；",
                 "3. 视频深度估计 (Video Depth Anything) 首次运行自动下载权重（约 111MB，国内可配置 HF_ENDPOINT=https://hf-mirror.com）；",
                 "4. 人脸精修 YOLO 权重请放置于 ComfyUI models/ultralytics/ 对应子目录；",
-                "5. 视频生成尺寸严格锁定在 0.2M~0.98M 的 9 档硬件对齐预设中（16:9 与 9:16 对称）；",
-                "6. 将 UI 工作流拖入 ComfyUI 点击 Queue Prompt 测试成功后，回到系统「设置 → 模型渠道」确认服务端口即可畅享创作！",
+                "5. 视频生成尺寸严格锁定在 0.4M~2.0M 的 12 档硬件对齐预设中（16:9 与 9:16 对称）；",
+                "6. API JSON 已内置于系统；如需单独调试，请在 ComfyUI 中按相同执行图配置并测试通过。",
             ].join("\n");
 
             zipFiles.push({ name: "README_模型与存放目录清单.txt", data: readmeContent });
@@ -870,7 +674,7 @@ export default function GuidePage() {
                         </div>
                         <h1 className="mt-3 text-2xl font-bold tracking-tight text-stone-950 sm:text-3xl dark:text-stone-100">{isZh ? "用户使用手册与工作流下载" : "User Guide & Workflow Downloads"}</h1>
                         <p className="mt-2 max-w-3xl text-sm leading-6 text-stone-500 dark:text-stone-400">
-                            {isZh ? "Infinite Canvas 采用纯前端无服务器架构，直连您本机的 ComfyUI（默认端口 8188）。系统内置 9 大核心能力矩阵，涵盖图像、视频、音频、深度估计及人脸精修。下载并导入下方官方预设工作流，配齐模型并在本地 ComfyUI 调试通过后，即可在无限画布中开展流畅的全流程 AI 创作。" : "Infinite Canvas uses a pure frontend architecture, connecting directly to your native ComfyUI (default port 8188). Built-in 9 core capability workflows cover image, video, audio, depth, and face refine. Download presets below to create seamlessly on canvas."}
+                            {isZh ? "Infinite Canvas 采用纯前端无服务器架构，直连您本机的 ComfyUI（默认端口 8188）。系统当前内置 7 类共 9 份 API 工作流，涵盖图像、视频、音频、文本、深度估计及人脸精修。配齐模型与插件后即可直接在画布使用，也可下载 JSON 单独调试。" : "Infinite Canvas connects directly to your local ComfyUI (default port 8188). It includes 9 API workflows across 7 categories, covering image, video, audio, text, depth, and face refine."}
                         </p>
                     </div>
 
@@ -1097,7 +901,7 @@ export default function GuidePage() {
                                 {isZh ? "下载工作流文件" : "Download Workflows"}
                             </div>
                             <p className="text-xs leading-5 text-stone-600 dark:text-stone-400">
-                                {isZh ? "点击右上角打包下载全部工作流，或在下方 9 大能力卡片中按需切换规格下载 UI 连线版或 API 格式。" : "Click top right to download all workflows, or select variants below for UI/API formats."}
+                                {isZh ? "点击右上角打包下载全部工作流，或在下方工作流卡片中按需下载 API 格式 JSON。" : "Download all workflows above, or download individual API JSON files below."}
                             </p>
                         </div>
 
@@ -1109,7 +913,7 @@ export default function GuidePage() {
                                 {isZh ? "安装插件与模型" : "Install Plugins & Models"}
                             </div>
                             <p className="text-xs leading-5 text-stone-600 dark:text-stone-400">
-                                {isZh ? <>将下方 5 大通用基础插件克隆至 <code className="font-mono">custom_nodes/</code>，权重放入 <code className="font-mono">models/</code> 对应子目录。</> : <>Clone the 5 core plugins to <code className="font-mono">custom_nodes/</code> and put weights in <code className="font-mono">models/</code>.</>}
+                                {isZh ? <>将下方 6 大通用基础插件克隆至 <code className="font-mono">custom_nodes/</code>，权重放入 <code className="font-mono">models/</code> 对应子目录。</> : <>Clone the 6 core plugins to <code className="font-mono">custom_nodes/</code> and put weights in <code className="font-mono">models/</code>.</>}
                             </p>
                         </div>
 
@@ -1121,7 +925,7 @@ export default function GuidePage() {
                                 {isZh ? "调试成功后即可使用" : "Test & Start Creating"}
                             </div>
                             <p className="text-xs leading-5 text-stone-600 dark:text-stone-400">
-                                {isZh ? "将工作流拖入 ComfyUI 页面点击 Queue 生成测试无报错后，回到本项目配置渠道，即可畅享画布生成！" : "Drag workflow into ComfyUI and test queue without errors. Then bind in Infinite Canvas and start generating!"}
+                                {isZh ? "在本地 ComfyUI 调试通过后，回到本项目确认渠道与工作流，即可畅享画布生成！" : "Test the workflows in ComfyUI, confirm your channel and workflows here, then start generating on canvas."}
                             </p>
                         </div>
                     </div>
@@ -1129,25 +933,25 @@ export default function GuidePage() {
 
                 {/* 分层核心插件专区 */}
                 <div className="mb-12">
-                    {/* 通用基础 5 大插件 */}
+                    {/* 通用基础 6 大插件 */}
                     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
                         <div>
                             <div className="flex items-center gap-2">
                                 <h2 className="text-lg font-bold text-stone-950 dark:text-stone-100">
-                                    {isZh ? "通用必备 5 大 ComfyUI 核心扩展插件" : "5 Essential Core ComfyUI Extension Plugins"}
+                                    {isZh ? "通用必备 6 大 ComfyUI 核心扩展插件" : "6 Essential Core ComfyUI Extension Plugins"}
                                 </h2>
                                 <Tag color="blue" className="m-0 text-xs">{isZh ? "基础必备" : "Essential"}</Tag>
                             </div>
                             <p className="mt-0.5 text-xs text-stone-500">
-                                {isZh ? <>覆盖生图、图生图、局部编辑、大语言模型与视频基础生成。克隆至 ComfyUI 的 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11px] text-stone-700 dark:bg-stone-800 dark:text-stone-300">custom_nodes/</code> 目录下并重启服务。</> : <>Covers text2img, img2img, inpaint, LLM, and video generation. Clone into ComfyUI custom_nodes/ and restart.</>}
+                                {isZh ? <>覆盖生图、图生图、大语言模型与视频基础生成。克隆至 ComfyUI 的 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-[11px] text-stone-700 dark:bg-stone-800 dark:text-stone-300">custom_nodes/</code> 目录下并重启服务。</> : <>Covers image generation, LLM, and video generation. Clone into ComfyUI custom_nodes/ and restart.</>}
                             </p>
                         </div>
                         <Button
                             size="small"
                             icon={<Copy className="size-3.5" />}
-                            onClick={() => copyText(CLONE_CORE_PLUGINS_CMD, "已复制 5 大基础插件克隆命令")}
+                            onClick={() => copyText(CLONE_CORE_PLUGINS_CMD, "已复制 6 大基础插件克隆命令")}
                         >
-                            {isZh ? "一键复制 5 大基础插件克隆命令" : "Copy 5 Core Plugins Clone Commands"}
+                            {isZh ? "一键复制 6 大基础插件克隆命令" : "Copy 6 Core Plugins Clone Commands"}
                         </Button>
                     </div>
 
@@ -1259,18 +1063,18 @@ export default function GuidePage() {
                     </div>
                 </div>
 
-                {/* 9 大核心能力矩阵卡片专区 */}
+                {/* 内置工作流卡片专区 */}
                 <div className="mb-12">
                     <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                         <div>
                             <div className="flex items-center gap-2">
                                 <h2 className="text-lg font-bold text-stone-950 dark:text-stone-100">
-                                    {isZh ? "官方内置 9 大核心能力工作流矩阵" : "9 Official Built-in Capability Workflows"}
+                                    {isZh ? "官方内置 ComfyUI 工作流" : "Official Built-in ComfyUI Workflows"}
                                 </h2>
-                                <Tag color="blue" className="m-0 text-xs">{isZh ? "共 9 大能力" : "9 Capabilities"}</Tag>
+                                <Tag color="blue" className="m-0 text-xs">{isZh ? "7 类 · 9 份 JSON" : "7 Categories · 9 JSON Files"}</Tag>
                             </div>
                             <p className="mt-0.5 text-xs text-stone-500">
-                                {isZh ? "默认下载 UI 连线版（可拖入 ComfyUI 可视化调试）；下拉选项可直接下载 API 格式 JSON 供系统绑定。" : "Downloads UI workflow for ComfyUI visual editing; dropdown lets you download API format JSON."}
+                                {isZh ? "以下均为 ComfyUI API 格式 JSON；QRw_D 同时用于文生图和图生图，打包下载时仅保留一份。" : "All downloads are ComfyUI API JSON. QRw_D is shared by T2I and I2I and included only once in the ZIP."}
                             </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
@@ -1290,9 +1094,9 @@ export default function GuidePage() {
                         <span className="text-xs font-medium text-stone-500">{isZh ? "分类筛选：" : "Categories: "}</span>
                         <div className="flex flex-wrap gap-1.5">
                             {[
-                                { key: "all", label: isZh ? "全部能力" : "All", icon: Layers, count: 9 },
-                                { key: "image", label: isZh ? "图像生成" : "Image", icon: Sparkles, count: 3 },
-                                { key: "video", label: isZh ? "视频生成" : "Video", icon: Video, count: 3 },
+                                { key: "all", label: isZh ? "全部工作流" : "All", icon: Layers, count: 7 },
+                                { key: "image", label: isZh ? "图像生成" : "Image", icon: Sparkles, count: 2 },
+                                { key: "video", label: isZh ? "视频生成" : "Video", icon: Video, count: 2 },
                                 { key: "audio", label: isZh ? "音乐音频" : "Audio", icon: Music, count: 1 },
                                 { key: "refine", label: isZh ? "精修与辅助" : "Refine & Utility", icon: Wrench, count: 2 },
                             ].map((item) => {
@@ -1325,43 +1129,6 @@ export default function GuidePage() {
                             const currentVariantId = selectedVariants[wf.id] || wf.defaultVariantId;
                             const activeVariant =
                                 wf.variants.find((v) => v.id === currentVariantId) || wf.variants[0];
-
-                            const downloadMenuItems: MenuProps["items"] = [
-                                ...(activeVariant.uiFileName && activeVariant.uiDownloadUrl
-                                    ? [
-                                          {
-                                              key: "ui",
-                                              label: (
-                                                  <div className="flex items-center gap-2 py-0.5">
-                                                      <Layers className="size-3.5 text-blue-500" />
-                                                      <div>
-                                                          <div className="text-xs font-medium">{isZh ? "下载 UI 可视化工作流 (.json)" : "Download UI Workflow (.json)"}</div>
-                                                          <div className="text-[10px] text-stone-400 font-mono">
-                                                              {activeVariant.uiFileName}
-                                                          </div>
-                                                      </div>
-                                                  </div>
-                                              ),
-                                              onClick: () => handleDownloadSingle(activeVariant.uiDownloadUrl!, activeVariant.uiFileName!),
-                                          },
-                                      ]
-                                    : []),
-                                {
-                                    key: "api",
-                                    label: (
-                                        <div className="flex items-center gap-2 py-0.5">
-                                            <FileCode className="size-3.5 text-emerald-500" />
-                                            <div>
-                                                <div className="text-xs font-medium">{isZh ? "下载 API 格式工作流 (.json)" : "Download API Workflow (.json)"}</div>
-                                                <div className="text-[10px] text-stone-400 font-mono">
-                                                    {activeVariant.apiFileName}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ),
-                                    onClick: () => handleDownloadSingle(activeVariant.apiDownloadUrl, activeVariant.apiFileName),
-                                },
-                            ];
 
                             return (
                                 <Card
@@ -1396,37 +1163,15 @@ export default function GuidePage() {
                                                 </div>
                                             </div>
 
-                                            {/* 双格式下载按钮 */}
-                                            <div className="flex shrink-0 items-center">
-                                                <Button
-                                                    type="primary"
-                                                    size="small"
-                                                    icon={<Download className="size-3.5" />}
-                                                    onClick={() =>
-                                                        handleDownloadSingle(
-                                                            activeVariant.uiDownloadUrl ?? activeVariant.apiDownloadUrl,
-                                                            activeVariant.uiFileName ?? activeVariant.apiFileName
-                                                        )
-                                                    }
-                                                    className="rounded-r-none"
-                                                >
-                                                    下载工作流
-                                                </Button>
-                                                <Dropdown
-                                                    menu={{ items: downloadMenuItems }}
-                                                    placement="bottomRight"
-                                                    trigger={["click"]}
-                                                >
-                                                    <Button
-                                                        type="primary"
-                                                        size="small"
-                                                        className="rounded-l-none border-l border-white/20 px-1.5"
-                                                        title="选择下载格式 (UI 连线版 / API 格式)"
-                                                    >
-                                                        <ChevronDown className="size-3" />
-                                                    </Button>
-                                                </Dropdown>
-                                            </div>
+                                            <Button
+                                                type="primary"
+                                                size="small"
+                                                icon={<Download className="size-3.5" />}
+                                                onClick={() => handleDownloadSingle(activeVariant.apiDownloadUrl, activeVariant.apiFileName)}
+                                                className="shrink-0"
+                                            >
+                                                下载 API JSON
+                                            </Button>
                                         </div>
 
                                         {/* 多规格切换器 */}
@@ -1608,11 +1353,11 @@ export default function GuidePage() {
                                 3. 显存不足 (CUDA Out of Memory) 报错？
                             </h3>
                             <p className="mt-2 text-xs leading-5 text-stone-600 dark:text-stone-400">
-                                MiniMax H3 视频与 Flux 模型显存需求较高。启动时添加{" "}
+                                MiniMax H3 视频与大尺寸图片模型显存需求较高。启动时添加{" "}
                                 <code className="rounded bg-stone-100 px-1 py-0.5 font-mono text-stone-800 dark:bg-stone-800 dark:text-stone-200">
                                     --lowvram
                                 </code>{" "}
-                                或优先选用带 <span className="font-semibold text-stone-800 dark:text-stone-200">FP8 4步 PDMD</span> 极速版规格，可以大幅削减显存峰值占用与推理耗时。
+                                或适当降低图片尺寸、视频分辨率与时长，可以削减显存峰值占用与推理耗时。
                             </p>
                         </div>
 
@@ -1652,7 +1397,7 @@ export default function GuidePage() {
                                 7. 视频生成分辨率硬件锁死规则说明？
                             </h3>
                             <p className="mt-2 text-xs leading-5 text-stone-600 dark:text-stone-400">
-                                为保证 MiniMax H3 多模态架构的绝对稳定与不花屏，系统严禁手动输入任意分辨率数字。所有视频生成尺寸均已收敛在 <span className="font-semibold text-stone-800 dark:text-stone-200">0.2M ~ 0.98M 的 9 档硬件对齐预设</span> 中（16:9 与 9:16 画幅对称对调，上限严格锁定在 0.98 MP）。
+                                为保证 MiniMax H3 多模态架构的绝对稳定与不花屏，系统严禁手动输入任意分辨率数字。所有视频生成尺寸均已收敛在 <span className="font-semibold text-stone-800 dark:text-stone-200">0.4M ~ 2.0M 的 12 档硬件对齐预设</span> 中（16:9 与 9:16 画幅对称对调，上限严格锁定在 2.0 MP）。
                             </p>
                         </div>
 

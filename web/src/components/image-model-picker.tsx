@@ -1,20 +1,16 @@
 import { Select, Tooltip } from "antd";
-import { AlertTriangle, HelpCircle, Image, Layers, Paintbrush, Server, Workflow, Zap } from "lucide-react";
+import { AlertTriangle, HelpCircle, Image, Layers, Server, Workflow, Zap } from "lucide-react";
 import { useMemo } from "react";
 
 import {
-    BUILTIN_IMAGE_WORKFLOW_MODELS,
-    buildCustomWorkflowProfile,
+    buildWorkflowModelProfiles,
     CUSTOM_WORKFLOW_CATEGORIES,
     evaluateModelAvailability,
-    findCustomWorkflowProfile,
-    getModelProfile,
-    imageQwen21Profile,
     type WorkflowModelProfile,
 } from "@/services/api/models";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { getDefaultWorkflow, useEffectiveConfig } from "@/stores/use-config-store";
+import { getChannelWorkflows, getDefaultWorkflow, useEffectiveConfig } from "@/stores/use-config-store";
 
 export type ImageModelPickerProps = {
     channelId?: string;
@@ -32,11 +28,9 @@ function getModelIcon(modelId: string) {
     switch (modelId) {
         case "image-z-turbo":
             return <Zap className="size-3.5 shrink-0 text-amber-500" />;
-        case "image-flux2-dev":
+        case "image-moss":
             return <Image className="size-3.5 shrink-0 text-blue-500" />;
-        case "image-qwen-inpaint":
-            return <Paintbrush className="size-3.5 shrink-0 text-purple-500" />;
-        case "image-qwen-2.1":
+        case "image-qwen":
         default:
             return <Layers className="size-3.5 shrink-0 text-emerald-500" />;
     }
@@ -66,26 +60,23 @@ export function ImageModelPicker({
         return (channelId ? channels.find((c) => c.id === channelId) : null) || channels[0];
     }, [channels, channelId]);
 
+    const activeProfiles = useMemo(
+        () => buildWorkflowModelProfiles(getChannelWorkflows(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.image)),
+        [activeChannel],
+    );
     const activeProfile = useMemo(() => {
-        if (modelId) {
-            const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, modelId, CUSTOM_WORKFLOW_CATEGORIES.image);
-            if (profile) return profile;
-        }
-        const defaultWf = activeChannel ? getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.image) : undefined;
-        if (defaultWf) {
-            const profile = getModelProfile(defaultWf.id) || findCustomWorkflowProfile(activeChannel, defaultWf.id, CUSTOM_WORKFLOW_CATEGORIES.image);
-            if (profile) return profile;
-        }
-        return imageQwen21Profile;
-    }, [modelId, activeChannel]);
-    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile.id));
+        const selected = activeProfiles.find((profile) => profile.id === modelId);
+        if (selected) return selected;
+        const defaultWf = getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.image);
+        const defaultProfile = defaultWf ? buildWorkflowModelProfiles([defaultWf])[0] : undefined;
+        return activeProfiles.find((profile) => profile.id === defaultProfile?.id) || activeProfiles[0];
+    }, [modelId, activeProfiles, activeChannel]);
+    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile?.id));
 
     const options = useMemo(() => {
         const orderedChannels = [activeChannel, ...channels.filter((channel) => channel.id !== activeChannel.id)];
-        return orderedChannels.flatMap((channel) => [
-            ...BUILTIN_IMAGE_WORKFLOW_MODELS,
-            ...(channel.workflows || []).filter((workflow) => !workflow.isBuiltin && CUSTOM_WORKFLOW_CATEGORIES.image.includes(workflow.category)).map(buildCustomWorkflowProfile),
-        ].map((model) => {
+        return orderedChannels.flatMap((channel) =>
+            buildWorkflowModelProfiles(getChannelWorkflows(channel, CUSTOM_WORKFLOW_CATEGORIES.image)).map((model) => {
             const isCustom = Boolean(channel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === model.id));
             const availability = evaluateModelAvailability({
                 targetModel: model,
@@ -165,18 +156,20 @@ export function ImageModelPicker({
     }, [activeChannel, channels, connectedImages, connectedVideos, connectedAudios, promptText]);
 
     const selectValue = useMemo(() => {
-        return JSON.stringify([activeChannel.id, activeProfile.id]);
-    }, [activeChannel.id, activeProfile.id]);
+        return activeProfile ? JSON.stringify([activeChannel.id, activeProfile.id]) : undefined;
+    }, [activeChannel.id, activeProfile]);
 
     const handleSelectChange = (value: string) => {
         const [selectedChannelId, selectedModelId] = JSON.parse(value) as [string, string];
         const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) || activeChannel;
-        const found = getModelProfile(selectedModelId) || findCustomWorkflowProfile(selectedChannel, selectedModelId, CUSTOM_WORKFLOW_CATEGORIES.image);
+        const found = buildWorkflowModelProfiles(getChannelWorkflows(selectedChannel, CUSTOM_WORKFLOW_CATEGORIES.image))
+            .find((profile) => profile.id === selectedModelId);
         if (!found) return;
         onChange(selectedChannelId, found.id, found);
     };
 
     const activeAvailability = useMemo(() => {
+        if (!activeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
             targetModel: activeProfile,
             connectedImages,
@@ -190,6 +183,7 @@ export function ImageModelPicker({
     return (
         <Select
             value={selectValue}
+            placeholder="暂无工作流"
             options={options}
             onChange={handleSelectChange}
             popupMatchSelectWidth={false}
@@ -213,8 +207,8 @@ export function ImageModelPicker({
                             {channelName}
                         </span>
                         <span className="opacity-30">/</span>
-                        {activeIsCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(activeProfile.id)}
-                        <span className="truncate font-medium">{activeProfile.name}</span>
+                        {activeIsCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(activeProfile?.id || "")}
+                        <span className="truncate font-medium">{activeProfile?.name || "暂无工作流"}</span>
                         {!activeAvailability.isAvailable && (
                             <Tooltip
                                 title={

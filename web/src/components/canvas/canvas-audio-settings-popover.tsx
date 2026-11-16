@@ -8,7 +8,7 @@ import { AudioSettingsPanel, audioSecondsLabel } from "@/components/audio-settin
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
-import { audioMinimaxMusic3Profile, getModelProfile, type WorkflowModelProfile } from "@/services/api/models";
+import { type WorkflowModelProfile } from "@/services/api/models";
 
 export type CanvasAudioSettingKey = "audioSeconds";
 
@@ -23,7 +23,7 @@ type CanvasAudioSettingsPopoverProps = {
 };
 
 export function CanvasAudioSettingsPopover({ config, modelId, profile: profileProp, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasAudioSettingsPopoverProps) {
-    const profile = profileProp || getModelProfile(modelId) || audioMinimaxMusic3Profile;
+    const profile = profileProp;
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const buttonRef = useRef<HTMLSpanElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -45,7 +45,7 @@ export function CanvasAudioSettingsPopover({ config, modelId, profile: profilePr
         onSyncPosition: () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null),
     });
 
-    if (!profile.capabilityConfig.duration) return null;
+    if (!profile?.capabilityConfig.duration) return null;
 
     const panel = open && buttonRect ? <AudioSettingsPortal buttonRect={buttonRect} panelRef={panelRef} placement={placement} theme={theme} config={config} modelId={modelId} profile={profile} onConfigChange={onConfigChange} /> : null;
 

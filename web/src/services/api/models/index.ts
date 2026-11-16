@@ -1,38 +1,16 @@
-import type {
-    ModelCapabilityType,
-    ModelCategoryType,
-    WorkflowCapabilityConfig,
-    WorkflowModelProfile,
-} from "./types";
+import type { ModelCapabilityType, WorkflowModelProfile } from "./types";
+import type { ComfyWorkflowItem } from "@/stores/use-config-store";
+import { videoMinimaxH3OmniProfile } from "./video-minimax-h3-omni";
+import { buildCustomWorkflowProfile } from "./custom-workflow";
 import {
-    videoMinimaxH3OmniFp8PdmdProfile,
-    videoMinimaxH3OmniFp8Profile,
-    videoMinimaxH3OmniInt8PdmdProfile,
-    videoMinimaxH3OmniInt8PikaProfile,
-    videoMinimaxH3OmniInt8SelfLiftProfile,
-    videoMinimaxH3OmniProfile,
-    MINIMAX_H3_SIZES,
-} from "./video-minimax-h3-omni";
-import {
-    videoMinimaxH3FrameFp8PdmdProfile,
-    videoMinimaxH3FrameFp8Profile,
-    videoMinimaxH3FrameInt8PdmdProfile,
-    videoMinimaxH3FrameInt8PikaProfile,
-    videoMinimaxH3FrameInt8SelfLiftProfile,
-    videoMinimaxH3FrameProfile,
-} from "./video-minimax-h3-frame";
-import {
-    imageQwen21Profile,
+    imageQwenProfile,
+    imageQwen4x4Profile,
+    imageMossProfile,
     imageZTurboProfile,
-    imageFlux2DevProfile,
-    imageQwenInpaintProfile,
     IMAGE_WORKFLOW_MODELS,
-    IMAGE_STANDARD_ASPECT_RATIOS,
 } from "./image-models";
 import {
     textQwen35Profile,
-    textQwen35ChatProfile,
-    textQwen35VlmProfile,
     TEXT_WORKFLOW_MODELS,
 } from "./text-models";
 import {
@@ -43,48 +21,17 @@ import {
 
 export * from "./types";
 export * from "./video-minimax-h3-omni";
-export * from "./video-minimax-h3-frame";
 export * from "./image-models";
 export * from "./text-models";
 export * from "./audio-models";
 export * from "./constraint-engine";
 export * from "./custom-workflow";
 
-/**
- * 系统内置视频工作流模型清单（4 款 FP8 + 6 款 INT8 量化模型）
- * 顺序敏感：FP8 4步 PDMD 必须首位，作为视频节点的默认回退模型
- */
-export const BUILTIN_VIDEO_WORKFLOW_MODELS: WorkflowModelProfile[] = [
-    videoMinimaxH3OmniFp8PdmdProfile,
-    videoMinimaxH3OmniFp8Profile,
-    videoMinimaxH3FrameFp8PdmdProfile,
-    videoMinimaxH3FrameFp8Profile,
-    videoMinimaxH3OmniInt8PdmdProfile,
-    videoMinimaxH3FrameInt8PdmdProfile,
-    videoMinimaxH3OmniInt8PikaProfile,
-    videoMinimaxH3FrameInt8PikaProfile,
-    videoMinimaxH3OmniInt8SelfLiftProfile,
-    videoMinimaxH3FrameInt8SelfLiftProfile,
-];
-
-/**
- * 系统内置图片工作流模型清单（4 款原生工作流模型）
- */
+export const BUILTIN_VIDEO_WORKFLOW_MODELS: WorkflowModelProfile[] = [videoMinimaxH3OmniProfile];
 export const BUILTIN_IMAGE_WORKFLOW_MODELS: WorkflowModelProfile[] = IMAGE_WORKFLOW_MODELS;
-
-/**
- * 系统内置文本工作流模型清单（2 款标准文本/反推模型）
- */
 export const BUILTIN_TEXT_WORKFLOW_MODELS: WorkflowModelProfile[] = TEXT_WORKFLOW_MODELS;
-
-/**
- * 系统内置音频工作流模型清单（MiniMax Music 03）
- */
 export const BUILTIN_AUDIO_WORKFLOW_MODELS_LIST: WorkflowModelProfile[] = BUILTIN_AUDIO_WORKFLOW_MODELS;
 
-/**
- * 系统内置工作流模型注册表（视频 + 图片 + 文本 + 音频）
- */
 export const BUILTIN_WORKFLOW_MODELS: WorkflowModelProfile[] = [
     ...BUILTIN_VIDEO_WORKFLOW_MODELS,
     ...BUILTIN_IMAGE_WORKFLOW_MODELS,
@@ -100,105 +47,21 @@ export function getModelProfile(modelIdOrCategory?: string): WorkflowModelProfil
     const clean = modelIdOrCategory.includes("::")
         ? modelIdOrCategory.slice(modelIdOrCategory.indexOf("::") + 2).trim()
         : modelIdOrCategory.trim();
-
-    // 1. 精确匹配 ID
-    const directMatch = BUILTIN_WORKFLOW_MODELS.find((m) => m.id === clean);
+    const directMatch = BUILTIN_WORKFLOW_MODELS.find((model) => model.id === clean);
     if (directMatch) return directMatch;
 
-    // 1.1 从工作流 ID 派生模型 ID
     const workflowDerivedId = resolveModelIdFromWorkflowId(clean);
-    if (workflowDerivedId) {
-        const matched = BUILTIN_WORKFLOW_MODELS.find((m) => m.id === workflowDerivedId);
-        if (matched) return matched;
-    }
+    if (workflowDerivedId) return BUILTIN_WORKFLOW_MODELS.find((model) => model.id === workflowDerivedId);
 
-    // 2. 匹配历史别名
-    if (clean === "video_minimax_h3_omni") return videoMinimaxH3OmniFp8PdmdProfile;
-    if (clean === "video_minimax_h3_frame") return videoMinimaxH3FrameFp8PdmdProfile;
-
-    // 3. 匹配分类名称或简短别名
     const lower = clean.toLowerCase();
-    if (lower === "omni" || lower === "omnivideo" || lower === "omni 4" || lower === "omni_4") {
-        return videoMinimaxH3OmniFp8PdmdProfile;
-    }
-    if (lower === "omni 20" || lower === "omni_20") {
-        return videoMinimaxH3OmniFp8Profile;
-    }
-    if (lower === "frame" || lower === "framevideo" || lower === "frame 4" || lower === "frame_4") {
-        return videoMinimaxH3FrameFp8PdmdProfile;
-    }
-    if (lower === "frame 20" || lower === "frame_20") {
-        return videoMinimaxH3FrameFp8Profile;
-    }
-
-    // 4. 图片模型别名匹配
-    if (
-        lower === "image-qwen-2.1" ||
-        lower === "qwen-image-2.1" ||
-        lower === "qwen-image2.1" ||
-        lower === "qwen-2.1" ||
-        lower === "qwen2.1" ||
-        lower === "qwen" ||
-        lower === "qwen-image" ||
-        lower === "t2i"
-    ) {
-        return imageQwen21Profile;
-    }
-    if (lower === "image-z-turbo" || lower === "z-turbo" || lower === "turbo" || lower === "z-image") {
-        return imageZTurboProfile;
-    }
-    if (
-        lower === "image-flux2-dev" ||
-        lower === "flux2-dev" ||
-        lower === "flux" ||
-        lower === "flux2" ||
-        lower === "i2i"
-    ) {
-        return imageFlux2DevProfile;
-    }
-    if (
-        lower === "image-qwen-inpaint" ||
-        lower === "inpaint" ||
-        lower === "qwen-inpaint"
-    ) {
-        return imageQwenInpaintProfile;
-    }
-
-    // 5. 文本模型别名匹配
-    if (
-        lower === "text-qwen-35" ||
-        lower === "text-qwen-35-chat" ||
-        lower === "text-qwen-35-vlm" ||
-        lower === "qwen-35" ||
-        lower === "qwen-35-chat" ||
-        lower === "qwen-35-vlm" ||
-        lower === "qwen3.5 4b" ||
-        lower === "qwen3.5-4b" ||
-        lower === "qwen3.5" ||
-        lower === "qwen-vlm" ||
-        lower === "vlm" ||
-        lower === "text"
-    ) {
-        return textQwen35Profile;
-    }
-
-    // 6. 音频模型别名匹配
-    if (
-        lower === "audio-minimax-music-3" ||
-        lower === "minimax_music_3" ||
-        lower === "minimax-music-3" ||
-        lower === "minimax_music3" ||
-        lower === "minimax-music" ||
-        lower === "music" ||
-        lower === "audio"
-    ) {
-        return audioMinimaxMusic3Profile;
-    }
-
-    // 7. 模糊匹配已知模型的名称
-    return BUILTIN_WORKFLOW_MODELS.find(
-        (m) => m.name.toLowerCase() === lower || m.name.toLowerCase().includes(lower)
-    );
+    if (lower === "t2i" || lower === "qwen" || lower === "qwen-image") return imageQwenProfile;
+    if (lower === "i2i" || lower === "qwen-4x4") return imageQwen4x4Profile;
+    if (lower === "moss" || lower === "moss-image") return imageMossProfile;
+    if (lower === "z-turbo" || lower === "turbo" || lower === "z-image") return imageZTurboProfile;
+    if (lower === "omni" || lower === "omnivideo") return videoMinimaxH3OmniProfile;
+    if (["text", "qwen-35", "qwen3.5", "qwen3.5-4b", "vlm"].includes(lower)) return textQwen35Profile;
+    if (["audio", "music", "minimax-music", "minimax_music_3", "minimax-music-3"].includes(lower)) return audioMinimaxMusic3Profile;
+    return BUILTIN_WORKFLOW_MODELS.find((model) => model.name.toLowerCase() === lower);
 }
 
 /**
@@ -208,80 +71,45 @@ export function listModelsByCapability(capability: ModelCapabilityType): Workflo
     return BUILTIN_WORKFLOW_MODELS.filter((m) => m.capability === capability);
 }
 
-/**
- * 视频模型家族标识（量化规格 + 蒸馏档位），用于在「全能参考 / 首尾帧」之间切换时
- * 保留当前模型家族，避免静默回退到 FP8 默认模型。
- * 形如 `omni-video-minimax-h3-{fp8|int8}[-4step-pdmd|-6step-pika|-6step-selflift]`。
- */
-const VIDEO_MODEL_VARIANT_SUFFIXES = ["-4step-pdmd", "-6step-pika", "-6step-selflift"] as const;
-const VIDEO_MODEL_SUFFIX_PATTERN = `(?:${VIDEO_MODEL_VARIANT_SUFFIXES.join("|")})`;
-const VIDEO_MODEL_ID_PATTERN = new RegExp(`^(?:omni|frame)-video-minimax-h3-(fp8|int8)(${VIDEO_MODEL_SUFFIX_PATTERN})?$`);
-const VIDEO_MODEL_ID_SEARCH_PATTERN = new RegExp(`(?:omni|frame)-video-minimax-h3-(?:fp8|int8)${VIDEO_MODEL_SUFFIX_PATTERN}?`);
+const WORKFLOW_MODEL_SUFFIXES: Record<string, string> = {
+    "t2i-qrw-d": "image-qwen",
+    "i2i-qrw-d": "image-qwen",
+    "i2i-qrw-4x4": "image-qwen-4x4",
+    "t2i-moss-image": "image-moss",
+    "t2i-z-image-turbo": "image-z-turbo",
+    "omni-video-minimax-h3-ms-v10": "omni-video-minimax-h3-ms-v10",
+    "text-qwen3-5": "text-qwen-35",
+    "audio-minimax-music-3": "audio-minimax-music-3",
+};
 
-/**
- * 根据当前模型与目标模式（omni / frame）解析出同家族的对应模型 ID。
- * 当前模型不属于已知视频家族时，回退到该方法对应的 FP8 4步 PDMD 默认模型。
- */
-export function resolveVideoModelIdForMode(
-    currentModelId: string | undefined,
-    nextMode: "omni" | "frame",
-): string {
-    const fallback = `${nextMode}-video-minimax-h3-fp8-4step-pdmd`;
-    const currentProfile = getModelProfile(currentModelId);
-    const family = VIDEO_MODEL_ID_PATTERN.exec(currentProfile?.id ?? "");
-    if (!family) return fallback;
-
-    const candidate = `${nextMode}-video-minimax-h3-${family[1]}${family[2] ?? ""}`;
-    return BUILTIN_WORKFLOW_MODELS.some((m) => m.id === candidate) ? candidate : fallback;
-}
-
-/**
- * 从渠道工作流 ID（如 `builtin-t2i-qwen-image-21`、`builtin-omni-video-minimax-h3-int8-6step-pika`）
- * 反解出对应的模型 Profile ID；无法识别时返回 undefined。
- */
 export function resolveModelIdFromWorkflowId(workflowId: string | undefined): string | undefined {
     if (!workflowId) return undefined;
-    const videoMatch = VIDEO_MODEL_ID_SEARCH_PATTERN.exec(workflowId)?.[0];
-    if (videoMatch && BUILTIN_WORKFLOW_MODELS.some((m) => m.id === videoMatch)) {
-        return videoMatch;
-    }
-    const lower = workflowId.toLowerCase();
-    if (
-        lower.includes("qwen-image-21") ||
-        lower.includes("qwen-image-2.1") ||
-        lower.includes("qwen-image2.1") ||
-        lower.includes("qwen-2.1") ||
-        lower.includes("qwen2.1")
-    ) {
-        return "image-qwen-2.1";
-    }
-    if (lower.includes("z-image-turbo") || lower.includes("z-turbo") || lower.includes("z-image")) {
-        return "image-z-turbo";
-    }
-    if (lower.includes("flux2-dev") || lower.includes("flux2") || lower.includes("flux")) {
-        return "image-flux2-dev";
-    }
-    if (lower.includes("inpaint-qwen-image") || lower.includes("qwen-inpaint")) {
-        return "image-qwen-inpaint";
-    }
-    if (lower.includes("text-qwen3-5") || lower.includes("qwen3.5") || lower.includes("qwen3-5") || lower.includes("qwen-35")) {
-        return "text-qwen-35";
-    }
-    if (lower.includes("audio-minimax-music-3") || lower.includes("music-3") || lower.includes("minimax-music")) {
-        return "audio-minimax-music-3";
-    }
-    return undefined;
+    const suffix = Object.keys(WORKFLOW_MODEL_SUFFIXES).find((key) => workflowId === key || workflowId.endsWith(`-${key}`));
+    return suffix ? WORKFLOW_MODEL_SUFFIXES[suffix] : undefined;
 }
 
-/**
- * 从渠道工作流 ID（形如 `builtin-omni-video-minimax-h3-int8-6step-pika`）反解出
- * 对应的视频模型 ID；无法识别时返回 undefined，交由调用方回退。
- */
+export function resolveVideoModelIdForMode(currentModelId: string | undefined, nextMode: "omni" | "frame"): string {
+    const currentProfile = getModelProfile(currentModelId);
+    if (nextMode === "omni") return currentProfile?.category === "omniVideo" ? currentProfile.id : videoMinimaxH3OmniProfile.id;
+    return currentProfile?.category === "frameVideo" ? currentProfile.id : "";
+}
+
 export function resolveVideoModelIdFromWorkflowId(workflowId: string | undefined): string | undefined {
-    if (!workflowId) return undefined;
-    const found = VIDEO_MODEL_ID_SEARCH_PATTERN.exec(workflowId)?.[0];
-    if (!found) return undefined;
-    return BUILTIN_WORKFLOW_MODELS.some((m) => m.id === found) ? found : undefined;
+    const modelId = resolveModelIdFromWorkflowId(workflowId);
+    return getModelProfile(modelId)?.capability === "video" ? modelId : undefined;
+}
+
+/** 将渠道真实工作流映射为节点 Profile，同一 Profile 的多分类工作流只保留首次出现。 */
+export function buildWorkflowModelProfiles(workflows: ComfyWorkflowItem[]): WorkflowModelProfile[] {
+    const profiles: WorkflowModelProfile[] = [];
+    const seen = new Set<string>();
+    for (const workflow of workflows) {
+        const profile = workflow.isBuiltin ? getModelProfile(workflow.id) : buildCustomWorkflowProfile(workflow);
+        if (!profile || seen.has(profile.id)) continue;
+        seen.add(profile.id);
+        profiles.push(profile);
+    }
+    return profiles;
 }
 
 export interface ModelValidationParams {

@@ -1,0 +1,211 @@
+{
+  "476": {
+    "inputs": {
+      "unet_name": "qwen_image_2.1_bf16.safetensors",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {
+      "title": "UNet加载器",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "477": {
+    "inputs": {
+      "clip_name": "qwen3vl_8b_bf16.safetensors",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {
+      "title": "select_models_clip",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "478": {
+    "inputs": {
+      "vae_name": "qwen_image_2.1_vae_bf16.safetensors"
+    },
+    "class_type": "VAELoader",
+    "_meta": {
+      "title": "select_models_vae",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "479": {
+    "inputs": {
+      "width": [
+        "530",
+        0
+      ],
+      "height": [
+        "529",
+        0
+      ],
+      "batch_size": 1
+    },
+    "class_type": "EmptyLatentImage",
+    "_meta": {
+      "title": "空Latent图像",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "480": {
+    "inputs": {
+      "samples": [
+        "481",
+        0
+      ],
+      "vae": [
+        "478",
+        0
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE解码",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "481": {
+    "inputs": {
+      "seed": 980290479560474,
+      "steps": 40,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": [
+        "483",
+        0
+      ],
+      "positive": [
+        "533",
+        0
+      ],
+      "negative": [
+        "533",
+        0
+      ],
+      "latent_image": [
+        "479",
+        0
+      ]
+    },
+    "class_type": "KSampler",
+    "_meta": {
+      "title": "K采样器",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "483": {
+    "inputs": {
+      "device": "auto",
+      "dtype": "default",
+      "model": [
+        "476",
+        0
+      ]
+    },
+    "class_type": "QwenImage21Cache",
+    "_meta": {
+      "title": "Qwen Image 2.1 缓存",
+      "cnr_id": "comfy-core",
+      "ver": "0.36.0"
+    }
+  },
+  "493": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": [
+        "480",
+        0
+      ]
+    },
+    "class_type": "SaveImage",
+    "_meta": {
+      "title": "output_image"
+    }
+  },
+  "529": {
+    "inputs": {
+      "Number": "1088"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "height",
+      "cnr_id": "ComfyLiterals",
+      "ver": "bdddb08ca82d90d75d97b1d437a652e0284a32ac"
+    }
+  },
+  "530": {
+    "inputs": {
+      "Number": "1920"
+    },
+    "class_type": "Int",
+    "_meta": {
+      "title": "width",
+      "cnr_id": "ComfyLiterals",
+      "ver": "bdddb08ca82d90d75d97b1d437a652e0284a32ac"
+    }
+  },
+  "531": {
+    "inputs": {
+      "image": "image (24).png"
+    },
+    "class_type": "LoadImage",
+    "_meta": {
+      "title": "ref_image_01",
+      "cnr_id": "comfy-core",
+      "ver": "0.3.51"
+    }
+  },
+  "533": {
+    "inputs": {
+      "prompt": [
+        "536",
+        0
+      ],
+      "clip": [
+        "477",
+        0
+      ],
+      "vae": [
+        "478",
+        0
+      ],
+      "image": [
+        "531",
+        0
+      ]
+    },
+    "class_type": "TextEncodeQwenImageEdit",
+    "_meta": {
+      "title": "文本编码 Qwen Image 编辑"
+    }
+  },
+  "536": {
+    "inputs": {
+      "value": "请将上传的角色参考图转换成一张 9:16 竖版四宫格角色设定卡，用于角色展示、定妆和建模参考。\n\n【最高优先级：参考图一致性】\n\n上传图片是人物外观与视觉呈现的唯一依据。\n\n严格保留人物身份、年龄感、头型、脸型、五官特征、发型、发色、肤色、体型比例、服装层次、配饰、鞋子及原始配色。\n\n除展示角度、姿态、背景和画面布局外，其余内容均以参考图为准。不得擅自美化、重新设计、换脸、改变年龄感、改变体型、修改服装结构或改变原始视觉呈现方式。\n\n不继承原图的背景、构图、动作、情绪、表情或透视畸变。角色统一调整为平静、中性表情和自然参考姿态。\n\n【整体布局】\n\n单张图片，宽高比严格为 9:16，采用规则的 2×2 四宫格，四格等大、边界准确对齐，以细窄、均匀的分隔线区分。\n\n背景统一为中性灰色，无道具、布景或额外人物。\n\n画面不出现任何文字、标签、编号、标题、Logo、水印或 UI。原服装中的文字标识省略，其余设计保持一致。\n\n四格亮度、色彩和清晰度协调统一，避免过曝、过暗或细节丢失。\n\n【左上：正面脸部近景】\n\n人物正对画面，头部端正，目光自然朝前，表情中性。\n\n采用紧凑头像构图，头顶保留少量安全边距，下方裁至锁骨或上胸。\n\n完整展示头部、发型、五官、可见耳部及耳饰、原有妆容和少量服装细节。\n\n避免头发被裁切或出现过多留白。\n\n【右上：90° 侧脸近景】\n\n人物面朝画面左侧，严格呈现 90° 侧面，不回头、不看镜头，表情中性。\n\n与左上保持相同头部尺度、眼睛水平线及裁切范围。\n\n清晰展示额头、鼻唇、下颌、耳部和发型的侧面结构，保持同一人物的五官特征与头部比例。\n\n【左下：正面完整全身，无五官】\n\n人物从头顶到鞋底完整入镜，正对画面，自然直立，双臂放松下垂，双手自然放松，双脚自然站立。\n\n清晰展示身体比例、服装层次、配饰位置和鞋子。\n\n面部不出现眼睛、眉毛、鼻子、嘴巴或任何五官线条。\n\n保留原人物的头部轮廓、脸部面积、发型、耳朵、肤色，以及自然的体积、明暗和表面细节。\n\n面部干净、完整、自然，不呈现面具、遮挡、马赛克、模糊涂抹、空洞或其他替代效果。\n\n除面部无五官外，其余外观必须与其他视图保持一致。\n\n【右下：180° 背面完整全身】\n\n人物完全背对画面，不回头，不露正脸或侧脸。\n\n与左下保持相同的身体姿态、双臂位置、双脚间距和体型比例。\n\n完整展示后脑发型、服装背部结构、配饰位置及鞋子背面。\n\n两张全身图的人物高度、水平中心、头顶留白和脚底基线严格一致。\n\n不裁切头发、手指或鞋底，不因视角变化改变人物体型和头身比例。\n\n【补全与一致性】\n\n参考图未展示的侧面、背面、鞋子或局部结构，仅作必要且保守的补全。\n\n优先根据参考图中可见的信息进行推断，不得改动已知设计，不新增无依据的装饰、花纹、武器或配件，不得为了对称而修改原有不对称设计。\n\n四格保持同一人物身份、年龄感、头型、发型、体型、服装、配饰、鞋子、配色及视觉呈现方式。\n\n左上与右上保留一致的五官特征；左下严格执行无五官要求；右下严格为完整背面。\n\n每格仅出现一个人物，不出现残影、多余肢体、肢体畸形或结构错位。\n\n【最终要求】\n\n生成一张干净、统一、规整、准确对齐的 9:16 四宫格人物参考卡。\n\n所有人物细节均以上传参考图为准，不进行无关修改。仅完成规定的视角转换、姿态统一、必要补全及四宫格布局。"
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "系统"
+    }
+  },
+  "537": {
+    "inputs": {
+      "value": ""
+    },
+    "class_type": "PrimitiveStringMultiline",
+    "_meta": {
+      "title": "prompt"
+    }
+  }
+}

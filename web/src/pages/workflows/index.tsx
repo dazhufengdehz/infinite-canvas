@@ -16,6 +16,7 @@ import {
     Sliders,
     Sparkles,
     Star,
+    Trash2,
     Upload,
     Workflow as WorkflowIcon,
 } from "lucide-react";
@@ -85,7 +86,7 @@ const AUTO_DETECT_CATEGORIES: WorkflowCategory[] = [
 
 export default function WorkflowsPage() {
     const { t } = useTranslation();
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const copyText = useCopyText();
     const [searchParams] = useSearchParams();
 
@@ -104,6 +105,7 @@ export default function WorkflowsPage() {
 
     const config = useEffectiveConfig();
     const saveWorkflowGlobally = useConfigStore((state) => state.saveWorkflowGlobally);
+    const deleteWorkflowGlobally = useConfigStore((state) => state.deleteWorkflowGlobally);
     const setChannelDefaultWorkflow = useConfigStore((state) => state.setChannelDefaultWorkflow);
     const resetChannelWorkflowToBuiltin = useConfigStore((state) => state.resetChannelWorkflowToBuiltin);
 
@@ -308,6 +310,23 @@ export default function WorkflowsPage() {
         setCurrentJson(JSON.parse(JSON.stringify(builtinCounterpart.json)));
         setIsDirty(false);
         message.success(t("workflowsPage.resetDefaultSuccess", { name: builtinCounterpart.name }));
+    };
+
+    const handleDelete = () => {
+        if (!activeWorkflow) return;
+        modal.confirm({
+            title: t("workflowsPage.deleteConfirmTitle"),
+            content: t("workflowsPage.deleteConfirmContent", { name: activeWorkflow.name }),
+            okText: t("common.delete"),
+            okButtonProps: { danger: true },
+            cancelText: t("common.cancel"),
+            onOk: () => {
+                deleteWorkflowGlobally(activeWorkflow);
+                setActiveWorkflowId("");
+                setIsDirty(false);
+                message.success(t("workflowsPage.deleteSuccess", { name: activeWorkflow.name }));
+            },
+        });
     };
 
     const handleUploadWorkflow = async (file?: File) => {
@@ -604,6 +623,14 @@ export default function WorkflowsPage() {
                                         {t("workflowsPage.resetDefault")}
                                     </Button>
                                 )}
+                                <Button
+                                    size="small"
+                                    danger
+                                    icon={<Trash2 className="size-3.5" />}
+                                    onClick={handleDelete}
+                                >
+                                    {t("common.delete")}
+                                </Button>
                                 <Button
                                     size="small"
                                     type="primary"

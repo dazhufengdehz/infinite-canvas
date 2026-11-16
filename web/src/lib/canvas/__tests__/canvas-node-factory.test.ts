@@ -127,14 +127,14 @@ describe("applyNodeConfigPatch", () => {
             width: 320,
             height: 240,
             metadata: {
-                modelId: "omni-video-minimax-h3-int8-6step-pika",
-                workflowId: "builtin-omni-video-minimax-h3-fp8-4step-pdmd",
+                modelId: "omni-video-minimax-h3-ms-v10",
+                workflowId: "builtin-omni-video-minimax-h3-ms-v10",
                 videoMode: "omni",
             },
         } as unknown as Parameters<typeof applyNodeConfigPatch>[0];
 
-        const next = applyNodeConfigPatch(node, { modelId: "omni-video-minimax-h3-int8-4step-pdmd", workflowId: undefined });
-        expect(next.metadata?.modelId).toBe("omni-video-minimax-h3-int8-4step-pdmd");
+        const next = applyNodeConfigPatch(node, { modelId: "omni-video-minimax-h3-ms-v10", workflowId: undefined });
+        expect(next.metadata?.modelId).toBe("omni-video-minimax-h3-ms-v10");
         // workflowId 必须被真正清除，否则执行侧会优先采用它并跳过 modelId 对应的内置工作流
         expect(next.metadata?.workflowId).toBeUndefined();
         expect(Object.prototype.hasOwnProperty.call(next.metadata, "workflowId")).toBe(true);

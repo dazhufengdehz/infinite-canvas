@@ -13,11 +13,7 @@ import {
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
-import {
-    getModelProfile,
-    type WorkflowModelProfile,
-    videoMinimaxH3OmniProfile,
-} from "@/services/api/models";
+import { type WorkflowModelProfile } from "@/services/api/models";
 
 export type CanvasVideoSettingsPopoverProps = {
     modelId?: string;
@@ -75,8 +71,9 @@ export function CanvasVideoSettingsPopover({
         onSyncPosition: () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null),
     });
 
-    const effectiveModelId = modelId || (videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : videoMode === "omni" ? "omni-video-minimax-h3-int8-6step-selflift" : undefined) || config?.videoModel || config?.model;
-    const profile = profileProp || getModelProfile(effectiveModelId) || videoMinimaxH3OmniProfile;
+    const effectiveModelId = modelId;
+    const profile = profileProp;
+    if (!profile) return null;
     const currentMode = videoMode || (profile.category === "frameVideo" ? "frame" : (config?.videoMode === "frame" ? "frame" : "omni"));
     const currentSize = size || config?.size;
     const currentDuration = duration !== undefined ? duration : config?.videoSeconds;

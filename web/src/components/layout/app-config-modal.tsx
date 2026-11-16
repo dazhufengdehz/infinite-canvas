@@ -271,7 +271,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                                 </div>
 
                                                 {isComfyui && (() => {
-                                                    const defaultWorkflows = getDefaultComfyuiWorkflows(channel);
+                                                    const defaultWorkflows = getDefaultComfyuiWorkflows();
                                                     return (
                                                         <div className="mt-3.5 space-y-4 border-t border-stone-100 pt-3 dark:border-stone-800/80">
                                                             {/* 核心生成工作流 */}

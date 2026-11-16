@@ -9,8 +9,8 @@ import { AudioModelPicker } from "@/components/audio-model-picker";
 import { VideoModelPicker } from "@/components/video-model-picker";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { TextModelPicker } from "@/components/text-model-picker";
-import { decodeChannelModel, defaultConfig, encodeChannelModel, findWorkflow, getChannelWorkflows, isModelSupportedByHost, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
-import { audioMinimaxMusic3Profile, BUILTIN_VIDEO_WORKFLOW_MODELS, CUSTOM_WORKFLOW_CATEGORIES, customWorkflowHasPrompt, evaluateModelAvailability, findCustomWorkflow, findCustomWorkflowProfile, getModelProfile, imageQwen21Profile, isMiniMaxH3EasyWorkflow, resolveModelIdFromWorkflowId, resolveVideoModelIdForMode, textQwen35Profile } from "@/services/api/models";
+import { defaultConfig, encodeChannelModel, findWorkflow, getChannelWorkflows, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
+import { buildWorkflowModelProfiles, CUSTOM_WORKFLOW_CATEGORIES, customWorkflowHasPrompt, evaluateModelAvailability, findCustomWorkflow, isMiniMaxH3EasyWorkflow, resolveModelIdFromWorkflowId, resolveVideoModelIdForMode } from "@/services/api/models";
 import { getNodeResourceCounts } from "@/lib/canvas/canvas-node-geometry";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -73,23 +73,21 @@ export function CanvasNodePromptPanel({
     const mode = modeOverride ?? defaultMode(node.type);
     const config = buildNodeConfig(globalConfig, node, mode);
     const activeChannel = globalConfig.channels.find((channel) => channel.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
-    const nodeCustomWorkflow = findCustomWorkflow(activeChannel, node.metadata?.workflowId, CUSTOM_WORKFLOW_CATEGORIES[mode]);
+    const nodeWorkflow = node.metadata?.workflowId ? findWorkflow(globalConfig, activeChannel?.id, node.metadata.workflowId) : undefined;
+    const workflowCategory = nodeWorkflow?.id === node.metadata?.workflowId ? nodeWorkflow.category : undefined;
+    const videoTool = mode === "video" && (workflowCategory === "faceRefine" || workflowCategory === "depthVideo") ? workflowCategory : undefined;
+    const channelWorkflows = getChannelWorkflows(activeChannel, CUSTOM_WORKFLOW_CATEGORIES[mode]);
+    const selectedWorkflow = videoTool ? nodeWorkflow : channelWorkflows.find((workflow) => workflow.id === node.metadata?.workflowId)
+        || channelWorkflows.find((workflow) => (workflow.isBuiltin ? resolveModelIdFromWorkflowId(workflow.id) : workflow.id) === node.metadata?.modelId)
+        || channelWorkflows.find((workflow) => workflow.isDefault)
+        || channelWorkflows[0];
+    const nodeCustomWorkflow = selectedWorkflow && !selectedWorkflow.isBuiltin ? selectedWorkflow : undefined;
     const isEasyWorkflow = Boolean(nodeCustomWorkflow && isMiniMaxH3EasyWorkflow(nodeCustomWorkflow));
-    const fallbackModelId = mode === "video"
-        ? (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")
-        : mode === "image"
-          ? config.imageModel || "image-qwen-2.1"
-          : mode === "audio"
-            ? "audio-minimax-music-3"
-            : "text-qwen-35";
-    const effectiveModelId = nodeCustomWorkflow?.id || node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || fallbackModelId;
-    const baseNodeProfile = nodeCustomWorkflow ? findCustomWorkflowProfile(activeChannel, nodeCustomWorkflow.id, CUSTOM_WORKFLOW_CATEGORIES[mode]) : getModelProfile(effectiveModelId);
+    const baseNodeProfile = selectedWorkflow ? buildWorkflowModelProfiles([selectedWorkflow])[0] : undefined;
+    const effectiveModelId = baseNodeProfile?.id;
     const nodeProfile = isEasyWorkflow && config.videoMode === "frame" && baseNodeProfile
         ? { ...baseNodeProfile, capabilityConfig: { ...baseNodeProfile.capabilityConfig, references: { ...baseNodeProfile.capabilityConfig.references, maxImages: 2, maxVideos: 0, maxAudios: 0 } } }
         : baseNodeProfile;
-    const nodeWorkflow = mode === "video" && node.metadata?.workflowId ? findWorkflow(globalConfig, node.metadata.channelId || globalConfig.channelId, node.metadata.workflowId) : undefined;
-    const workflowCategory = nodeWorkflow?.id === node.metadata?.workflowId ? nodeWorkflow?.category : undefined;
-    const videoTool = workflowCategory === "faceRefine" || workflowCategory === "depthVideo" ? workflowCategory : undefined;
     const hasTextContent = node.type === CanvasNodeType.Text && Boolean(node.metadata?.content?.trim());
     const hasImageContent = node.type === CanvasNodeType.Image && Boolean(node.metadata?.content);
     const hasVideoContent = node.type === CanvasNodeType.Video && Boolean(node.metadata?.content);
@@ -134,8 +132,9 @@ export function CanvasNodePromptPanel({
 
     const videoModelAvailability = useMemo(() => {
         if (mode !== "video" || videoTool) return { isAvailable: true, reasons: [] };
+        if (!nodeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
-            targetModel: nodeProfile || BUILTIN_VIDEO_WORKFLOW_MODELS[0],
+            targetModel: nodeProfile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
@@ -146,8 +145,9 @@ export function CanvasNodePromptPanel({
 
     const imageModelAvailability = useMemo(() => {
         if (mode !== "image") return { isAvailable: true, reasons: [] };
+        if (!nodeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
-            targetModel: nodeProfile || imageQwen21Profile,
+            targetModel: nodeProfile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
@@ -158,8 +158,9 @@ export function CanvasNodePromptPanel({
 
     const textModelAvailability = useMemo(() => {
         if (mode !== "text") return { isAvailable: true, reasons: [] };
+        if (!nodeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
-            targetModel: nodeProfile || textQwen35Profile,
+            targetModel: nodeProfile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
@@ -170,8 +171,9 @@ export function CanvasNodePromptPanel({
 
     const audioModelAvailability = useMemo(() => {
         if (mode !== "audio") return { isAvailable: true, reasons: [] };
+        if (!nodeProfile) return { isAvailable: false, reasons: ["暂无可用的工作流"] };
         return evaluateModelAvailability({
-            targetModel: nodeProfile || audioMinimaxMusic3Profile,
+            targetModel: nodeProfile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
@@ -189,6 +191,18 @@ export function CanvasNodePromptPanel({
             : audioModelAvailability;
     const isCurrentModelAvailable = currentAvailability.isAvailable;
     const currentModelUnavailabilityReasons = currentAvailability.reasons;
+
+    useEffect(() => {
+        if (videoTool) return;
+        const patch: Partial<CanvasNodeData["metadata"]> = {};
+        if (node.metadata?.workflowId !== selectedWorkflow?.id) patch.workflowId = selectedWorkflow?.id;
+        if (node.metadata?.modelId !== effectiveModelId) patch.modelId = effectiveModelId;
+        if (mode === "video" && selectedWorkflow && !isEasyWorkflow) {
+            const nextVideoMode = selectedWorkflow.category === "frameVideo" ? "frame" : "omni";
+            if (node.metadata?.videoMode !== nextVideoMode) patch.videoMode = nextVideoMode;
+        }
+        if (Object.keys(patch).length > 0) onConfigChange(node.id, patch);
+    }, [node.id, node.metadata?.workflowId, node.metadata?.modelId, node.metadata?.videoMode, selectedWorkflow, effectiveModelId, mode, videoTool, isEasyWorkflow, onConfigChange]);
 
     // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
     useEffect(() => {
@@ -263,6 +277,7 @@ export function CanvasNodePromptPanel({
             }
         }
 
+        if (!isCurrentModelAvailable) return;
         onGenerate(node.id, mode, text, intent);
     };
 

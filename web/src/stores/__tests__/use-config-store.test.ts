@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
     COMFYUI_DEFAULT_MODELS,
     DEFAULT_SUPPORTED_IMAGE_MODEL_IDS,
-    LEGACY_DEFAULT_SUPPORTED_VIDEO_MODEL_IDS,
+    DEFAULT_SUPPORTED_MODEL_IDS,
     createModelChannel,
     defaultConfig,
     isAiConfigReady,
@@ -19,21 +19,36 @@ import {
     selectableModelsByCapability,
     useConfigStore,
     type AiConfig,
+    type ComfyWorkflowItem,
     type ModelChannel,
 } from "@/stores/use-config-store";
 
+const DEFAULT_MODEL_NAMES = [
+    "Qwen Image 全能生图",
+    "Qwen Image 4×4 图生图",
+    "Moss Image 文生图",
+    "Z-Image-Turbo 文生图",
+    "Qwen3.5 文本生成与反推",
+    "MiniMax H3 全能参考视频",
+    "MiniMax Music 03 音乐生成",
+];
+
+const DEFAULT_WORKFLOW_IDS = [
+    "builtin-t2i-qrw-d",
+    "builtin-i2i-qrw-d",
+    "builtin-i2i-qrw-4x4",
+    "builtin-t2i-moss-image",
+    "builtin-t2i-z-image-turbo",
+    "builtin-omni-video-minimax-h3-ms-v10",
+    "builtin-depth-video-reshot",
+    "builtin-text-qwen3-5",
+    "builtin-audio-minimax-music-3",
+    "builtin-face-refine-h3",
+];
+
 describe("COMFYUI_DEFAULT_MODELS", () => {
-    it("pre-provisions the default ComfyUI models", () => {
-        expect(COMFYUI_DEFAULT_MODELS.map((model) => model.name)).toEqual([
-            "Z-Image-Turbo",
-            "Flux2.Dev",
-            "Qwen-Image-2.1",
-            "Qwen-Image Inpaint",
-            "Qwen3.5 4B",
-            "MiniMax H3 全能 (INT8 6步 SelfLift)",
-            "MiniMax H3 首尾帧 (INT8 6步 SelfLift)",
-            "MiniMax Music 03",
-        ]);
+    it("pre-provisions the seven default ComfyUI models", () => {
+        expect(COMFYUI_DEFAULT_MODELS.map((model) => model.name)).toEqual(DEFAULT_MODEL_NAMES);
     });
 });
 
@@ -41,7 +56,7 @@ describe("createModelChannel", () => {
     it("pre-provisions the default models for a new ComfyUI channel without models", () => {
         const channel = createModelChannel();
         expect(channel.apiFormat).toBe("comfyui");
-        expect(channel.models.map((model) => model.name)).toEqual(COMFYUI_DEFAULT_MODELS.map((model) => model.name));
+        expect(channel.models.map((model) => model.name)).toEqual(DEFAULT_MODEL_NAMES);
     });
 
     it("keeps an explicit model list instead of pre-provisioning", () => {
@@ -57,8 +72,8 @@ describe("createModelChannel", () => {
 
 describe("normalizeChannelModels", () => {
     it("normalizes string entries with a guessed capability and dedupes by name", () => {
-        expect(normalizeChannelModels(["Z-Image-Turbo", "Z-Image-Turbo", "Custom T2I"])).toEqual([
-            { name: "Z-Image-Turbo", capability: "image", script: undefined, comfyuiWorkflow: undefined },
+        expect(normalizeChannelModels(["Z-Image-Turbo 文生图", "Z-Image-Turbo 文生图", "Custom T2I"])).toEqual([
+            { name: "Z-Image-Turbo 文生图", capability: "image", script: undefined, comfyuiWorkflow: undefined },
             { name: "Custom T2I", capability: "image", script: undefined, comfyuiWorkflow: undefined },
         ]);
     });
@@ -110,47 +125,36 @@ describe("ComfyUI model resolution", () => {
         baseUrl: "",
         apiKey: "",
         apiFormat: "comfyui",
-        models: [{ name: "Z-Image-Turbo", capability: "image", comfyuiWorkflow: { name: "t2i", json: {}, createdAt: 0 } }],
+        models: [{ name: "Z-Image-Turbo 文生图", capability: "image", comfyuiWorkflow: { name: "t2i", json: {}, createdAt: 0 } }],
         comfyuiProxyUrl: "http://127.0.0.1:8189",
         comfyuiProxyToken: "tok",
     };
     const config: AiConfig = { ...defaultConfig, channels: [comfyChannel] };
 
     it("resolves a ComfyUI model to the ComfyUI channel", () => {
-        const resolved = resolveModelRequestConfig(config, "comfy::Z-Image-Turbo");
+        const resolved = resolveModelRequestConfig(config, "comfy::Z-Image-Turbo 文生图");
         expect(resolved.apiFormat).toBe("comfyui");
-        expect(resolved.model).toBe("Z-Image-Turbo");
+        expect(resolved.model).toBe("Z-Image-Turbo 文生图");
         expect(resolved.baseUrl).toBe("http://127.0.0.1:8189");
     });
 
     it("resolves multiple ComfyUI channels to their respective IP addresses", () => {
         const channel1: ModelChannel = {
+            ...comfyChannel,
             id: "channel-1",
             name: "ComfyUI 1",
-            baseUrl: "",
-            apiKey: "",
-            apiFormat: "comfyui",
-            models: [{ name: "MiniMax H3 全能视频", capability: "video" }],
+            models: [{ name: "MiniMax H3 全能参考视频", capability: "video" }],
             comfyuiProxyUrl: "http://127.0.0.1:8188",
         };
         const channel2: ModelChannel = {
+            ...channel1,
             id: "channel-2",
             name: "ComfyUI 2",
-            baseUrl: "",
-            apiKey: "",
-            apiFormat: "comfyui",
-            models: [{ name: "MiniMax H3 全能视频", capability: "video" }],
             comfyuiProxyUrl: "http://192.168.1.200:8188",
         };
         const cfg: AiConfig = { ...defaultConfig, channels: [channel1, channel2] };
-
-        const res1 = resolveModelChannel(cfg, "channel-1::MiniMax H3 全能视频");
-        expect(res1.id).toBe("channel-1");
-        expect(res1.comfyuiProxyUrl).toBe("http://127.0.0.1:8188");
-
-        const res2 = resolveModelChannel(cfg, "channel-2::MiniMax H3 全能视频");
-        expect(res2.id).toBe("channel-2");
-        expect(res2.comfyuiProxyUrl).toBe("http://192.168.1.200:8188");
+        expect(resolveModelChannel(cfg, "channel-1::MiniMax H3 全能参考视频").comfyuiProxyUrl).toBe("http://127.0.0.1:8188");
+        expect(resolveModelChannel(cfg, "channel-2::MiniMax H3 全能参考视频").comfyuiProxyUrl).toBe("http://192.168.1.200:8188");
     });
 });
 
@@ -164,7 +168,7 @@ describe("custom workflow capabilities", () => {
             { id: "custom-video", name: "自定义视频", category: "omniVideo", json: {}, createdAt: 0 },
             { id: "custom-text", name: "自定义文本", category: "text", json: {}, createdAt: 0 },
             { id: "custom-audio", name: "自定义音频", category: "audio", json: {}, createdAt: 0 },
-            { id: "image-qwen-2.1", name: "重名自定义文本", category: "text", json: {}, createdAt: 0 },
+            { id: "image-qwen", name: "重名自定义文本", category: "text", json: {}, createdAt: 0 },
         ],
     });
     const config: AiConfig = { ...defaultConfig, channels: [channel] };
@@ -178,11 +182,11 @@ describe("custom workflow capabilities", () => {
     });
 
     it("prefers a custom workflow over a colliding built-in model alias", () => {
-        expect(modelCapabilityOf(config, "custom::image-qwen-2.1")).toBe("text");
-        expect(resolveModelForCapability(config, "custom::image-qwen-2.1", "text")).toBe("custom::image-qwen-2.1");
+        expect(modelCapabilityOf(config, "custom::image-qwen")).toBe("text");
+        expect(resolveModelForCapability(config, "custom::image-qwen", "text")).toBe("custom::image-qwen");
     });
 
-    it("allows only custom workflows explicitly stored on a restricted host", () => {
+    it("allows custom workflows explicitly stored on a restricted host", () => {
         expect(isModelSupportedByHost(channel, "custom-image")).toBe(true);
         expect(isModelSupportedByHost(channel, "custom-video")).toBe(true);
         expect(isModelSupportedByHost(channel, "missing-custom")).toBe(false);
@@ -196,61 +200,43 @@ describe("persistence merge stability", () => {
 
     it("preserves custom workflows and proxy URL across merge", () => {
         const customT2i = { name: "custom-t2i.json", json: { test: 1 }, createdAt: 100 };
-        const customChannel: ModelChannel = createModelChannel({
+        const customChannel = createModelChannel({
             id: "default",
             name: "My ComfyUI",
             comfyuiProxyUrl: "http://192.168.1.50:8188",
             comfyuiT2iWorkflow: customT2i,
-            models: [{ name: "Z-Image-Turbo", capability: "image", comfyuiWorkflow: customT2i }],
+            workflows: [{ id: "default-t2i-qrw-d", name: customT2i.name, category: "t2i", json: customT2i.json, createdAt: customT2i.createdAt, isDefault: true }],
+            models: [{ name: "Z-Image-Turbo 文生图", capability: "image", comfyuiWorkflow: customT2i }],
         });
         const persistOptions = (useConfigStore as any).persist.getOptions();
-        const merged = persistOptions.merge(
-            {
-                config: {
-                    ...defaultConfig,
-                    channels: [customChannel],
-                    imageModel: "default::Z-Image-Turbo",
-                },
-            },
-            useConfigStore.getState(),
-        );
-
+        const merged = persistOptions.merge({
+            config: { ...defaultConfig, channels: [customChannel], imageModel: "default::Z-Image-Turbo 文生图" },
+        }, useConfigStore.getState());
         expect(merged.config.channels[0].comfyuiProxyUrl).toBe("http://192.168.1.50:8188");
         expect(merged.config.channels[0].comfyuiT2iWorkflow).toEqual(customT2i);
-        expect(merged.config.imageModel).toBe("default::Z-Image-Turbo");
+        expect(merged.config.imageModel).toBe("default::Z-Image-Turbo 文生图");
     });
 
-    it("falls back to default models when persisted model references obsolete names", () => {
+    it("falls back to current default models when persisted references are obsolete", () => {
         const persistOptions = (useConfigStore as any).persist.getOptions();
-        const merged = persistOptions.merge(
-            {
-                config: {
-                    ...defaultConfig,
-                    imageModel: "default::obsolete-gpt-image",
-                    videoModel: "default::obsolete-video",
-                    textModel: "default::obsolete-llm",
-                },
+        const merged = persistOptions.merge({
+            config: {
+                ...defaultConfig,
+                imageModel: "default::obsolete-gpt-image",
+                videoModel: "default::obsolete-video",
+                textModel: "default::obsolete-llm",
             },
-            useConfigStore.getState(),
-        );
-
-        expect(merged.config.imageModel).toBe("builtin::Qwen-Image-2.1");
-        expect(merged.config.videoModel).toBe("builtin::MiniMax H3 全能 (INT8 6步 SelfLift)");
-        expect(merged.config.textModel).toBe("builtin::Qwen3.5 4B");
+        }, useConfigStore.getState());
+        expect(merged.config.imageModel).toBe("builtin::Qwen Image 全能生图");
+        expect(merged.config.videoModel).toBe("builtin::MiniMax H3 全能参考视频");
+        expect(merged.config.textModel).toBe("builtin::Qwen3.5 文本生成与反推");
     });
 
     it("rehydrates after modifying channel via setConfig", async () => {
         const initialChannels = useConfigStore.getState().config.channels;
-        const modifiedChannel = {
-            ...initialChannels[0],
-            comfyuiProxyUrl: "http://192.168.1.99:8188",
-        };
-        useConfigStore.getState().setConfig({
-            ...useConfigStore.getState().config,
-            channels: [modifiedChannel],
-        });
+        const modifiedChannel = { ...initialChannels[0], comfyuiProxyUrl: "http://192.168.1.99:8188" };
+        useConfigStore.getState().setConfig({ ...useConfigStore.getState().config, channels: [modifiedChannel] });
         expect(useConfigStore.getState().config.channels[0].comfyuiProxyUrl).toBe("http://192.168.1.99:8188");
-
         await useConfigStore.persist.rehydrate();
         expect(useConfigStore.getState().config.channels[0].comfyuiProxyUrl).toBe("http://192.168.1.99:8188");
     });
@@ -258,16 +244,9 @@ describe("persistence merge stability", () => {
     it("persists when deleting custom channel", async () => {
         const initialChannels = useConfigStore.getState().config.channels;
         const extraChannel = createModelChannel({ id: "extra", name: "额外渠道" });
-        useConfigStore.getState().setConfig({
-            ...useConfigStore.getState().config,
-            channels: [...initialChannels, extraChannel],
-        });
+        useConfigStore.getState().setConfig({ ...useConfigStore.getState().config, channels: [...initialChannels, extraChannel] });
         expect(useConfigStore.getState().config.channels.length).toBe(2);
-
-        useConfigStore.getState().setConfig({
-            ...useConfigStore.getState().config,
-            channels: initialChannels,
-        });
+        useConfigStore.getState().setConfig({ ...useConfigStore.getState().config, channels: initialChannels });
         await useConfigStore.persist.rehydrate();
         expect(useConfigStore.getState().config.channels.length).toBe(1);
     });
@@ -275,32 +254,27 @@ describe("persistence merge stability", () => {
     it("persists when reordering channels via setDefaultChannel", async () => {
         const initialChannels = useConfigStore.getState().config.channels;
         const extraChannel = createModelChannel({ id: "extra", name: "额外渠道" });
-        useConfigStore.getState().setConfig({
-            ...useConfigStore.getState().config,
-            channels: [extraChannel, initialChannels[0]],
-        });
+        useConfigStore.getState().setConfig({ ...useConfigStore.getState().config, channels: [extraChannel, initialChannels[0]] });
         await useConfigStore.persist.rehydrate();
         expect(useConfigStore.getState().config.channels[0].id).toBe("extra");
     });
 
     it("persists all preferences fields across rehydration", async () => {
-        useConfigStore.getState().updateConfig("imageModel", "builtin::Flux2.Dev");
-        useConfigStore.getState().updateConfig("videoModel", "builtin::MiniMax H3 全能 (INT8 6步 SelfLift)");
-        useConfigStore.getState().updateConfig("textModel", "builtin::Qwen3.5 4B");
+        useConfigStore.getState().updateConfig("imageModel", "builtin::Moss Image 文生图");
+        useConfigStore.getState().updateConfig("videoModel", "builtin::MiniMax H3 全能参考视频");
+        useConfigStore.getState().updateConfig("textModel", "builtin::Qwen3.5 文本生成与反推");
         useConfigStore.getState().updateConfig("canvasImageCount", "5");
         useConfigStore.getState().updateConfig("audioVoice", "echo");
         useConfigStore.getState().updateConfig("audioFormat", "wav");
         useConfigStore.getState().updateConfig("audioSpeed", "1.25");
         useConfigStore.getState().updateConfig("audioInstructions", "Speak in a calm voice");
         useConfigStore.getState().updateConfig("systemPrompt", "You are a professional designer");
-
         await useConfigStore.persist.rehydrate();
-
         const config = useConfigStore.getState().config;
-        expect(config.imageModel).toBe("builtin::Flux2.Dev");
-        expect(config.model).toBe("builtin::Flux2.Dev");
-        expect(config.videoModel).toBe("builtin::MiniMax H3 全能 (INT8 6步 SelfLift)");
-        expect(config.textModel).toBe("builtin::Qwen3.5 4B");
+        expect(config.imageModel).toBe("builtin::Moss Image 文生图");
+        expect(config.model).toBe("builtin::Moss Image 文生图");
+        expect(config.videoModel).toBe("builtin::MiniMax H3 全能参考视频");
+        expect(config.textModel).toBe("builtin::Qwen3.5 文本生成与反推");
         expect(config.canvasImageCount).toBe("5");
         expect(config.audioVoice).toBe("echo");
         expect(config.audioFormat).toBe("wav");
@@ -315,18 +289,17 @@ describe("persistence merge stability", () => {
         useConfigStore.getState().updateWebdavConfig("username", "admin");
         useConfigStore.getState().updateWebdavConfig("password", "secret123");
         useConfigStore.getState().updateWebdavConfig("lastSyncedAt", "2026-09-11T12:00:00.000Z");
-
         await useConfigStore.persist.rehydrate();
-
-        const webdav = useConfigStore.getState().webdav;
-        expect(webdav.url).toBe("https://nas.example.com/webdav");
-        expect(webdav.directory).toBe("my-canvas-backup");
-        expect(webdav.username).toBe("admin");
-        expect(webdav.password).toBe("secret123");
-        expect(webdav.lastSyncedAt).toBe("2026-09-11T12:00:00.000Z");
+        expect(useConfigStore.getState().webdav).toMatchObject({
+            url: "https://nas.example.com/webdav",
+            directory: "my-canvas-backup",
+            username: "admin",
+            password: "secret123",
+            lastSyncedAt: "2026-09-11T12:00:00.000Z",
+        });
     });
 
-    it("persists all 6 custom workflow slots and token across rehydration", async () => {
+    it("persists current custom workflow slots and token across rehydration", async () => {
         const customWf = (name: string) => ({ name, json: { node: name }, createdAt: 1000 });
         const channels = useConfigStore.getState().config.channels;
         const modified = {
@@ -334,29 +307,35 @@ describe("persistence merge stability", () => {
             comfyuiProxyToken: "my-secret-token",
             comfyuiT2iWorkflow: customWf("custom-t2i"),
             comfyuiI2iWorkflow: customWf("custom-i2i"),
-            comfyuiInpaintWorkflow: customWf("custom-inpaint"),
             comfyuiTextWorkflow: customWf("custom-text"),
             comfyuiVideoWorkflow: customWf("custom-video"),
-            comfyuiFrameVideoWorkflow: customWf("custom-frame-video"),
+            comfyuiAudioWorkflow: customWf("custom-audio"),
+            comfyuiFaceRefineWorkflow: customWf("custom-face-refine"),
+            comfyuiDepthVideoWorkflow: customWf("custom-depth-video"),
+            workflows: ([
+                ["t2i", "t2i-qrw-d", "custom-t2i"],
+                ["i2i", "i2i-qrw-d", "custom-i2i"],
+                ["text", "text-qwen3-5", "custom-text"],
+                ["omniVideo", "omni-video-minimax-h3-ms-v10", "custom-video"],
+                ["audio", "audio-minimax-music-3", "custom-audio"],
+                ["faceRefine", "face-refine-h3", "custom-face-refine"],
+                ["depthVideo", "depth-video-reshot", "custom-depth-video"],
+            ] as const).map(([category, suffix, name]) => ({ ...customWf(name), id: `builtin-${suffix}`, category, isDefault: true })),
         };
-        useConfigStore.getState().setConfig({
-            ...useConfigStore.getState().config,
-            channels: [modified],
-        });
-
+        useConfigStore.getState().setConfig({ ...useConfigStore.getState().config, channels: [modified] });
         await useConfigStore.persist.rehydrate();
-
         const savedChannel = useConfigStore.getState().config.channels[0];
         expect(savedChannel.comfyuiProxyToken).toBe("my-secret-token");
         expect(savedChannel.comfyuiT2iWorkflow?.name).toBe("custom-t2i");
         expect(savedChannel.comfyuiI2iWorkflow?.name).toBe("custom-i2i");
-        expect(savedChannel.comfyuiInpaintWorkflow?.name).toBe("custom-inpaint");
         expect(savedChannel.comfyuiTextWorkflow?.name).toBe("custom-text");
         expect(savedChannel.comfyuiVideoWorkflow?.name).toBe("custom-video");
-        expect(savedChannel.comfyuiFrameVideoWorkflow?.name).toBe("custom-frame-video");
+        expect(savedChannel.comfyuiAudioWorkflow?.name).toBe("custom-audio");
+        expect(savedChannel.comfyuiFaceRefineWorkflow?.name).toBe("custom-face-refine");
+        expect(savedChannel.comfyuiDepthVideoWorkflow?.name).toBe("custom-depth-video");
     });
 
-    it("supports adding an extra channel, selecting its models, routing its API calls, and persisting across reload", async () => {
+    it("supports an extra channel, model routing and persistence across reload", async () => {
         const initialChannels = useConfigStore.getState().config.channels;
         const channel2 = createModelChannel({
             id: "chan-2",
@@ -364,183 +343,141 @@ describe("persistence merge stability", () => {
             comfyuiProxyUrl: "http://192.168.10.88:8188",
             comfyuiProxyToken: "token2",
         });
-
         useConfigStore.getState().setConfig({
             ...useConfigStore.getState().config,
             channels: [...initialChannels, channel2],
             models: modelOptionsFromChannels([...initialChannels, channel2]),
         });
-
         const stateBefore = useConfigStore.getState();
         expect(stateBefore.config.channels.length).toBe(2);
-
-        // 1. Check selectable models include channel 2
-        const imageModels = selectableModelsByCapability(stateBefore.config, "image");
-        expect(imageModels).toContain("chan-2::Z-Image-Turbo");
-        expect(modelOptionLabel(stateBefore.config, "chan-2::Z-Image-Turbo")).toBe("Z-Image-Turbo（私有 GPU）");
-
-        // 2. Check API resolution points to channel 2's URL and token
-        const reqConfig = resolveModelRequestConfig(stateBefore.config, "chan-2::Z-Image-Turbo");
+        expect(selectableModelsByCapability(stateBefore.config, "image")).toContain("chan-2::Z-Image-Turbo 文生图");
+        expect(modelOptionLabel(stateBefore.config, "chan-2::Z-Image-Turbo 文生图")).toBe("Z-Image-Turbo 文生图（私有 GPU）");
+        const reqConfig = resolveModelRequestConfig(stateBefore.config, "chan-2::Z-Image-Turbo 文生图");
         expect(reqConfig.baseUrl).toBe("http://192.168.10.88:8188");
         expect(reqConfig.apiKey).toBe("token2");
-        expect(reqConfig.model).toBe("Z-Image-Turbo");
-
-        // 3. Check canvas node resolution selects channel 2
-        const resolved = resolveModelForCapability(stateBefore.config, "chan-2::Z-Image-Turbo", "image");
-        expect(resolved).toBe("chan-2::Z-Image-Turbo");
-
-        // 4. Rehydrate (simulate browser refresh)
+        expect(reqConfig.model).toBe("Z-Image-Turbo 文生图");
+        expect(resolveModelForCapability(stateBefore.config, "chan-2::Z-Image-Turbo 文生图", "image")).toBe("chan-2::Z-Image-Turbo 文生图");
         await useConfigStore.persist.rehydrate();
-
         const stateAfter = useConfigStore.getState();
         expect(stateAfter.config.channels.length).toBe(2);
-        const rehydratedChan2 = stateAfter.config.channels.find((c) => c.id === "chan-2");
-        expect(rehydratedChan2).toBeDefined();
-        expect(rehydratedChan2?.name).toBe("私有 GPU");
-        expect(rehydratedChan2?.comfyuiProxyUrl).toBe("http://192.168.10.88:8188");
-        expect(rehydratedChan2?.comfyuiProxyToken).toBe("token2");
-
-        // 5. Post-reload API resolution still routes correctly to channel 2
-        const postReloadReqConfig = resolveModelRequestConfig(stateAfter.config, "chan-2::Z-Image-Turbo");
+        expect(stateAfter.config.channels.find((channel) => channel.id === "chan-2")).toMatchObject({
+            name: "私有 GPU",
+            comfyuiProxyUrl: "http://192.168.10.88:8188",
+            comfyuiProxyToken: "token2",
+        });
+        const postReloadReqConfig = resolveModelRequestConfig(stateAfter.config, "chan-2::Z-Image-Turbo 文生图");
         expect(postReloadReqConfig.baseUrl).toBe("http://192.168.10.88:8188");
         expect(postReloadReqConfig.apiKey).toBe("token2");
     });
 });
 
 describe("default built-in ComfyUI channel", () => {
-    it("provides the unified built-in channel in defaultConfig", () => {
-        expect(defaultConfig.channels.map((c) => c.id)).toEqual(["builtin"]);
-        expect(defaultConfig.channels[0].name).toBe("系统内置 ComfyUI");
-        expect(defaultConfig.channels[0].comfyuiProxyUrl).toBe("http://127.0.0.1:8188");
-        expect(defaultConfig.channels[0].models.map((m) => m.name)).toEqual([
-            "Z-Image-Turbo",
-            "Flux2.Dev",
-            "Qwen-Image-2.1",
-            "Qwen-Image Inpaint",
-            "Qwen3.5 4B",
-            "MiniMax H3 全能 (INT8 6步 SelfLift)",
-            "MiniMax H3 首尾帧 (INT8 6步 SelfLift)",
-            "MiniMax Music 03",
-        ]);
-        expect(defaultConfig.channels[0].workflows?.length).toBe(19);
-        expect(defaultConfig.channels[0].supportedModelIds).toEqual([
-            "omni-video-minimax-h3-fp8-4step-pdmd",
-            "omni-video-minimax-h3-fp8",
-            "frame-video-minimax-h3-fp8-4step-pdmd",
-            "frame-video-minimax-h3-fp8",
-            "omni-video-minimax-h3-int8-4step-pdmd",
-            "frame-video-minimax-h3-int8-4step-pdmd",
-            "omni-video-minimax-h3-int8-6step-pika",
-            "frame-video-minimax-h3-int8-6step-pika",
-            "omni-video-minimax-h3-int8-6step-selflift",
-            "frame-video-minimax-h3-int8-6step-selflift",
-            "image-qwen-2.1",
-            "image-z-turbo",
-            "image-flux2-dev",
-            "image-qwen-inpaint",
-            "text-qwen-35",
-            "audio-minimax-music-3",
-        ]);
+    it("provides seven models and ten categorized workflows", () => {
+        const channel = defaultConfig.channels[0];
+        expect(defaultConfig.channels.map((item) => item.id)).toEqual(["builtin"]);
+        expect(channel.name).toBe("系统内置 ComfyUI");
+        expect(channel.comfyuiProxyUrl).toBe("http://127.0.0.1:8188");
+        expect(channel.models.map((model) => model.name)).toEqual(DEFAULT_MODEL_NAMES);
+        expect(channel.workflows?.map((workflow) => workflow.id)).toEqual(DEFAULT_WORKFLOW_IDS);
+        expect(channel.workflows?.filter((workflow) => workflow.name === "Qwen Image 全能生图").map((workflow) => workflow.category)).toEqual(["t2i", "i2i"]);
+        expect(channel.supportedModelIds).toEqual(DEFAULT_SUPPORTED_MODEL_IDS);
+        expect(channel.supportedModelIds).toHaveLength(7);
+        expect(DEFAULT_SUPPORTED_IMAGE_MODEL_IDS).toEqual(["image-qwen", "image-qwen-4x4", "image-moss", "image-z-turbo"]);
     });
 
-    it("creates custom channel with builtin models, workflows and supportedModelIds", () => {
+    it("creates custom channels with the same built-in workflow catalog", () => {
         const customChannel = createModelChannel({ id: "my-custom", name: "自定义 ComfyUI" });
         expect(customChannel.name).toBe("自定义 ComfyUI");
-        expect(customChannel.models.length).toBe(8);
-        expect(customChannel.workflows?.length).toBe(19);
-        expect(customChannel.supportedModelIds?.length).toBe(16);
-        expect(customChannel.workflows?.every((w) => w.isBuiltin)).toBe(true);
-        expect(customChannel.comfyuiT2iWorkflow?.isBuiltin).toBe(true);
-        expect(customChannel.comfyuiI2iWorkflow?.isBuiltin).toBe(true);
-        expect(customChannel.comfyuiInpaintWorkflow?.isBuiltin).toBe(true);
-        expect(customChannel.comfyuiTextWorkflow?.isBuiltin).toBe(true);
-        expect(customChannel.comfyuiVideoWorkflow?.isBuiltin).toBe(true);
-        expect(customChannel.comfyuiFrameVideoWorkflow?.isBuiltin).toBe(true);
+        expect(customChannel.models).toHaveLength(7);
+        expect(customChannel.workflows).toHaveLength(10);
+        expect(customChannel.supportedModelIds).toHaveLength(7);
+        expect(customChannel.workflows?.every((workflow) => workflow.isBuiltin)).toBe(true);
+        for (const field of [
+            "comfyuiT2iWorkflow",
+            "comfyuiI2iWorkflow",
+            "comfyuiTextWorkflow",
+            "comfyuiVideoWorkflow",
+            "comfyuiAudioWorkflow",
+            "comfyuiFaceRefineWorkflow",
+            "comfyuiDepthVideoWorkflow",
+        ] as const) {
+            expect(customChannel[field]?.isBuiltin).toBe(true);
+        }
+    });
+});
+
+describe("deleteWorkflowGlobally", () => {
+    beforeEach(() => {
+        useConfigStore.setState({
+            config: {
+                ...defaultConfig,
+                channels: [
+                    defaultConfig.channels[0],
+                    createModelChannel({ id: "second", name: "第二渠道" }),
+                ],
+            },
+        });
+    });
+
+    it("deletes a built-in workflow across channels and never revives it on merge or rehydrate", async () => {
+        const target = defaultConfig.channels[0].workflows!.find((workflow) => workflow.id === "builtin-t2i-qrw-d")!;
+        useConfigStore.getState().deleteWorkflowGlobally(target);
+        for (const channel of useConfigStore.getState().config.channels) {
+            expect(channel.workflows?.some((workflow) => workflow.id.endsWith("t2i-qrw-d"))).toBe(false);
+            expect(channel.workflows?.some((workflow) => workflow.id.endsWith("i2i-qrw-d"))).toBe(true);
+            expect(channel.deletedBuiltinWorkflowIds).toContain(`${channel.id}-t2i-qrw-d`);
+            expect(createModelChannel(channel).workflows?.some((workflow) => workflow.id.endsWith("t2i-qrw-d"))).toBe(false);
+        }
+        await useConfigStore.persist.rehydrate();
+        for (const channel of useConfigStore.getState().config.channels) {
+            expect(channel.workflows?.some((workflow) => workflow.id.endsWith("t2i-qrw-d"))).toBe(false);
+            expect(channel.workflows?.some((workflow) => workflow.id.endsWith("i2i-qrw-d"))).toBe(true);
+        }
+    });
+
+    it("deletes a custom workflow across channels and keeps it deleted after rehydrate", async () => {
+        const custom: ComfyWorkflowItem = {
+            id: "shared-custom-t2i",
+            name: "共享自定义工作流",
+            category: "t2i",
+            json: { node: 1 },
+            createdAt: 100,
+        };
+        useConfigStore.getState().saveWorkflowGlobally(custom);
+        expect(useConfigStore.getState().config.channels.every((channel) => channel.workflows?.some((workflow) => workflow.id === custom.id))).toBe(true);
+        useConfigStore.getState().deleteWorkflowGlobally(custom);
+        expect(useConfigStore.getState().config.channels.every((channel) => channel.workflows?.every((workflow) => workflow.id !== custom.id))).toBe(true);
+        expect(useConfigStore.getState().config.channels.every((channel) => channel.workflows?.some((workflow) => workflow.id.endsWith("t2i-qrw-d")))).toBe(true);
+        await useConfigStore.persist.rehydrate();
+        expect(useConfigStore.getState().config.channels.every((channel) => channel.workflows?.every((workflow) => workflow.id !== custom.id))).toBe(true);
     });
 });
 
 describe("isModelSupportedByHost & updateChannelSupportedModels", () => {
-    it("returns true when supportedModelIds contains the model", () => {
-        const channel = createModelChannel();
-        expect(isModelSupportedByHost(channel, "omni-video-minimax-h3-fp8-4step-pdmd")).toBe(true);
-        expect(isModelSupportedByHost(channel, "video_minimax_h3_omni")).toBe(true);
-        expect(isModelSupportedByHost(channel, "frame-video-minimax-h3-fp8")).toBe(true);
-    });
+    const channel: ModelChannel = {
+        id: "restricted",
+        name: "受限渠道",
+        baseUrl: "",
+        apiKey: "",
+        apiFormat: "comfyui",
+        models: [],
+        supportedModelIds: ["omni-video-minimax-h3-ms-v10", "image-qwen"],
+    };
 
-    it("returns true when supportedModelIds is empty or undefined (open-by-default rule)", () => {
-        const openChannel = createModelChannel({ supportedModelIds: [] });
-        expect(isModelSupportedByHost(openChannel, "any-model-id")).toBe(true);
-    });
-
-    it("returns false when model is excluded from supportedModelIds", () => {
-        const restrictedChannel = createModelChannel({
-            supportedModelIds: ["omni-video-minimax-h3-fp8-4step-pdmd"],
-        });
-        expect(isModelSupportedByHost(restrictedChannel, "omni-video-minimax-h3-fp8-4step-pdmd")).toBe(true);
-        expect(isModelSupportedByHost(restrictedChannel, "omni-video-minimax-h3-fp8")).toBe(false);
-        expect(isModelSupportedByHost(restrictedChannel, "frame-video-minimax-h3-fp8")).toBe(false);
-    });
-
-    it("evolves legacy default supportedModelIds by appending newly added builtin models", () => {
-        // 旧版默认清单（INT8 量化模型纳入默认前）：4 视频 + 4 图 + 1 文 + 1 音
-        const legacyDefaultIds = [
-            ...LEGACY_DEFAULT_SUPPORTED_VIDEO_MODEL_IDS,
-            ...DEFAULT_SUPPORTED_IMAGE_MODEL_IDS,
-            "text-qwen-35",
-            "audio-minimax-music-3",
-        ];
-        const migrated = createModelChannel({ id: "legacy-188", name: "188", supportedModelIds: legacyDefaultIds });
-
-        expect(migrated.supportedModelIds).toContain("omni-video-minimax-h3-int8-4step-pdmd");
-        expect(migrated.supportedModelIds).toContain("frame-video-minimax-h3-int8-4step-pdmd");
-        expect(migrated.supportedModelIds).toContain("omni-video-minimax-h3-int8-6step-pika");
-        expect(migrated.supportedModelIds).toContain("frame-video-minimax-h3-int8-6step-pika");
-        expect(migrated.supportedModelIds?.slice(0, legacyDefaultIds.length)).toEqual(legacyDefaultIds);
-        expect(isModelSupportedByHost(migrated, "omni-video-minimax-h3-int8-4step-pdmd")).toBe(true);
-        expect(isModelSupportedByHost(migrated, "frame-video-minimax-h3-int8-4step-pdmd")).toBe(true);
-
-        // 幂等：重复归一不会不断增长
-        const normalizedAgain = createModelChannel(migrated);
-        expect(normalizedAgain.supportedModelIds).toEqual(migrated.supportedModelIds);
-    });
-
-    it("does not evolve a curated video-only list that never came from the defaults", () => {
-        const videoOnly = createModelChannel({ supportedModelIds: [...LEGACY_DEFAULT_SUPPORTED_VIDEO_MODEL_IDS] });
-        expect(videoOnly.supportedModelIds).toEqual([...LEGACY_DEFAULT_SUPPORTED_VIDEO_MODEL_IDS]);
-        expect(isModelSupportedByHost(videoOnly, "omni-video-minimax-h3-int8-6step-pika")).toBe(false);
-    });
-
-    it("does not pollute explicitly curated subsets", () => {
-        const curated = createModelChannel({
-            supportedModelIds: ["omni-video-minimax-h3-fp8-4step-pdmd", "image-qwen-2.1"],
-        });
-        expect(curated.supportedModelIds).toEqual(["omni-video-minimax-h3-fp8-4step-pdmd", "image-qwen-2.1"]);
-        expect(isModelSupportedByHost(curated, "omni-video-minimax-h3-int8-4step-pdmd")).toBe(false);
-    });
-
-    it("keeps an explicitly empty supportedModelIds empty (open-by-default)", () => {
-        const openChannel = createModelChannel({ supportedModelIds: [] });
-        expect(openChannel.supportedModelIds).toEqual([]);
-    });
-
-    it("allows image models by default when channel has only legacy video supportedModelIds", () => {
-        const legacyVideoOnlyChannel = createModelChannel({
-            supportedModelIds: ["omni-video-minimax-h3-fp8-4step-pdmd", "frame-video-minimax-h3-fp8"],
-        });
-        // Video model not in whitelist is blocked
-        expect(isModelSupportedByHost(legacyVideoOnlyChannel, "omni-video-minimax-h3-fp8")).toBe(false);
-        // Image models are permitted by default for legacy channels that never configured image whitelist
-        expect(isModelSupportedByHost(legacyVideoOnlyChannel, "image-qwen-2.1")).toBe(true);
-        expect(isModelSupportedByHost(legacyVideoOnlyChannel, "image-z-turbo")).toBe(true);
+    it("checks explicit support and open-by-default channels", () => {
+        expect(isModelSupportedByHost(channel, "omni-video-minimax-h3-ms-v10")).toBe(true);
+        expect(isModelSupportedByHost(channel, "image-qwen")).toBe(true);
+        expect(isModelSupportedByHost(channel, "image-z-turbo")).toBe(false);
+        expect(isModelSupportedByHost({ ...channel, supportedModelIds: [] }, "any-model-id")).toBe(true);
+        expect(isModelSupportedByHost({ ...channel, supportedModelIds: undefined }, "any-model-id")).toBe(true);
     });
 
     it("updates channel supported models in store", () => {
         useConfigStore.setState({ config: defaultConfig });
-        useConfigStore.getState().updateChannelSupportedModels("builtin", ["frame-video-minimax-h3-fp8"]);
-        const channel = useConfigStore.getState().config.channels.find((c) => c.id === "builtin");
-        expect(channel?.supportedModelIds).toEqual(["frame-video-minimax-h3-fp8"]);
-        expect(isModelSupportedByHost(channel, "frame-video-minimax-h3-fp8")).toBe(true);
-        expect(isModelSupportedByHost(channel, "omni-video-minimax-h3-fp8-4step-pdmd")).toBe(false);
+        useConfigStore.getState().updateChannelSupportedModels("builtin", ["image-z-turbo"]);
+        const updated = useConfigStore.getState().config.channels.find((item) => item.id === "builtin");
+        expect(updated?.supportedModelIds).toEqual(["image-z-turbo"]);
+        expect(isModelSupportedByHost(updated, "image-z-turbo")).toBe(true);
+        expect(isModelSupportedByHost(updated, "omni-video-minimax-h3-ms-v10")).toBe(false);
     });
 });
-

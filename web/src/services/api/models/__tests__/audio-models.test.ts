@@ -190,12 +190,12 @@ describe("Audio Workflow Model DSL & Dispatcher", () => {
                 apiKey: "",
                 apiFormat: "comfyui",
                 models: [],
-                supportedModelIds: ["audio-minimax-music-3", "image-qwen-2.1"],
+                supportedModelIds: ["audio-minimax-music-3", "image-qwen"],
             };
             expect(isModelSupportedByHost(channel, "audio-minimax-music-3")).toBe(true);
         });
 
-        it("returns true out-of-the-box when host has not configured any explicit audio models", () => {
+        it("returns false when the host explicitly supports only a video model", () => {
             const legacyChannel: ModelChannel = {
                 id: "chan-legacy",
                 name: "Legacy Video Host",
@@ -203,10 +203,9 @@ describe("Audio Workflow Model DSL & Dispatcher", () => {
                 apiKey: "",
                 apiFormat: "comfyui",
                 models: [],
-                supportedModelIds: ["omni-video-minimax-h3-fp8-4step-pdmd"],
+                supportedModelIds: ["omni-video-minimax-h3-ms-v10"],
             };
-            // Should pass because host has no audio models configured yet
-            expect(isModelSupportedByHost(legacyChannel, "audio-minimax-music-3")).toBe(true);
+            expect(isModelSupportedByHost(legacyChannel, "audio-minimax-music-3")).toBe(false);
         });
 
         it("returns false when host explicitly declares another audio model but excludes audio-minimax-music-3", () => {
@@ -217,7 +216,7 @@ describe("Audio Workflow Model DSL & Dispatcher", () => {
                 apiKey: "",
                 apiFormat: "comfyui",
                 models: [],
-                supportedModelIds: ["audio-other-custom", "image-qwen-2.1"],
+                supportedModelIds: ["audio-other-custom", "image-qwen"],
             };
             expect(isModelSupportedByHost(exclusiveChannel, "audio-minimax-music-3")).toBe(false);
         });

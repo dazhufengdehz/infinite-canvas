@@ -7,7 +7,7 @@ import { type CanvasTheme } from "@/lib/canvas-theme";
 import type { AiConfig } from "@/stores/use-config-store";
 import {
     getModelProfile,
-    imageQwen21Profile,
+    imageQwenProfile,
     IMAGE_RESOLUTION_PRESETS,
     IMAGE_STANDARD_ASPECT_RATIOS,
     IMAGE_RESOLUTION_TIERS,
@@ -73,7 +73,7 @@ type ImageSettingsPanelProps = {
 
 export function ImageSettingsPanel({ config, onConfigChange, theme, modelId, profile: profileProp, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
     const { t } = useTranslation();
-    const profile = profileProp || getModelProfile(modelId) || imageQwen21Profile;
+    const profile = profileProp || getModelProfile(modelId) || imageQwenProfile;
     const sizeConfig = profile.capabilityConfig.size;
     const hasSizeConfig = Boolean(sizeConfig);
 

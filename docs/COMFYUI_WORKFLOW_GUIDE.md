@@ -24,23 +24,24 @@
 ### 核心特性
 - **工作流驱动 UI**：画布节点的输入控件（正向提示词、分辨率宽高、随机种子、视频时长、参考素材端口）完全由你绑定的 ComfyUI 工作流动态决定；工作流中标记了什么槽位，画布节点就呈现什么控件（**未标记 = 不在 UI 上显示**）。
 - **动态级联修剪（Dynamic Pruning）**：工作流可预设多达 9 张参考图、3 段视频、3 段音频，当你实际只连线了部分资源（或纯文本生图/视频）时，系统在向 ComfyUI 提交前会**自动彻底抹除未指派资产的参考节点及下游输入引用**，杜绝因悬挂空节点或默认测试图残留引发 ComfyUI `FileNotFoundError`。
-- **开箱即用内置工作流**：系统已内置 6 大常用 API 工作流（文生图、图生图、局部重绘、文本/反推、全能参考视频、首尾帧视频），无需手动上传即可直接体验；上传自定义工作流后也可随时一键恢复内置。
+- **开箱即用内置工作流**：系统已内置 7 类共 9 份唯一 API 工作流（文生图、图生图、文本/反推、全能参考视频、深度视频、音乐生成、人脸精修），无需手动上传即可直接体验；也可上传、删除自定义或内置工作流。
 
 ---
 
 ## 2. 环境前置与 ComfyUI 渠道配置
 
-### 前置要求：必须安装的 5 大 ComfyUI 核心插件
+### 前置要求：必须安装的 6 大 ComfyUI 核心插件
 
-为保证本系统全部 6 大内置工作流与导出的工作流顺畅运行，请务必在本地 ComfyUI 的 `custom_nodes/` 目录下安装以下 5 个核心扩展插件：
+为保证本系统内置工作流与导出的工作流顺畅运行，请务必在本地 ComfyUI 的 `custom_nodes/` 目录下安装以下 6 个核心扩展插件：
 
 | 序号 | 插件名称 | 仓库地址 | 作用与对应功能 |
 | :--- | :--- | :--- | :--- |
 | 1 | **Comfyui-kktools** | `https://github.com/zhiwendesign/Comfyui-kktools` | 大语言模型多模态文本生成、提示词润色扩写与反推 |
-| 2 | **ComfyUI-KJNodes** | `https://github.com/kijai/ComfyUI-KJNodes` | 高级逻辑控制与视频多模态组件解包提取 (`GetVideoComponents` 等)，驱动全能参考视频 |
-| 3 | **ComfyLiterals** | `https://github.com/M1kep/ComfyLiterals` | 字面量、常数类型及动态参数输入端口节点，驱动首尾帧与全能视频 |
+| 2 | **ComfyUI-KJNodes** | `https://github.com/kijai/ComfyUI-KJNodes` | 高级逻辑控制与视频多模态组件解包提取 (`GetVideoComponents` 等)，用于人脸精修与视频处理 |
+| 3 | **ComfyLiterals** | `https://github.com/M1kep/ComfyLiterals` | 字面量、常数类型及动态参数输入端口节点，用于 QRw、MS_V10 与音乐生成等工作流 |
 | 4 | **ComfyUI-UniversalToolkit** | `https://github.com/whmc76/ComfyUI-UniversalToolkit` | 通用工具箱与多类型参数转接桥接，驱动文本生成工作流 |
-| 5 | **ComfyUI_LayerStyle** | `https://github.com/chflame163/ComfyUI_LayerStyle` | 图层样式合成与局部重绘遮罩 (`ref_mask`) 处理，驱动局部修图 |
+| 5 | **ComfyUI_LayerStyle** | `https://github.com/chflame163/ComfyUI_LayerStyle` | 图层样式合成与局部重绘遮罩 (`ref_mask`) 处理，用于自定义局部修图工作流 |
+| 6 | **comfyui-SelfLift** | `https://github.com/facok/comfyui-SelfLift` | MiniMax H3 渐进式潜空间超分采样器，驱动 MS_V10 全能参考视频 |
 
 #### 一键克隆安装命令
 
@@ -53,10 +54,11 @@ git clone https://github.com/kijai/ComfyUI-KJNodes.git
 git clone https://github.com/M1kep/ComfyLiterals.git
 git clone https://github.com/whmc76/ComfyUI-UniversalToolkit.git
 git clone https://github.com/chflame163/ComfyUI_LayerStyle.git
+git clone https://github.com/facok/comfyui-SelfLift.git
 ```
 安装完成后请**重启本地 ComfyUI** 服务保证节点加载生效。
 
-> 💡 **更详尽的 5 大插件核心节点解析、工作流对应矩阵与排错指南，请参阅统一专文：[ComfyUI 必备插件安装与说明指南](COMFYUI_PLUGINS.md)**。
+> 💡 **更详尽的 6 大插件核心节点解析、工作流对应矩阵与排错指南，请参阅统一专文：[ComfyUI 必备插件安装与说明指南](COMFYUI_PLUGINS.md)**。
 
 ---
 
@@ -89,13 +91,14 @@ git clone https://github.com/chflame163/ComfyUI_LayerStyle.git
 
 ### 第三步：上传工作流并绑定能力（可选）
 
-默认情况下，系统已经自动为以下常用模型预置了系统内置工作流：
-- **ComfyUI T2I**：文生图工作流
-- **ComfyUI I2I**：图生图工作流
-- **ComfyUI Inpaint**：局部重绘 / 修图工作流
-- **ComfyUI Video**：全能参考视频工作流（如 MiniMax H3）
-- **ComfyUI Frame Video**：首尾帧视频生成工作流
-- **ComfyUI Text**：多模态文本生成 / LLM 工作流
+默认情况下，系统已经自动为以下 7 类能力预置工作流：
+- **文生图**：`QRw_D`、`moss_image`、`z_image_turbo_api`
+- **图生图**：`QRw_D`、`QRw_4×4`
+- **文本生成 / 反推**：`qwen3_5_text_api`
+- **全能参考视频**：`MS_V10`
+- **深度视频**：`depth_video_api`
+- **音乐生成**：`audio_minimax_music_3_api`
+- **人脸精修**：`H3_Face_Refine_Auto_Select_Api`
 
 如果你有自调的模型或特定 LoRA 工作流：
 1. 点击渠道编辑抽屉中的目标模型；
@@ -326,23 +329,24 @@ Native ComfyUI (Default http://127.0.0.1:8188)
 ### Core Capabilities
 - **Schema-Driven UI**: Controls on canvas node cards (prompts, resolution presets, random seed, duration, reference asset input slots) are rendered dynamically based on the uploaded ComfyUI workflow (**unlabeled slot = hidden from UI**).
 - **Dynamic Pruning**: Workflows may declare up to 9 reference images, 3 reference videos, and 3 reference audios. When fewer references (or none, e.g., pure text-to-video) are connected, unassigned reference loader nodes and intermediate bridge nodes are **automatically pruned before submission**, preventing ComfyUI runtime `FileNotFoundError` caused by placeholder filenames.
-- **Built-In Workflows**: Pre-bundled with 6 production-ready API workflows (T2I, I2I, Inpaint, Text/VLM, Full Reference Video, First/Last Frame Video). You can start immediately without uploading custom JSONs, or restore built-in presets at any time.
+- **Built-In Workflows**: Pre-bundled with nine unique API workflows across seven categories (T2I, I2I, Text/VLM, Omni Reference Video, Depth Video, Music, and Face Refine). You can start immediately without uploading custom JSONs, and can upload or delete both custom and built-in workflows.
 
 ---
 
 ## 2. Prerequisites & ComfyUI Channel Configuration
 
-### Prerequisites: 5 Mandatory ComfyUI Custom Node Plugins
+### Prerequisites: 6 Mandatory ComfyUI Custom Node Plugins
 
-To ensure all built-in workflows and exported API JSON workflows execute without missing node errors, you must install the following 5 plugins into your ComfyUI `custom_nodes/` directory:
+To ensure all built-in workflows and exported API JSON workflows execute without missing node errors, you must install the following 6 plugins into your ComfyUI `custom_nodes/` directory:
 
 | # | Plugin Name | Repository URL | Purpose & Target Capabilities |
 | :--- | :--- | :--- | :--- |
 | 1 | **Comfyui-kktools** | `https://github.com/zhiwendesign/Comfyui-kktools` | LLM multimodal text generation, prompt expansion & vision captioning |
-| 2 | **ComfyUI-KJNodes** | `https://github.com/kijai/ComfyUI-KJNodes` | Advanced logic control & video component extraction (`GetVideoComponents`), powers Omni Reference Video |
-| 3 | **ComfyLiterals** | `https://github.com/M1kep/ComfyLiterals` | Literal / constant values and dynamic parameter ports, powers FL2V & Omni Video |
+| 2 | **ComfyUI-KJNodes** | `https://github.com/kijai/ComfyUI-KJNodes` | Advanced logic control & video component extraction (`GetVideoComponents`) for face refinement and video processing |
+| 3 | **ComfyLiterals** | `https://github.com/M1kep/ComfyLiterals` | Literal / constant values and dynamic parameter ports for QRw, MS_V10, music, and other workflows |
 | 4 | **ComfyUI-UniversalToolkit** | `https://github.com/whmc76/ComfyUI-UniversalToolkit` | Universal toolset and multi-type parameter routing bridge, powers LLM workflows |
-| 5 | **ComfyUI_LayerStyle** | `https://github.com/chflame163/ComfyUI_LayerStyle` | Layer compositing and inpaint mask (`ref_mask`) processing, powers Inpaint workflows |
+| 5 | **ComfyUI_LayerStyle** | `https://github.com/chflame163/ComfyUI_LayerStyle` | Layer compositing and inpaint mask (`ref_mask`) processing for custom inpaint workflows |
+| 6 | **comfyui-SelfLift** | `https://github.com/facok/comfyui-SelfLift` | MiniMax H3 progressive latent upscaling sampler for the MS_V10 omni-reference workflow |
 
 #### One-Click Clone Installation Commands
 
@@ -355,10 +359,11 @@ git clone https://github.com/kijai/ComfyUI-KJNodes.git
 git clone https://github.com/M1kep/ComfyLiterals.git
 git clone https://github.com/whmc76/ComfyUI-UniversalToolkit.git
 git clone https://github.com/chflame163/ComfyUI_LayerStyle.git
+git clone https://github.com/facok/comfyui-SelfLift.git
 ```
 Restart ComfyUI after cloning so the custom nodes are registered.
 
-> 💡 **For in-depth explanations, node breakdowns, workflow matrix, and troubleshooting for all 5 plugins, see the consolidated guide: [ComfyUI Plugins Guide](COMFYUI_PLUGINS.md)**.
+> 💡 **For in-depth explanations, node breakdowns, workflow matrix, and troubleshooting for all 6 plugins, see the consolidated guide: [ComfyUI Plugins Guide](COMFYUI_PLUGINS.md)**.
 
 ---
 
@@ -391,13 +396,14 @@ Infinite Canvas requires ComfyUI's **API Format JSON** (which contains node `inp
 
 ### Step 3: Upload and Bind Custom Workflows (Optional)
 
-By default, the system already provisions built-in workflows for standard capabilities:
-- **ComfyUI T2I**: Text-to-Image
-- **ComfyUI I2I**: Image-to-Image
-- **ComfyUI Inpaint**: Mask-guided inpainting
-- **ComfyUI Video**: Multimodal reference video (MiniMax H3)
-- **ComfyUI Frame Video**: First & Last frame video generation
-- **ComfyUI Text**: Multimodal LLM / VLM
+By default, the system provisions these seven workflow categories:
+- **Text-to-Image**: `QRw_D`, `moss_image`, `z_image_turbo_api`
+- **Image-to-Image**: `QRw_D`, `QRw_4×4`
+- **Text / VLM**: `qwen3_5_text_api`
+- **Omni Reference Video**: `MS_V10`
+- **Depth Video**: `depth_video_api`
+- **Music**: `audio_minimax_music_3_api`
+- **Face Refine**: `H3_Face_Refine_Auto_Select_Api`
 
 To bind your custom checkpoint or LoRA workflow:
 1. Click the target model in the channel drawer;

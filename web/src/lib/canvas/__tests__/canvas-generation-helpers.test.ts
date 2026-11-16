@@ -31,7 +31,7 @@ import type { CanvasConnection, CanvasNodeData, CanvasNodeMetadata } from "@/typ
 import { defaultConfig, encodeChannelModel, isAiConfigReady, type AiConfig } from "@/stores/use-config-store";
 
 describe("video tool configuration", () => {
-    const sourceModel = "frame-video-minimax-h3-fp8-4step-pdmd";
+    const sourceModel = "omni-video-minimax-h3-ms-v10";
     const config: AiConfig = {
         ...defaultConfig,
         channelId: "source-host",
@@ -43,7 +43,7 @@ describe("video tool configuration", () => {
     };
 
     it("checks readiness on the tool host even when the source model host is unconfigured", () => {
-        const node = makeNode(CanvasNodeType.Video, { channelId: "tool-host", workflowId: "face-tool", modelId: encodeChannelModel("source-host", sourceModel), videoMode: "frame" });
+        const node = makeNode(CanvasNodeType.Video, { channelId: "tool-host", workflowId: "face-tool", modelId: encodeChannelModel("source-host", sourceModel), videoMode: "omni" });
         const result = buildGenerationConfig(config, node, "video");
         expect(result.videoMode).toBe("omni");
         expect(result.model).toBe("face-tool");

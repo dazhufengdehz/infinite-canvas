@@ -3,13 +3,12 @@ import { Image as ImageIcon, LoaderCircle, MessageSquare, Music2, Play, Settings
 import { Button, Segmented } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { ModelPicker } from "@/components/model-picker";
 import { ChannelWorkflowPicker } from "@/components/channel-workflow-picker";
-import { decodeChannelModel, defaultConfig, encodeChannelModel, findWorkflow, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { defaultConfig, encodeChannelModel, findWorkflow, getDefaultWorkflow, resolveModelChannel, resolveModelForCapability, useEffectiveConfig, type AiConfig, type WorkflowCategory } from "@/stores/use-config-store";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { normalizeVideoSizeValue } from "@/components/video-settings-panel";
-import { getModelProfile, resolveVideoModelIdForMode, resolveVideoModelIdFromWorkflowId } from "@/services/api/models";
+import { buildWorkflowModelProfiles, resolveVideoModelIdForMode } from "@/services/api/models";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasAudioSettingsPopover } from "./canvas-audio-settings-popover";
@@ -29,14 +28,22 @@ type CanvasConfigNodePanelProps = {
 export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigChange, onGenerate, onStop, onComposerToggle }: CanvasConfigNodePanelProps) {
     const { t } = useTranslation();
     const globalConfig = useEffectiveConfig();
-    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = node.metadata?.generationMode || "image";
     const config = buildNodeConfig(globalConfig, node, mode);
+    const workflowCategory: WorkflowCategory | WorkflowCategory[] = mode === "image"
+        ? (inputSummary.imageCount > 0 ? "i2i" : "t2i")
+        : mode === "video"
+          ? ["omniVideo", "frameVideo", "faceRefine"]
+          : mode === "audio" ? "audio" : "text";
+    const activeChannel = globalConfig.channels.find((channel) => channel.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
+    const selectedWorkflow = (node.metadata?.workflowId ? findWorkflow(globalConfig, activeChannel?.id, node.metadata.workflowId, workflowCategory) : undefined)
+        || getDefaultWorkflow(activeChannel, workflowCategory);
+    const nodeProfile = selectedWorkflow ? buildWorkflowModelProfiles([selectedWorkflow])[0] : undefined;
     const chipStyle = { background: theme.node.fill, borderColor: theme.node.stroke, color: theme.node.text };
     const hasAnyInput = Boolean(inputSummary.textCount || inputSummary.imageCount || inputSummary.videoCount || inputSummary.audioCount);
     const hasComposerContent = Boolean((node.metadata?.composerContent ?? node.metadata?.prompt ?? "").trim());
-    const canGenerate = hasComposerContent || hasAnyInput;
+    const canGenerate = Boolean(selectedWorkflow) && (hasComposerContent || hasAnyInput);
 
     return (
         <div className="flex h-full w-full cursor-move flex-col px-3 pb-3 pt-7 text-sm" style={{ color: theme.node.text }} onWheel={(event) => event.stopPropagation()}>
@@ -109,25 +116,19 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
 
             <div className="mb-2 grid min-w-0 cursor-default grid-cols-[minmax(0,1fr)_148px] items-center gap-2" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
                 <ChannelWorkflowPicker
-                    category={
-                        mode === "image"
-                            ? (inputSummary.imageCount > 0 ? "i2i" : "t2i")
-                            : mode === "video"
-                            ? ["omniVideo", "frameVideo", "faceRefine"]
-                            : mode === "audio"
-                            ? "audio"
-                            : "text"
-                    }
+                    category={workflowCategory}
                     preferredCategory={mode === "video" ? (findWorkflow(globalConfig, node.metadata?.channelId, node.metadata?.workflowId)?.category || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frameVideo" : "omniVideo")) : undefined}
                     channelId={node.metadata?.channelId}
                     workflowId={node.metadata?.workflowId}
                     onChange={(channelId, workflowId, workflow) => {
-                        const patch: Partial<CanvasNodeMetadata> = { channelId, workflowId };
+                        const patch: Partial<CanvasNodeMetadata> = {
+                            channelId,
+                            workflowId,
+                            modelId: workflow ? buildWorkflowModelProfiles([workflow])[0]?.id : undefined,
+                        };
                         if (mode === "video") {
                             const nextVideoMode = workflow?.category === "frameVideo" ? "frame" : workflow?.category === "omniVideo" ? "omni" : (node.metadata?.videoMode || config.videoMode);
                             patch.videoMode = nextVideoMode;
-                            patch.modelId = resolveVideoModelIdFromWorkflowId(workflowId)
-                                ?? (nextVideoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift");
                         }
                         onConfigChange(node.id, patch);
                     }}
@@ -135,7 +136,8 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                 />
                 {mode === "video" ? (
                     <CanvasVideoSettingsPopover
-                        modelId={node.metadata?.modelId || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")}
+                        modelId={nodeProfile?.id}
+                        profile={nodeProfile}
                         size={node.metadata?.size || config.size}
                         duration={node.metadata?.seconds || config.videoSeconds}
                         videoMode={(node.metadata?.videoMode as "omni" | "frame") || (config.videoMode as "omni" | "frame")}
@@ -148,17 +150,19 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
                         onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value, config, node.metadata?.modelId))}
                     />
                 ) : mode === "image" ? (
-                    <CanvasImageSettingsPopover config={config} placement="topRight" autoAdjustOverflow={false} buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })} />
+                    <CanvasImageSettingsPopover config={config} modelId={nodeProfile?.id} profile={nodeProfile} placement="topRight" autoAdjustOverflow={false} buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2" onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })} />
                 ) : mode === "audio" ? (
                     <CanvasAudioSettingsPopover
                         config={config}
+                        modelId={nodeProfile?.id}
+                        profile={nodeProfile}
                         placement="topRight"
                         buttonClassName="canvas-compact-control !h-10 !w-full !justify-start !rounded-lg !px-2"
                         onConfigChange={(key, value) => onConfigChange(node.id, { seconds: value, audioSeconds: value })}
                     />
                 ) : (
                     <CanvasTextSettingsPopover
-                        modelId={node.metadata?.modelId}
+                        modelId={nodeProfile?.id}
                         maxLength={node.metadata?.maxLength}
                         thinking={node.metadata?.thinking}
                         onParamChange={(patch) => onConfigChange(node.id, patch)}

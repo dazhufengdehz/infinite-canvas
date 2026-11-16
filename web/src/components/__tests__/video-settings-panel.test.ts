@@ -7,10 +7,7 @@ import {
     videoSizeLabel,
     MINIMAX_VIDEO_SIZE_TIERS,
 } from "../video-settings-panel";
-import {
-    videoMinimaxH3OmniProfile,
-    videoMinimaxH3FrameProfile,
-} from "@/services/api/models";
+import { videoMinimaxH3OmniProfile } from "@/services/api/models";
 
 describe("Video Settings Panel DSL & Sizing Helpers", () => {
     it("extractVideoSizeTiers dynamically parses discrete dimension pairs into sorted landscape tiers", () => {
@@ -47,17 +44,17 @@ describe("Video Settings Panel DSL & Sizing Helpers", () => {
         // Valid 16:9 size from profile
         expect(normalizeVideoSizeValue("1280x736", videoMinimaxH3OmniProfile)).toBe("1280x736");
         // Valid 9:16 size from profile
-        expect(normalizeVideoSizeValue("736x1280", videoMinimaxH3FrameProfile)).toBe("736x1280");
+        expect(normalizeVideoSizeValue("736x1280", videoMinimaxH3OmniProfile)).toBe("736x1280");
         // Valid 2.0 MP tier
         expect(normalizeVideoSizeValue("1920x1088", videoMinimaxH3OmniProfile)).toBe("1920x1088");
-        expect(normalizeVideoSizeValue("1088x1920", videoMinimaxH3FrameProfile)).toBe("1088x1920");
+        expect(normalizeVideoSizeValue("1088x1920", videoMinimaxH3OmniProfile)).toBe("1088x1920");
         // Disallowed custom size falls back to profile default (middle tier index 6: 1344x768)
         expect(normalizeVideoSizeValue("1920x1080", videoMinimaxH3OmniProfile)).toBe("1344x768");
         // Removed 0.2 and 0.3 tiers fall back to profile default
         expect(normalizeVideoSizeValue("608x352", videoMinimaxH3OmniProfile)).toBe("1344x768");
         expect(normalizeVideoSizeValue("736x416", videoMinimaxH3OmniProfile)).toBe("1344x768");
         // Empty size falls back to profile dynamic middle default
-        expect(normalizeVideoSizeValue("", videoMinimaxH3FrameProfile)).toBe("1344x768");
+        expect(normalizeVideoSizeValue("", videoMinimaxH3OmniProfile)).toBe("1344x768");
 
         // Custom profile with odd number of tiers (e.g. 3 tiers -> middle is 864x480)
         const customProfile = {

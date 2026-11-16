@@ -7,6 +7,13 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- ComfyUI built-in workflow replacement, deletion, and node selection:
+  - With both fresh and existing configurations, confirm Workflow Management contains only the current seven categories and nine unique API workflows (`QRw_D` appears in both T2I and I2I). Old Flux, Inpaint, frame-video, and quantized-video built-ins must be gone. Verify the guide's category counts, individual/ZIP downloads, six core plugins, and model dependencies match the shipped files.
+  - In an image node, confirm the QRw_D-backed “Qwen Image 全能生图” profile appears only once per channel and supports both text-to-image and 0–9 reference images. QRw_4×4 must require one reference image, while Moss Image and Z-Image-Turbo must not expose reference-image inputs.
+  - Delete one built-in and one custom workflow. After confirmation, both must disappear from every channel and the category default must be reselected. Refreshing and reopening the page must not resurrect deleted built-ins or affect unrelated categories and custom workflows.
+  - Confirm image, video, text, and audio node selectors use a flat workflow list, including cross-channel options with host details and no submenu. Switching must keep `channelId`, `workflowId`, `modelId`, and the submitted workflow aligned.
+  - Delete every workflow in one category for a channel. The corresponding node selector must show “暂无工作流” and block generation without falling back to old profiles, models, or channel fields; uploading a valid workflow must restore selection and generation. Recheck MiniMax H3 MS_V10 limits of nine images, three videos, three audios, 12 size presets, and 1–15 seconds.
+
 - Desktop-first `canvas_open` launching:
   - Without a desktop client that supports `infinite-canvas://`, the default call must explain that installation is required and must not fall back to the web. An explicitly provided `url` must still open the requested web canvas in the system browser.
   - After installing the new NSIS package, call `new`, `recent`, and `choose` separately. Confirm cold starts create only one client and one Sidecar, automatically connect the local Agent, and never create two projects from duplicate deep-link events in `new` mode.

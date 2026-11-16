@@ -13,46 +13,24 @@ import {
 } from "@/stores/use-config-store";
 
 const BUILTIN_WORKFLOW_IDENTIFIERS = new Set([
-    "t2i_z_image_turbo_api.json",
+    "QRw_D.json",
+    "QRw_4×4.json",
+    "moss_image.json",
+    "z_image_turbo_api.json",
+    "MS_V10.json",
+    "depth_video_api.json",
+    "qwen3_5_text_api.json",
+    "audio_minimax_music_3_api.json",
+    "H3_Face_Refine_Auto_Select_Api.json",
+    "Qwen Image 全能生图",
+    "Qwen Image 4×4 图生图",
+    "Moss Image 文生图",
     "Z-Image-Turbo 文生图",
-    "i2i_flux2_dev_api.json",
-    "Flux2.Dev 图生图",
-    "inpaint_qwen_image_api.json",
-    "Qwen-Image 局部编辑",
-    "text_qwen3_5_api.json",
-    "Qwen-3.5 文本生成/反推",
-    "video_minimax_h3_omni_fp8_20step_api.json",
-    "MiniMax H3 全能参考 (FP8 20步)",
-    "video_minimax_h3_omni_fp8_4step_pdmd_api.json",
-    "minimax_h3_ref2v_4step_pdmd_api.json",
-    "MiniMax H3 全能视频 (FP8 4步 PDMD)",
-    "MiniMax H3 全能参考 (FP8 4步 PDMD)",
-    "video_minimax_h3_omni_int8_4step_pdmd_api.json",
-    "minimax_h3_ref2v_int8_convrot_4step_pdmd_api.json",
-    "MiniMax H3 全能视频 (INT8 4步 PDMD)",
-    "MiniMax H3 全能 (INT8 4步 PDMD)",
-    "video_minimax_h3_omni_int8_6step_pika_api.json",
-    "minimax_h3_ref2v_int8_convrot_6step_pika_api.json",
-    "MiniMax H3 全能视频 (INT8 6步 Pika)",
-    "MiniMax H3 全能 (INT8 6步 Pika)",
-    "video_minimax_h3_frame_fp8_20step_api.json",
-    "MiniMax H3 首尾帧 (FP8 20步)",
-    "video_minimax_h3_frame_fp8_4step_pdmd_api.json",
-    "minimax_h3_fl2va_fp8_4step_pdmd_api.json",
-    "MiniMax H3 首尾帧视频 (FP8 4步 PDMD)",
-    "MiniMax H3 首尾帧 (FP8 4步 PDMD)",
-    "video_minimax_h3_frame_int8_4step_pdmd_api.json",
-    "minimax_h3_fl2va_int8_convrot_4step_pdmd_api.json",
-    "MiniMax H3 首尾帧视频 (INT8 4步 PDMD)",
-    "MiniMax H3 首尾帧 (INT8 4步 PDMD)",
-    "video_minimax_h3_frame_int8_6step_pika_api.json",
-    "minimax_h3_fl2va_int8_convrot_6step_pika_api.json",
-    "MiniMax H3 首尾帧视频 (INT8 6步 Pika)",
-    "MiniMax H3 首尾帧 (INT8 6步 Pika)",
-    "qwen_image_21_api.json",
-    "Qwen-Image-2.1 文生图",
-    "Qwen-Image-2.1 多图参考图生图",
-    "Qwen-Image-2.1 全能生图",
+    "MiniMax H3 全能参考视频",
+    "ReShot 深度视频提取",
+    "Qwen3.5 文本生成与反推",
+    "MiniMax Music 03 音乐生成",
+    "MiniMax H3 人脸精修",
 ]);
 
 export type ComfyuiWorkflowEditorProps = {
@@ -90,7 +68,7 @@ export function ComfyuiWorkflowEditor({
         if (categoryWorkflows.length > 0) {
             return categoryWorkflows.find((w) => w.isDefault) || categoryWorkflows[0];
         }
-        return value || defaultWorkflow;
+        return Array.isArray(channel?.workflows) ? undefined : value || defaultWorkflow;
     })();
 
     const isCustom = (() => {

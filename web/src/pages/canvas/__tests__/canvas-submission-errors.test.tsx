@@ -362,7 +362,7 @@ describe("canvas submission failure settlement through the page callbacks", () =
 const originalVideo = "http://127.0.0.1:8188/view?filename=original.mp4";
 const referenceImage = "data:image/png;base64,AA==";
 const toolPrompt = "修复面部细节";
-const frameModelId = "frame-video-minimax-h3-fp8-4step-pdmd";
+const sourceModelId = "omni-video-minimax-h3-ms-v10";
 
 function configureVideoTools() {
     harness.config = {
@@ -387,7 +387,7 @@ async function mountToolSource(metadata: CanvasNodeData["metadata"] = {}, connec
     await mount(makeNode(CanvasNodeType.Video, {
         status: "success", content: originalVideo, references: connectedImage ? [] : [referenceImage],
         generationReferences: [{ nodeId: "original-generation-text", kind: "text", text: "原生成过程的文本" }],
-        channelId: "face-host", modelId: frameModelId, videoMode: "frame", ...metadata,
+        channelId: "face-host", modelId: sourceModelId, videoMode: "omni", ...metadata,
     }), connectedImage ? [imageNode] : []);
 }
 
@@ -407,7 +407,7 @@ function expectFaceInputs(callIndex: number) {
     const [config, prompt, images, options] = harness.requestVideo.mock.calls[callIndex];
     expect(config).toMatchObject({ channelId: "face-host", workflowId: "face-refine-workflow", videoMode: "omni" });
     expect(prompt).toBe(toolPrompt);
-    expect(options.model).not.toBe(frameModelId);
+    expect(options.model).not.toBe(sourceModelId);
     expect(options.videoMode).toBe("omni");
     expect(options.referenceVideos).toEqual([expect.objectContaining({ id: "source", url: originalVideo })]);
     expect(images).toEqual([expect.objectContaining({ dataUrl: referenceImage })]);
@@ -427,7 +427,7 @@ describe("video tool operation submission", () => {
     });
 
     for (const connectedImage of [false, true]) {
-        it(`face: repeats a frame-model source with ${connectedImage ? "connected" : "metadata"} images through the selected tool`, async () => {
+        it(`face: repeats a omni-model source with ${connectedImage ? "connected" : "metadata"} images through the selected tool`, async () => {
             await mountToolSource({}, connectedImage);
             const result = await executeFaceRefine();
             await act(async () => harness.generateRef.current(result.id, "video", toolPrompt, "repeat"));
@@ -586,7 +586,7 @@ describe("video tool operation submission", () => {
         expect(harness.nodesRef.current.find((node) => node.id === draft.id)?.metadata).toMatchObject({ status: "error", errorDetails: expect.any(String) });
     });
 
-    it("depth: snapshots the original video without inherited image, text or frame-model inputs", async () => {
+    it("depth: snapshots the original video without inherited image, text or omni-model inputs", async () => {
         await mountToolSource();
         const result = await executeDepthVideo();
         expect(result.metadata?.generationReferences).toEqual([expect.objectContaining({ kind: "video", nodeId: "source", url: originalVideo })]);
@@ -612,7 +612,7 @@ describe("video tool operation submission", () => {
             expect(config).toMatchObject({ channelId: "face-host", workflowId: "depth-video-workflow", videoMode: "omni" });
             expect(prompt).toBe("");
             expect(images).toEqual([]);
-            expect(options.model).not.toBe(frameModelId);
+            expect(options.model).not.toBe(sourceModelId);
             expect(options.referenceVideos).toEqual([expect.objectContaining({ id: "source", url: originalVideo })]);
         });
     }

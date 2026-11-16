@@ -15,7 +15,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
 
     if (type === CanvasNodeType.Image) {
         const wf = getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.image);
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "image-qwen-2.1";
+        const modelId = wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : "";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
@@ -25,7 +25,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     }
     if (type === CanvasNodeType.Video) {
         const wf = getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.video);
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "omni-video-minimax-h3-fp8-4step-pdmd";
+        const modelId = wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : "";
         const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, wf?.id, CUSTOM_WORKFLOW_CATEGORIES.video);
         return {
             channelId: activeChannel.id,
@@ -38,7 +38,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     }
     if (type === CanvasNodeType.Text) {
         const wf = getDefaultWorkflow(activeChannel, "text");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "text-qwen-35";
+        const modelId = wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : "";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
@@ -48,7 +48,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     }
     if (type === CanvasNodeType.Audio) {
         const wf = getDefaultWorkflow(activeChannel, "audio");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "audio-minimax-music-3";
+        const modelId = wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : "";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
