@@ -33,6 +33,8 @@ The current release needs manual verification in these areas:
 
 - 媒体落盘与外部素材导入：
   - 使用桌面端连续生成并采用多个视频，确认 ComfyUI 成功后媒体均能落盘播放，不再随机出现“媒体ID不合法”；图片、音频及对应封面也应正常保存。
+  - Generate a video in the desktop client and confirm the node leaves the loading state after the MP4 is stored, displays its poster or player, and supports play, pause, seeking, and preview. Reopen the project and confirm the persisted video still plays.
+  - Simulate a poster extraction failure and confirm the node still receives its media URL and storage key instead of waiting indefinitely for metadata, so the video remains playable without a poster.
   - 从文件管理器复制图片、视频、音频或多个混合文件，在画布非输入区域按 `Ctrl+V`，确认按原类型创建节点；粘贴文本或截图的既有行为保持可用。
   - 框选或 `Shift` 多选多个节点后按 `Ctrl+C`、`Ctrl+V`，确认全部节点及内部连线一起复制，不会被系统剪贴板残留文件抢占；切到文件管理器复制外部素材后，再回画布粘贴应恢复外部文件优先。
   - 桌面端重启应用以加载新 Sidecar 后，将本地图片、视频、音频拖到空白画布及节点参考区，确认旧壳可通过 Tauri 原生路径事件、重新构建的新壳可通过 HTML5 文件事件在释放位置创建媒体节点，本地文件由 Sidecar 流式直拷且节点内部参考资源拖拽排序不受影响。

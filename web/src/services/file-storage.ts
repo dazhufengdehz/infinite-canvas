@@ -212,15 +212,18 @@ export function readVideoMeta(url: string) {
         const done = (poster?: Blob) => {
             if (settled) return;
             settled = true;
+            clearTimeout(timer);
             const result = { width: video.videoWidth || 1280, height: video.videoHeight || 720, durationMs: Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined, poster };
             video.pause();
             video.removeAttribute("src");
             video.load();
             resolve(result);
         };
+        const timer = window.setTimeout(done, 10_000);
         video.preload = "auto";
         video.muted = true;
         video.playsInline = true;
+        video.crossOrigin = "anonymous";
         video.onloadeddata = () => {
             if (!video.videoWidth || !video.videoHeight) return done();
             const canvas = document.createElement("canvas");
@@ -228,8 +231,12 @@ export function readVideoMeta(url: string) {
             canvas.height = video.videoHeight;
             const context = canvas.getContext("2d");
             if (!context) return done();
-            context.drawImage(video, 0, 0, canvas.width, canvas.height);
-            canvas.toBlob((blob) => done(blob || undefined), "image/webp", 0.82);
+            try {
+                context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                canvas.toBlob((blob) => done(blob || undefined), "image/webp", 0.82);
+            } catch {
+                done();
+            }
         };
         video.onerror = () => done();
         video.src = url;
