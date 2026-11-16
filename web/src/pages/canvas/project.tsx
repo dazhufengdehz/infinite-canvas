@@ -222,6 +222,7 @@ function InfiniteCanvasPage() {
     const imageInputRef = useRef<HTMLInputElement>(null);
     const uploadTargetRef = useRef<{ nodeId?: string; position?: Position } | null>(null);
     const clipboardRef = useRef<CanvasClipboard | null>(null);
+    const internalPastePriorityRef = useRef(false);
     const historyRef = useRef<{ past: CanvasHistoryEntry[]; future: CanvasHistoryEntry[] }>({ past: [], future: [] });
     const lastHistoryRef = useRef<CanvasHistoryEntry | null>(null);
     const historyCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1494,6 +1495,7 @@ function InfiniteCanvasPage() {
                 .filter((connection) => selectedIds.has(connection.toNodeId))
                 .map((connection) => ({ ...connection })),
         };
+        internalPastePriorityRef.current = true;
     }, []);
 
     const pasteCopiedNodes = useCallback(() => {
@@ -2119,6 +2121,10 @@ function InfiniteCanvasPage() {
         const handlePaste = (event: ClipboardEvent) => {
             const target = event.target instanceof Element ? event.target : null;
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-shortcuts-ignore]")) return;
+            if (internalPastePriorityRef.current && pasteCopiedNodes()) {
+                event.preventDefault();
+                return;
+            }
             const files = Array.from(event.clipboardData?.files || []);
             if (files.length) {
                 event.preventDefault();
@@ -2131,8 +2137,15 @@ function InfiniteCanvasPage() {
             }
             void pasteSystemClipboard();
         };
+        const handleWindowBlur = () => {
+            internalPastePriorityRef.current = false;
+        };
         window.addEventListener("paste", handlePaste);
-        return () => window.removeEventListener("paste", handlePaste);
+        window.addEventListener("blur", handleWindowBlur);
+        return () => {
+            window.removeEventListener("paste", handlePaste);
+            window.removeEventListener("blur", handleWindowBlur);
+        };
     }, [createMediaFileNodes, getCanvasCenter, message, pasteCopiedNodes, pasteSystemClipboard]);
 
     useEffect(() => {
