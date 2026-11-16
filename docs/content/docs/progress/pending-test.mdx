@@ -7,6 +7,12 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- ComfyUI 画布业务节点紧凑平铺展示：
+  - 在图片、视频、音频、文本节点打开模型选择器，确认全部当前内置工作流模型以单层列表展示，选项包含模型名称、所属主机与既有资源警告；跨主机选择后正确回写 `channelId`、`modelId` 和 `workflowId`，不再通过二级级联菜单选择。
+  - 确认 SelfLift 默认模型、全能/首尾帧模式切换、模型资源禁用原因和前置输入警告保持正确，视频仍仅展示 DSL 声明的 12 档尺寸，未标记槽位继续隐藏。
+  - 检查五类业务节点在浅色和深色主题下的默认、悬停、选中、加载与错误状态，确认卡片外框、参数弹层和提示词面板均为紧凑扁平风格，媒体比例、懒加载、缩放、连线与拖拽行为不回归。
+  - 挂载真实节点提示词面板并缩小可用高度，确认正文独立滚动，底部模型、参数与生成/停止按钮完整可见且可点击，工具栏仍在上、提示词输入区仍在下。
+
 - Tauri 2 桌面壳与 Sidecar 生命周期：
   - 在当前平台准备 Rust、Node.js 与 Tauri 2 系统依赖后运行 `bun run desktop:dev`，确认自动准备 Node Sidecar、打开桌面窗口并连接 `127.0.0.1:18080`，启动期间不会回退到浏览器项目数据。
   - 运行 `bun run desktop:build` 生成生产安装包，安装后确认无需单独启动 Node 或静态网站即可创建、重开项目及播放已落盘媒体；关闭窗口后 Sidecar 进程一并退出。

@@ -266,7 +266,7 @@ export function CanvasNodePromptPanel({
     return (
         <div
             data-canvas-no-zoom
-            className="flex min-h-0 flex-col rounded-2xl border p-3 shadow-2xl backdrop-blur"
+            className="flex min-h-0 flex-col rounded-xl border p-2 shadow-none"
             style={{ maxHeight: "var(--canvas-node-panel-max-height, none)", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
@@ -286,25 +286,25 @@ export function CanvasNodePromptPanel({
             />}
             {savedDraftReferenceHint}
             {mode === "text" && connectedResources.images > 0 && (
-                <div className="mb-2 flex items-center gap-1.5 overflow-x-auto text-xs py-0.5">
-                    <span className="shrink-0 text-stone-400 dark:text-stone-500">快捷指令:</span>
+                <div className="mb-1.5 flex items-center gap-1 overflow-x-auto py-0.5 text-xs" style={{ color: theme.node.muted }}>
+                    <span className="shrink-0">快捷指令:</span>
                     <button
                         type="button"
-                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
                         onClick={() => updatePrompt("请根据参考图片反推一段适合用于 AI 生图的提示词。涵盖主体、构图、光影、色彩与质感。")}
                     >
                         生图反推
                     </button>
                     <button
                         type="button"
-                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
                         onClick={() => updatePrompt("详细分析提取这张图片的视觉风格、艺术流派、配色方案与渲染材质。")}
                     >
                         风格提取
                     </button>
                     <button
                         type="button"
-                        className="shrink-0 rounded-full border border-stone-200 px-2.5 py-0.5 text-xs transition hover:border-purple-400 hover:text-purple-500 dark:border-stone-700"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
                         onClick={() => updatePrompt("用详细的自然语言描述画面中的主体、人物姿态、镜头机位与环境分镜。")}
                     >
                         分镜描述
@@ -320,16 +320,16 @@ export function CanvasNodePromptPanel({
                 triggerMentionRef={triggerMentionRef}
                 onChange={updatePrompt}
                 onSubmit={submit}
-                className="thin-scrollbar h-40 w-full cursor-text resize-none rounded-xl px-3 py-2 text-sm leading-5 outline-none"
+                className="thin-scrollbar h-32 w-full cursor-text resize-none rounded-lg px-2.5 py-2 text-sm leading-5 outline-none"
                 style={{ background: "transparent", color: theme.node.text }}
                 placeholder={promptPlaceholder}
             />
             </div>
 
-            <div data-canvas-node-panel-actions className="mt-2 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2">
-                <div className="thin-scrollbar flex min-w-0 flex-1 items-center gap-2 overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
+            <div data-canvas-node-panel-actions className="mt-1.5 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-1.5">
+                <div className="thin-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
                     <Tooltip title={t("canvas.promptPanel.expandEditor")}>
-                        <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
+                        <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-lg !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
                     </Tooltip>
                     {mode === "image" ? (
                         <>
@@ -354,7 +354,7 @@ export function CanvasNodePromptPanel({
                                 modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1"}
                                 config={config}
                                 placement="topLeft"
-                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
                                 onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
                                 onMissingConfig={() => openConfigDialog(true)}
                                 onOpenChange={handleSettingsOpenChange}
@@ -392,7 +392,7 @@ export function CanvasNodePromptPanel({
                                     onConfigChange(node.id, patch);
                                 }}
                                 config={config}
-                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
                                 onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value, config, node.metadata?.modelId))}
                                 onOpenChange={handleSettingsOpenChange}
                             />
@@ -419,7 +419,7 @@ export function CanvasNodePromptPanel({
                             <CanvasAudioSettingsPopover
                                 config={config}
                                 modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "audio-minimax-music-3"}
-                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
                                 onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))}
                                 onOpenChange={handleSettingsOpenChange}
                             />
@@ -450,7 +450,7 @@ export function CanvasNodePromptPanel({
                                 onParamChange={(patch) => onConfigChange(node.id, patch)}
                                 config={config}
                                 count={node.metadata?.textCount || 1}
-                                buttonClassName="!h-10 min-w-0 !max-w-[160px] !justify-start !rounded-full !px-3"
+                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
                                 onCountChange={(textCount) => onConfigChange(node.id, { textCount })}
                                 onOpenChange={handleSettingsOpenChange}
                             />
@@ -459,7 +459,7 @@ export function CanvasNodePromptPanel({
                     <Tooltip title={t("canvas.promptPanel.mentionResource", "召唤/引用画布资源 (@)")}>
                         <Button
                             type="text"
-                            className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
+                            className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-lg !bg-transparent !p-0"
                             style={{ color: theme.node.text }}
                             icon={<AtSign className="size-3.5" />}
                             onMouseDown={(e) => {
@@ -473,7 +473,7 @@ export function CanvasNodePromptPanel({
                     <CanvasPromptLibrary onSelect={updatePrompt} />
                 </div>
                 {isGenerating ? (
-                    <Button type="primary" danger className="ml-auto !h-10 shrink-0 !rounded-full !px-3" onClick={() => onStop(node.id)} aria-label={t("canvas.promptPanel.stopGeneration")}>
+                    <Button type="primary" danger className="ml-auto !h-8 shrink-0 !rounded-lg !px-3" onClick={() => onStop(node.id)} aria-label={t("canvas.promptPanel.stopGeneration")}>
                         <span className="flex items-center gap-1.5">
                             <LoaderCircle className="size-4 animate-spin" />
                             <Square className="size-3.5 fill-current" />
@@ -483,7 +483,7 @@ export function CanvasNodePromptPanel({
                 ) : videoTool ? (
                     <Button
                         type="primary"
-                        className="ml-auto !h-10 shrink-0 !rounded-full !px-4"
+                        className="ml-auto !h-8 shrink-0 !rounded-lg !px-4"
                         icon={canRepeat ? <RefreshCw className="size-3.5" /> : undefined}
                         disabled={!canRepeat && !prompt.trim() && !canSubmitEmptyPrompt}
                         onClick={() => submit(canRepeat ? "repeat" : "new")}
@@ -505,7 +505,7 @@ export function CanvasNodePromptPanel({
                             <span>
                                 <Button
                                     type="primary"
-                                    className="ml-auto !h-10 !rounded-full !px-4"
+                                    className="ml-auto !h-8 !rounded-lg !px-4"
                                     icon={<RefreshCw className="size-3.5" />}
                                     disabled
                                 >
@@ -516,7 +516,7 @@ export function CanvasNodePromptPanel({
                     ) : (
                         <Button
                             type="primary"
-                            className="ml-auto !h-10 !rounded-full !px-4"
+                            className="ml-auto !h-8 !rounded-lg !px-4"
                             icon={<RefreshCw className="size-3.5" />}
                             onClick={() => submit("repeat")}
                         >
@@ -538,7 +538,7 @@ export function CanvasNodePromptPanel({
                             <span>
                                 <Button
                                     type="primary"
-                                    className="ml-auto !h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                                    className="ml-auto !h-8 !min-w-16 shrink-0 !rounded-lg !px-3"
                                     disabled
                                     aria-label={t("canvas.promptPanel.generate")}
                                 >
@@ -549,7 +549,7 @@ export function CanvasNodePromptPanel({
                     ) : (
                         <Button
                             type="primary"
-                            className="ml-auto !h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                            className="ml-auto !h-8 !min-w-16 shrink-0 !rounded-lg !px-3"
                             disabled={!prompt.trim() && !canSubmitEmptyPrompt}
                             onClick={() => submit("new")}
                             aria-label={t("canvas.promptPanel.generate")}
@@ -595,7 +595,7 @@ export function CanvasNodePromptPanel({
                             <CanvasPromptLibrary onSelect={updatePrompt} />
                             <span>{t("canvas.promptPanel.charCount", { count: prompt.length })}</span>
                         </div>
-                        <Button type="primary" className="!rounded-full !px-5" onClick={closeExpandedEditor}>
+                        <Button type="primary" className="!rounded-lg !px-5" onClick={closeExpandedEditor}>
                             {t("canvas.promptPanel.done")}
                         </Button>
                     </div>

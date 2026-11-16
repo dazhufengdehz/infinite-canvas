@@ -392,7 +392,7 @@ export const CanvasNode = React.memo(function CanvasNode({
             )}
 
             <div
-                className="relative h-full w-full overflow-visible rounded-3xl border-2"
+                className="relative h-full w-full overflow-visible rounded-2xl border"
                 style={{
                     background: isGroup ? "transparent" : hasImageContent || hasVideoContent || transparentBg ? "transparent" : theme.node.fill,
                     borderColor: isConnectionRejected
@@ -420,7 +420,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                             : hasInvalidConnections
                               ? "0 0 0 1px #f59e0b55"
                               : isRelated
-                                ? `0 0 0 1px ${theme.node.muted}55, 0 18px 48px rgba(0,0,0,.14)`
+                                ? `0 0 0 1px ${theme.node.muted}55, 0 8px 24px rgba(0,0,0,.10)`
                                 : undefined,
                 }}
                 onMouseDown={(event) => {

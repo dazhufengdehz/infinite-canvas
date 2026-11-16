@@ -47,7 +47,7 @@ export function CanvasAudioSettingsPopover({ config, modelId, onConfigChange, on
     return (
         <>
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[120px] !justify-start !rounded-full !px-2.5"} style={{ background: theme.node.fill, color: theme.node.text }} icon={<Clock className="size-3.5" />} onClick={() => updateOpen(!open)}>
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[120px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Clock className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">
                         {audioSecondsLabel(config.audioSeconds, modelId)}
                     </span>
@@ -94,9 +94,10 @@ function AudioSettingsPortal({
             ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceAbove)) }
             : { top: buttonRect.bottom + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceBelow)) }),
         background: theme.toolbar.panel,
-        borderRadius: 18,
-        boxShadow: "0 18px 54px rgba(28, 25, 23, 0.16)",
-        padding: 18,
+        border: `1px solid ${theme.toolbar.border}`,
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(28, 25, 23, 0.10)",
+        padding: 12,
         overflowY: "auto",
         overflowX: "hidden",
         boxSizing: "border-box",
@@ -113,7 +114,7 @@ function AudioSettingsPortal({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
         >
-            <AudioSettingsPanel config={config} modelId={modelId} onConfigChange={onConfigChange} theme={theme} className="space-y-4" />
+            <AudioSettingsPanel config={config} modelId={modelId} onConfigChange={onConfigChange} theme={theme} className="space-y-3" />
         </div>,
         document.body,
     );

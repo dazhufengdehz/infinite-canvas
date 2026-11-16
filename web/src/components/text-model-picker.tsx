@@ -1,5 +1,5 @@
-import { Cascader, Tooltip } from "antd";
-import { AlertTriangle, Eye, HelpCircle, MessageSquareText, Server, Sparkles } from "lucide-react";
+import { Select, Tooltip } from "antd";
+import { AlertTriangle, Eye, HelpCircle, MessageSquareText, Sparkles } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -66,101 +66,92 @@ export function TextModelPicker({
         return textQwen35Profile;
     }, [modelId, activeChannel]);
 
-    // 级联递进选项：第一级为 API 提供商 (算力主机)，hover 展开第二级为模型
     const options = useMemo(() => {
-        return channels.map((channel) => ({
-            value: channel.id,
-            label: (
-                <div className="flex items-center gap-1.5 py-0.5">
-                    <Server className="size-3.5 text-blue-500 shrink-0" />
-                    <span className="font-medium text-xs truncate max-w-[140px]">{channel.name || "ComfyUI 主机"}</span>
-                </div>
-            ),
-            rawName: channel.name,
-            children: BUILTIN_TEXT_WORKFLOW_MODELS.map((model) => {
-                const availability = evaluateModelAvailability({
-                    targetModel: model,
-                    connectedImages,
-                    connectedVideos,
-                    connectedAudios,
-                    promptText,
-                    activeChannel: channel,
-                });
+        const orderedChannels = [activeChannel, ...channels.filter((channel) => channel.id !== activeChannel.id)];
+        return orderedChannels.flatMap((channel) => BUILTIN_TEXT_WORKFLOW_MODELS.map((model) => {
+            const availability = evaluateModelAvailability({
+                targetModel: model,
+                connectedImages,
+                connectedVideos,
+                connectedAudios,
+                promptText,
+                activeChannel: channel,
+            });
 
-                const isBlocked = !availability.isSelectable;
-                const needsInputs = availability.isSelectable && !availability.isAvailable;
+            const isBlocked = !availability.isSelectable;
+            const needsInputs = availability.isSelectable && !availability.isAvailable;
 
-                return {
-                    value: model.id,
-                    disabled: isBlocked,
-                    label: (
-                        <div className={`flex items-center justify-between gap-2 py-0.5 min-w-[200px] ${isBlocked ? "opacity-60" : ""}`}>
-                            <div className="flex items-center gap-1.5 truncate">
-                                {getModelIcon(model.id)}
+            return {
+                value: JSON.stringify([channel.id, model.id]),
+                disabled: isBlocked,
+                label: (
+                    <div className={`flex items-center justify-between gap-2 py-0.5 min-w-[200px] ${isBlocked ? "opacity-60" : ""}`}>
+                        <div className="flex items-center gap-1.5 truncate">
+                            {getModelIcon(model.id)}
+                            <div className="flex min-w-0 flex-col">
                                 <span className="font-medium text-xs truncate">{model.name}</span>
+                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}</span>
                             </div>
-                            {isBlocked ? (
-                                <Tooltip
-                                    title={
-                                        <div className="space-y-1 text-xs">
-                                            <div className="font-semibold text-rose-400">无法切换（资源冲突）：</div>
-                                            {availability.blockingReasons.map((r, i) => (
-                                                <div key={i} className="flex items-start gap-1">
-                                                    <span className="text-rose-400">•</span>
-                                                    <span>{r}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    }
-                                >
-                                    <span
-                                        className="pointer-events-auto flex items-center gap-0.5 text-rose-500 shrink-0 cursor-help p-0.5 hover:text-rose-600"
-                                        onClick={(e) => e.stopPropagation()}
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                        <HelpCircle className="size-3.5" />
-                                    </span>
-                                </Tooltip>
-                            ) : needsInputs ? (
-                                <Tooltip
-                                    title={
-                                        <div className="space-y-1 text-xs">
-                                            <div className="font-semibold text-amber-300">选定后前置要求：</div>
-                                            {availability.warningReasons.map((r, i) => (
-                                                <div key={i} className="flex items-start gap-1">
-                                                    <span className="text-amber-400">•</span>
-                                                    <span>{r}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    }
-                                >
-                                    <span
-                                        className="pointer-events-auto flex items-center gap-0.5 text-amber-500 shrink-0 cursor-help p-0.5 hover:text-amber-600"
-                                        onClick={(e) => e.stopPropagation()}
-                                        onMouseDown={(e) => e.stopPropagation()}
-                                    >
-                                        <AlertTriangle className="size-3.5" />
-                                    </span>
-                                </Tooltip>
-                            ) : null}
                         </div>
-                    ),
-                    model,
-                    availability,
-                };
-            }),
+                        {isBlocked ? (
+                            <Tooltip
+                                title={
+                                    <div className="space-y-1 text-xs">
+                                        <div className="font-semibold text-rose-400">无法切换（资源冲突）：</div>
+                                        {availability.blockingReasons.map((r, i) => (
+                                            <div key={i} className="flex items-start gap-1">
+                                                <span className="text-rose-400">•</span>
+                                                <span>{r}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                }
+                            >
+                                <span
+                                    className="pointer-events-auto flex items-center gap-0.5 text-rose-500 shrink-0 cursor-help p-0.5 hover:text-rose-600"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    <HelpCircle className="size-3.5" />
+                                </span>
+                            </Tooltip>
+                        ) : needsInputs ? (
+                            <Tooltip
+                                title={
+                                    <div className="space-y-1 text-xs">
+                                        <div className="font-semibold text-amber-300">选定后前置要求：</div>
+                                        {availability.warningReasons.map((r, i) => (
+                                            <div key={i} className="flex items-start gap-1">
+                                                <span className="text-amber-400">•</span>
+                                                <span>{r}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                }
+                            >
+                                <span
+                                    className="pointer-events-auto flex items-center gap-0.5 text-amber-500 shrink-0 cursor-help p-0.5 hover:text-amber-600"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                >
+                                    <AlertTriangle className="size-3.5" />
+                                </span>
+                            </Tooltip>
+                        ) : null}
+                    </div>
+                ),
+                model,
+                availability,
+            };
         }));
-    }, [channels, connectedImages, connectedVideos, connectedAudios, promptText]);
+    }, [activeChannel, channels, connectedImages, connectedVideos, connectedAudios, promptText]);
 
-    const cascaderValue = useMemo(() => {
-        return [activeChannel.id, activeProfile.id];
+    const selectValue = useMemo(() => {
+        return JSON.stringify([activeChannel.id, activeProfile.id]);
     }, [activeChannel.id, activeProfile.id]);
 
-    const handleCascaderChange = (value: (string | number)[]) => {
-        if (!value || value.length < 2) return;
-        const selectedChannelId = String(value[0]);
-        const selectedModelId = String(value[1]);
+    const handleSelectChange = (value: string) => {
+        const [selectedChannelId, selectedModelId] = JSON.parse(value) as [string, string];
         const found = getModelProfile(selectedModelId) || activeProfile;
         onChange(selectedChannelId, found.id, found);
     };
@@ -177,21 +168,22 @@ export function TextModelPicker({
     }, [activeProfile, connectedImages, connectedVideos, connectedAudios, promptText, activeChannel]);
 
     return (
-        <Cascader
-            value={cascaderValue}
+        <Select
+            value={selectValue}
             options={options}
-            onChange={handleCascaderChange}
-            expandTrigger="hover"
+            onChange={handleSelectChange}
+            popupMatchSelectWidth={false}
             disabled={disabled}
             allowClear={false}
             popupClassName="canvas-model-picker-dropdown"
-            className={`canvas-compact-control !h-8 !rounded-full !text-xs ${className}`}
+            className={`canvas-compact-control !h-8 !rounded-lg !text-xs ${className}`}
             style={{
-                background: theme.node.fill,
+                background: "transparent",
                 borderColor: activeAvailability.isAvailable ? theme.node.stroke : "#f59e0b",
                 color: theme.node.text,
+                height: "32px",
             }}
-            displayRender={() => (
+            labelRender={() => (
                 <div className="flex items-center gap-1.5 truncate max-w-[170px]">
                     {getModelIcon(activeProfile.id)}
                     <span className="font-semibold text-xs truncate">{activeProfile.name}</span>

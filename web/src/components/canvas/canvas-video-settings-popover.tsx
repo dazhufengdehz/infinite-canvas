@@ -95,7 +95,7 @@ export function CanvasVideoSettingsPopover({
     return (
         <>
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[230px] !justify-start !rounded-full !px-2.5"} style={{ background: theme.node.fill, color: theme.node.text }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[230px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">
                         {currentMode === "frame" ? "首尾帧" : "全能参考"} · {videoSizeLabel(currentSize, profile)} · {videoSecondsLabel(currentDuration, profile)}
                     </span>
@@ -150,9 +150,10 @@ function VideoSettingsPortal({
             ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceAbove)) }
             : { top: buttonRect.bottom + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceBelow)) }),
         background: theme.toolbar.panel,
-        borderRadius: 18,
-        boxShadow: "0 18px 54px rgba(28, 25, 23, 0.16)",
-        padding: 18,
+        border: `1px solid ${theme.toolbar.border}`,
+        borderRadius: 12,
+        boxShadow: "0 8px 24px rgba(28, 25, 23, 0.10)",
+        padding: 12,
         overflowY: "auto",
         color: theme.node.text,
     } as const;
@@ -176,7 +177,7 @@ function VideoSettingsPortal({
                 config={config}
                 onConfigChange={onConfigChange as any}
                 theme={theme}
-                className="space-y-4"
+                className="space-y-3"
             />
         </div>,
         document.body,
