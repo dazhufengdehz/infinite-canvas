@@ -24,6 +24,24 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", own
     return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta, posterUrl, posterStorageKey };
 }
 
+export async function importMediaFile(file: { path: string; type: string }, prefix: "video" | "audio", ownerId = "assets"): Promise<UploadedFile> {
+    const storageKey = scopedStorageKey(prefix, ownerId);
+    const imported = await storageRequest<{ bytes: number; mimeType: string }>("/media/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetStorageKey: storageKey, sourcePath: file.path, mimeType: file.type }),
+    });
+    const url = storageMediaUrl(storageKey);
+    const meta = prefix === "video" ? await readVideoMeta(url) : await readAudioMeta(url);
+    let posterUrl: string | undefined;
+    let posterStorageKey: string | undefined;
+    if ("poster" in meta && meta.poster) {
+        posterStorageKey = storageKey.replace(/^[^:]+:/, "poster:");
+        posterUrl = await setMediaBlob(posterStorageKey, meta.poster);
+    }
+    return { url, storageKey, bytes: imported.bytes, mimeType: imported.mimeType, ...meta, posterUrl, posterStorageKey };
+}
+
 export async function adoptMediaFile(source: { url: string; token?: string; mimeType?: string }, prefix: "video" | "audio", ownerId = "assets"): Promise<UploadedFile> {
     if (!(await hasStorageServer())) return uploadMediaFile(source.url, prefix, ownerId);
     const storageKey = scopedStorageKey(prefix, ownerId);

@@ -458,7 +458,7 @@ export function sourceNodeReferenceImages(node: CanvasNodeData | null) {
     ];
 }
 
-export function isAudioFile(file: File) {
+export function isAudioFile(file: Pick<File, "name" | "type">) {
     return file.type.startsWith("audio/") || /\.(mp3|wav)$/i.test(file.name);
 }
 

@@ -262,6 +262,17 @@ export function createStorage(dataDir) {
             return { storageKey: targetStorageKey };
         },
 
+        async importMedia(storageKey, sourcePath, mimeType) {
+            if (typeof sourcePath !== "string" || !sourcePath) throw new StorageError(400, "本地文件路径不合法");
+            const file = resolve(sourcePath);
+            const info = await stat(file).catch(() => null);
+            if (!info?.isFile()) throw new StorageError(400, "本地文件不存在或不是文件");
+            const target = mediaPaths(await parseMediaKey(storageKey));
+            const normalizedMimeType = normalizeMimeType(mimeType);
+            await copyParts({ file }, target, normalizedMimeType);
+            return { storageKey, bytes: info.size, mimeType: normalizedMimeType };
+        },
+
         async adoptMedia(storageKey, sourceUrl, token, mimeType) {
             let url;
             try {

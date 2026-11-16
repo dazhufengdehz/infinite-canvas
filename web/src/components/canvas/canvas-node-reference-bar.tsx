@@ -176,6 +176,7 @@ export function CanvasNodeReferenceBar({
             <div
                 className="thin-scrollbar flex min-h-12 items-center gap-2 overflow-x-auto pb-1"
                 onDragOver={(e) => {
+                    if (dragIndexRef.current === null) return;
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                 }}

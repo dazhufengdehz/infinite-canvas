@@ -27,6 +27,18 @@ export async function uploadImage(input: string | Blob, ownerId = "assets"): Pro
     return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type || meta.mimeType };
 }
 
+export async function importImageFile(file: { path: string; type: string }, ownerId = "assets"): Promise<UploadedImage> {
+    const storageKey = scopedStorageKey("image", ownerId);
+    const imported = await storageRequest<{ bytes: number; mimeType: string }>("/media/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetStorageKey: storageKey, sourcePath: file.path, mimeType: file.type }),
+    });
+    const url = storageMediaUrl(storageKey);
+    const meta = await readImageMeta(url);
+    return { url, storageKey, width: meta.width, height: meta.height, bytes: imported.bytes, mimeType: imported.mimeType || meta.mimeType };
+}
+
 export async function adoptGeneratedImage(source: { dataUrl: string; sourceToken?: string }, ownerId = "assets"): Promise<UploadedImage> {
     if (!/^https?:\/\//i.test(source.dataUrl) || !(await hasStorageServer())) return uploadImage(source.dataUrl, ownerId);
     const storageKey = scopedStorageKey("image", ownerId);

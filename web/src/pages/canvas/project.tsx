@@ -11,8 +11,8 @@ import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audi
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { getModelProfile } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { adoptGeneratedImage, copyImageFile, uploadImage } from "@/services/image-storage";
-import { acquireMediaUrl, copyMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
+import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
+import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
 import { readProject } from "@/services/project-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
@@ -139,6 +139,22 @@ type CanvasClipboard = {
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
 };
+
+type DesktopMediaFile = { path: string; name: string; type: string };
+type MediaFileInput = File | DesktopMediaFile;
+
+const DESKTOP_MEDIA_MIME_TYPES: Record<string, string> = {
+    png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp", gif: "image/gif", bmp: "image/bmp", svg: "image/svg+xml",
+    mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mkv: "video/x-matroska", avi: "video/x-msvideo",
+    mp3: "audio/mpeg", wav: "audio/wav", m4a: "audio/mp4", aac: "audio/aac", flac: "audio/flac", ogg: "audio/ogg", opus: "audio/opus",
+};
+
+function desktopMediaFileFromPath(path: string): DesktopMediaFile | null {
+    const name = path.split(/[\\/]/).pop() || path;
+    const extension = name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
+    const type = DESKTOP_MEDIA_MIME_TYPES[extension];
+    return type ? { path, name, type } : null;
+}
 
 type ConnectionDropTarget = {
     nodeId: string | null;
@@ -2008,8 +2024,8 @@ function InfiniteCanvasPage() {
         };
     }, [finishNodeDrag, handleGlobalMouseMove, handleGlobalMouseUp, handleGlobalPointerMove]);
 
-    const createImageFileNode = useCallback(async (file: File, position: Position) => {
-        const image = await uploadImage(file, projectId);
+    const createImageFileNode = useCallback(async (file: MediaFileInput, position: Position) => {
+        const image = file instanceof File ? await uploadImage(file, projectId) : await importImageFile(file, projectId);
         const size = fitNodeSize(image.width, image.height);
         const id = `image-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
@@ -2029,8 +2045,8 @@ function InfiniteCanvasPage() {
         setDialogNodeId(id);
     }, [projectId]);
 
-    const createVideoFileNode = useCallback(async (file: File, position: Position) => {
-        const video = await uploadMediaFile(file, "video", projectId);
+    const createVideoFileNode = useCallback(async (file: MediaFileInput, position: Position) => {
+        const video = file instanceof File ? await uploadMediaFile(file, "video", projectId) : await importMediaFile(file, "video", projectId);
         const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
         const id = `video-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
@@ -2049,8 +2065,8 @@ function InfiniteCanvasPage() {
         setDialogNodeId(id);
     }, [projectId]);
 
-    const createAudioFileNode = useCallback(async (file: File, position: Position) => {
-        const audio = await uploadMediaFile(file, "audio", projectId);
+    const createAudioFileNode = useCallback(async (file: MediaFileInput, position: Position) => {
+        const audio = file instanceof File ? await uploadMediaFile(file, "audio", projectId) : await importMediaFile(file, "audio", projectId);
         const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
         const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
         const newNode: CanvasNodeData = {
@@ -2068,7 +2084,7 @@ function InfiniteCanvasPage() {
         setSelectedConnectionId(null);
     }, [projectId]);
 
-    const createMediaFileNodes = useCallback(async (files: File[], basePos: Position) => {
+    const createMediaFileNodes = useCallback(async (files: MediaFileInput[], basePos: Position) => {
         const mediaFiles = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/") || isAudioFile(file));
         for (const [index, file] of mediaFiles.entries()) {
             const position = { x: basePos.x + index * 40, y: basePos.y + index * 40 };
@@ -2078,6 +2094,30 @@ function InfiniteCanvasPage() {
         }
         return mediaFiles.length;
     }, [createAudioFileNode, createImageFileNode, createVideoFileNode]);
+
+    useEffect(() => {
+        if (!("__TAURI_INTERNALS__" in window)) return;
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+        void import("@tauri-apps/api/webview")
+            .then(({ getCurrentWebview }) => getCurrentWebview().onDragDropEvent((event) => {
+                if (event.payload.type !== "drop") return;
+                const files = event.payload.paths.map(desktopMediaFileFromPath).filter((file): file is DesktopMediaFile => file !== null);
+                if (!files.length) return;
+                const scale = window.devicePixelRatio || 1;
+                const position = screenToCanvas(event.payload.position.x / scale, event.payload.position.y / scale);
+                void createMediaFileNodes(files, position).catch((error) => message.error(error instanceof Error ? error.message : String(error)));
+            }))
+            .then((cleanup) => {
+                if (cancelled) cleanup();
+                else unlisten = cleanup;
+            })
+            .catch((error) => console.error("Failed to listen for desktop file drops:", error));
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, [createMediaFileNodes, message, screenToCanvas]);
 
     const createTextNodeFromClipboard = useCallback(
         (text: string) => {

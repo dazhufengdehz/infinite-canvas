@@ -220,6 +220,11 @@ export function createDesktopServer(options = {}) {
             sendJson(req, res, 200, await storage.copyMedia(body.sourceStorageKey, body.targetStorageKey, body.mimeType));
             return;
         }
+        if (pathname === "/api/storage/media/import" && req.method === "POST") {
+            const body = await readJson(req);
+            sendJson(req, res, 200, await storage.importMedia(body.targetStorageKey, body.sourcePath, body.mimeType));
+            return;
+        }
         if (pathname === "/api/storage/media/adopt" && req.method === "POST") {
             const body = await readJson(req);
             sendJson(req, res, 200, await storage.adoptMedia(body.targetStorageKey, body.sourceUrl, body.token, body.mimeType));
