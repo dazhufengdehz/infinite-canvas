@@ -316,8 +316,8 @@ function ReferenceItem({
                 <span className="grid size-full place-items-center overflow-hidden rounded-[inherit] pointer-events-none">
                     {(resource?.kind === "image" || node.type === CanvasNodeType.Image) && content ? (
                         <img src={content} alt="" draggable={false} className="size-full object-cover" />
-                    ) : (resource?.kind === "video" || node.type === CanvasNodeType.Video) && content ? (
-                        <video src={content} draggable={false} className="size-full object-cover" muted />
+                    ) : (resource?.kind === "video" || node.type === CanvasNodeType.Video) && node.metadata?.posterUrl ? (
+                        <img src={node.metadata.posterUrl} alt="" draggable={false} className="size-full object-cover" />
                     ) : (
                         <Icon className="size-4 opacity-65" />
                     )}
@@ -360,10 +360,10 @@ function ReferencePreview({ node, content, badge }: { node: CanvasNodeData; cont
             </div>
             {(resource?.kind === "image" || node.type === CanvasNodeType.Image) && content ? (
                 <img src={content} alt={node.title} className="max-h-52 w-72 rounded-lg object-contain" />
-            ) : (resource?.kind === "video" || node.type === CanvasNodeType.Video) && content ? (
-                <video src={content} className="max-h-52 w-72 rounded-lg" muted controls />
-            ) : (resource?.kind === "audio" || node.type === CanvasNodeType.Audio) && content ? (
-                <audio src={content} className="w-72" controls />
+            ) : resource?.kind === "video" || node.type === CanvasNodeType.Video ? (
+                node.metadata?.posterUrl ? <img src={node.metadata.posterUrl} alt={node.title} className="max-h-52 w-72 rounded-lg object-contain" /> : <div className="flex w-72 items-center gap-2 py-3 text-sm"><Video className="size-4" />{node.title || t("canvas.references.empty")}</div>
+            ) : resource?.kind === "audio" || node.type === CanvasNodeType.Audio ? (
+                <div className="flex w-72 items-center gap-2 py-3 text-sm"><Music2 className="size-4" />{node.title}</div>
             ) : (
                 <div className="max-h-52 w-72 overflow-auto whitespace-pre-wrap text-sm">
                     {resource?.text || node.metadata?.content || node.metadata?.prompt || node.title || t("canvas.references.empty")}

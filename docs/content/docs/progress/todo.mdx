@@ -5,6 +5,8 @@ description: Planned follow-up work
 
 # TODO
 
+- 将 ComfyUI 输出改为候选引用，用户采用时再通过 Sidecar 流式复制到项目，避免完整 Data URL 下载与重复媒体占用。
+- 接入 Tauri 生产桌面壳，补齐桌面端启动与存储位置说明。
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.
 - 生成进度当前由前端按节点数加权估算（ComfyUI 本地 8188 不提供整体百分比）。等自建 ComfyUI 升到 v0.6.0+ 后改用 `/api/jobs/{id}/cancel` 按 id 精准取消，消除现有「查队列 + /interrupt」之间的竞态窗口。

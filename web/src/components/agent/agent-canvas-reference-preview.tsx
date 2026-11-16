@@ -15,14 +15,14 @@ export function AgentCanvasReferencePreview({ reference, previewUrl, previewText
                 <span className="truncate text-sm font-medium">{reference.title}</span>
             </div>
             {reference.kind === "image" && previewUrl ? <img src={previewUrl} alt={reference.title} className="max-h-64 w-full rounded-md object-contain" /> : null}
-            {reference.kind === "video" && previewUrl ? <video src={previewUrl} controls preload="metadata" className="max-h-64 w-full rounded-md" /> : null}
-            {reference.kind === "audio" && previewUrl ? <audio src={previewUrl} controls preload="metadata" className="w-full" /> : null}
+            {reference.kind === "video" && previewUrl ? <img src={previewUrl} alt={reference.title} className="max-h-64 w-full rounded-md object-contain" /> : null}
             {reference.kind === "text" && previewText ? (
                 <div className="thin-scrollbar max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-md border px-3 py-2 text-xs leading-5" style={{ borderColor: theme.node.stroke }}>
                     {previewText}
                 </div>
             ) : null}
-            {!previewUrl && !(reference.kind === "text" && previewText) ? <div className="py-3 text-center text-xs" style={{ color: theme.node.muted }}>{t("agent.composer.mentions.previewUnavailable")}</div> : null}
+            {reference.kind === "audio" ? <div className="flex items-center gap-2 py-3 text-xs" style={{ color: theme.node.muted }}><Music2 className="size-4" />{canvasReferenceKindLabel(reference.kind)}</div> : null}
+            {!previewUrl && reference.kind !== "audio" && !(reference.kind === "text" && previewText) ? <div className="py-3 text-center text-xs" style={{ color: theme.node.muted }}>{t("agent.composer.mentions.previewUnavailable")}</div> : null}
         </div>
     );
 }

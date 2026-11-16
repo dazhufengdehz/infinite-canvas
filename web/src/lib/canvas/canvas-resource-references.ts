@@ -45,6 +45,7 @@ export function getCanvasAllCategorizedResources(
 
     const getNodePreview = (node: CanvasNodeData): string | undefined => {
         const res = getNodeDefinition(node.type)?.resource?.(node);
+        if (node.type === CanvasNodeType.Video) return node.metadata?.posterUrl;
         return node.metadata?.content || node.metadata?.images?.find((img) => Boolean(img.content))?.content || res?.url;
     };
 
@@ -213,7 +214,7 @@ function labelResourceNodes(nodes: CanvasNodeData[], active: boolean) {
                 kind,
                 label: displayTitle,
                 title: displayTitle,
-                previewUrl: node.metadata?.content || resource?.url,
+                previewUrl: node.type === CanvasNodeType.Video ? node.metadata?.posterUrl : node.metadata?.content || resource?.url,
                 text: resourceText(node),
                 active,
             },

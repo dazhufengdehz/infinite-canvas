@@ -141,11 +141,11 @@ function videoPluginResult(result: unknown): VideoGenerationResult {
     throw new Error(apiText("scriptNoVideo"));
 }
 
-export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
-    if (result.blob) return uploadMediaFile(result.blob, "video");
+export async function storeGeneratedVideo(result: VideoGenerationResult, ownerId = "assets"): Promise<UploadedFile> {
+    if (result.blob) return uploadMediaFile(result.blob, "video", ownerId);
     if (result.url) {
         try {
-            return await uploadMediaFile(result.url, "video");
+            return await uploadMediaFile(result.url, "video", ownerId);
         } catch {
             return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
         }

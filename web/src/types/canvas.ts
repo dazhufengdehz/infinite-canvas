@@ -122,6 +122,8 @@ export type CanvasNodeMetadata = {
     images?: CanvasNodeImage[];
     primaryImageId?: string;
     storageKey?: string;
+    posterUrl?: string;
+    posterStorageKey?: string;
     mimeType?: string;
     bytes?: number;
     durationMs?: number;
@@ -163,6 +165,7 @@ export type CanvasAssistantImage = {
     dataUrl: string;
     storageKey?: string;
     prompt: string;
+    mimeType?: string;
 };
 
 export type CanvasAssistantMessage = {

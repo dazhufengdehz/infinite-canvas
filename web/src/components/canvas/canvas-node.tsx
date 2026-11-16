@@ -12,7 +12,7 @@ import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textare
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type CanvasNodeText, type Position } from "@/types/canvas";
 import type { CanvasNodeContext, CanvasPluginHost } from "@/types/canvas-plugin";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
-import { CanvasVideoPlayer } from "./canvas-video-player";
+import { CanvasVideoPlayer, LazyAudioPlayer } from "./canvas-video-player";
 import { useTranslation } from "react-i18next";
 import { formatNodeLoadingText, formatProgressCaption } from "@/lib/canvas/canvas-generation-helpers";
 import { CanvasGenerationError } from "./canvas-generation-error";
@@ -862,12 +862,13 @@ function VideoNodeContent({ node, theme, onViewMedia }: NodeContentRendererProps
             </div>
         );
     }
-    return <CanvasVideoPlayer nodeId={node.id} src={node.metadata.content} onPreview={onViewMedia} />;
+    return <CanvasVideoPlayer nodeId={node.id} src={node.metadata.content} storageKey={node.metadata.storageKey} posterUrl={node.metadata.posterUrl} onPreview={onViewMedia} />;
 }
 
 function AudioNodeContent({ node, theme }: NodeContentRendererProps) {
     const { t } = useTranslation();
-    if (!node.metadata?.content)
+    const content = node.metadata?.content || "";
+    if (!content)
         return (
             <div className="flex h-full w-full flex-col items-center justify-center gap-2" style={{ color: theme.node.placeholder }}>
                 <Music2 className="size-7 opacity-35" />
@@ -880,7 +881,7 @@ function AudioNodeContent({ node, theme }: NodeContentRendererProps) {
                 <Music2 className="size-4 shrink-0" />
                 <span className="truncate">{t("canvas.node.audio")}</span>
             </div> : null}
-            <audio src={node.metadata.content} controls className="w-full" data-canvas-no-zoom />
+            <LazyAudioPlayer src={content} storageKey={node.metadata?.storageKey} />
         </div>
     );
 }

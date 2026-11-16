@@ -3,14 +3,14 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 
 import { nanoid } from "nanoid";
 import { cleanupUnusedImages, resolveImageUrl, uploadImage } from "@/services/image-storage";
-import { cleanupUnusedMedia } from "@/services/file-storage";
+import { cleanupUnusedMedia, resolveMediaUrl } from "@/services/file-storage";
 import { hasStorageServer } from "@/services/api/storage";
 import { readAssets, readProjects, saveAssets } from "@/services/project-storage";
 
 export type AssetKind = "text" | "image" | "video" | "audio";
 export type TextAsset = AssetBase<"text"> & { data: { content: string } };
 export type ImageAsset = AssetBase<"image"> & { data: { dataUrl: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
-export type VideoAsset = AssetBase<"video"> & { data: { url: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
+export type VideoAsset = AssetBase<"video"> & { data: { url: string; storageKey?: string; posterUrl?: string; posterStorageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
 export type AudioAsset = AssetBase<"audio"> & { data: { url: string; storageKey?: string; bytes: number; mimeType: string; durationMs?: number } };
 export type Asset = TextAsset | ImageAsset | VideoAsset | AudioAsset;
 
@@ -44,6 +44,10 @@ const assetStorage: PersistStorage<AssetStore> = {
     getItem: async () => {
         const assets = await Promise.all(
             (await readAssets()).map(async (asset) => {
+                if (asset.kind === "video" && asset.data.posterStorageKey) {
+                    const posterUrl = await resolveMediaUrl(asset.data.posterStorageKey, asset.data.posterUrl || asset.coverUrl);
+                    return { ...asset, coverUrl: posterUrl || asset.coverUrl, data: { ...asset.data, posterUrl } };
+                }
                 if (asset.kind !== "image") return asset;
                 if (asset.data.storageKey) {
                     return {

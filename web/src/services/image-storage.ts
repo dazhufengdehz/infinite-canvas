@@ -2,7 +2,7 @@ import localforage from "localforage";
 
 import i18n from "@/i18n";
 import { readImageMeta } from "@/lib/image-utils";
-import { hasStorageServer, putStorageBlob, storageMediaUrl } from "@/services/api/storage";
+import { hasStorageServer, putStorageBlob, storageMediaUrl, storageRequest } from "@/services/api/storage";
 import { scopedStorageKey } from "@/services/project-storage";
 
 export type UploadedImage = {
@@ -45,6 +45,22 @@ export async function getImageBlob(storageKey: string) {
         return response.ok ? response.blob() : null;
     }
     return store.getItem<Blob>(storageKey);
+}
+
+export async function copyImageFile(sourceStorageKey: string, ownerId: string, mimeType: string) {
+    const storageKey = scopedStorageKey("image", ownerId);
+    if (await hasStorageServer()) {
+        await storageRequest("/media/copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sourceStorageKey, targetStorageKey: storageKey, mimeType }),
+        });
+    } else {
+        const blob = await getImageBlob(sourceStorageKey);
+        if (!blob) throw new Error("图片文件不存在");
+        await setImageBlob(storageKey, blob);
+    }
+    return { url: await resolveImageUrl(storageKey), storageKey };
 }
 
 export async function setImageBlob(storageKey: string, blob: Blob) {

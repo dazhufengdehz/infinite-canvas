@@ -99,25 +99,27 @@ export async function resolveMetadataReferences(metadata: CanvasNodeMetadata) {
     return references.every(Boolean) ? (references as ReferenceImage[]) : null;
 }
 
-export async function hydrateCanvasImages(nodes: CanvasNodeData[]) {
+export async function hydrateCanvasImages(nodes: CanvasNodeData[], projectId: string) {
     return Promise.all(
         nodes.map(async (node) => {
             const content = node.metadata?.content;
-            if ((node.type === CanvasNodeType.Video || node.type === CanvasNodeType.Audio) && node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveMediaUrl(node.metadata.storageKey, content) } };
+            if (node.type === CanvasNodeType.Video && node.metadata?.posterStorageKey) {
+                return { ...node, metadata: { ...node.metadata, posterUrl: await resolveMediaUrl(node.metadata.posterStorageKey, node.metadata.posterUrl) } };
+            }
             if (node.type !== CanvasNodeType.Image || !content) return node;
             const images = await Promise.all((node.metadata?.images || []).map(async (image) => (image.content ? { ...image, content: await resolveImageUrl(image.storageKey, image.content) } : image)));
             if (node.metadata?.storageKey) return { ...node, metadata: { ...node.metadata, content: await resolveImageUrl(node.metadata.storageKey, content), images } };
             if (!content.startsWith("data:image/")) return node;
-            return { ...node, metadata: { ...node.metadata, ...imageMetadata(await uploadImage(content)) } };
+            return { ...node, metadata: { ...node.metadata, ...imageMetadata(await uploadImage(content, projectId)) } };
         }),
     );
 }
 
-export async function hydrateAssistantImages(sessions: CanvasAssistantSession[]) {
+export async function hydrateAssistantImages(sessions: CanvasAssistantSession[], projectId: string) {
     const hydrateItem = async <T extends { dataUrl?: string; storageKey?: string }>(item: T) => {
         if (item.storageKey) return { ...item, dataUrl: await resolveImageUrl(item.storageKey, item.dataUrl) };
         if (item.dataUrl?.startsWith("data:image/")) {
-            const image = await uploadImage(item.dataUrl);
+            const image = await uploadImage(item.dataUrl, projectId);
             return { ...item, dataUrl: image.url, storageKey: image.storageKey };
         }
         return item;

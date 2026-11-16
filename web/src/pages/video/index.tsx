@@ -7,13 +7,14 @@ import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { CanvasVideoPlayer } from "@/components/canvas/canvas-video-player";
 import { mergePresetPrompt } from "@/lib/assets/system-presets";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
-import { deleteStoredMedia, resolveMediaUrl } from "@/services/file-storage";
+import { deleteStoredMedia, getMediaBlob, resolveMediaUrl } from "@/services/file-storage";
 import { resolveImageUrl, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
 import { useAssetStore } from "@/stores/use-asset-store";
@@ -27,6 +28,8 @@ type GeneratedVideo = {
     id: string;
     url: string;
     storageKey: string;
+    posterUrl?: string;
+    posterStorageKey?: string;
     durationMs: number;
     width: number;
     height: number;
@@ -237,18 +240,19 @@ export default function VideoPage() {
         void generate();
     };
 
-    const downloadVideo = (video: GeneratedVideo) => {
-        saveAs(video.url, "video.mp4");
+    const downloadVideo = async (video: GeneratedVideo) => {
+        const blob = await getMediaBlob(video.storageKey);
+        saveAs(blob || video.url, "video.mp4");
     };
 
     const saveResultToAssets = (video: GeneratedVideo) => {
         addAsset({
             kind: "video",
             title: t("videoWorkbench.resultTitle"),
-            coverUrl: "",
+            coverUrl: video.posterUrl || "",
             tags: [],
             source: t("videoWorkbench.source"),
-            data: { url: video.url, storageKey: video.storageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
+            data: { url: video.url, storageKey: video.storageKey, posterUrl: video.posterUrl, posterStorageKey: video.posterStorageKey, width: video.width, height: video.height, bytes: video.bytes, mimeType: video.mimeType },
             metadata: { source: "video-page", prompt },
         });
         message.success(t("common.addedToAssets"));
@@ -278,7 +282,7 @@ export default function VideoPage() {
     const deleteSelectedLogs = () => {
         const mediaKeys = logs
             .filter((log) => selectedLogIds.includes(log.id))
-            .map((log) => log.video?.storageKey)
+            .flatMap((log) => [log.video?.storageKey, log.video?.posterStorageKey])
             .filter((key): key is string => Boolean(key));
         void Promise.all([deleteStoredMedia(mediaKeys), ...selectedLogIds.map((id) => logStore.removeItem(id))]).then(() => refreshLogs());
         if (previewLog && selectedLogIds.includes(previewLog.id)) {
@@ -323,6 +327,8 @@ export default function VideoPage() {
                         id: nanoid(),
                         url: stored.url,
                         storageKey: stored.storageKey,
+                        posterUrl: stored.posterUrl,
+                        posterStorageKey: stored.posterStorageKey,
                         durationMs: Date.now() - log.createdAt,
                         width: stored.width || 1280,
                         height: stored.height || 720,
@@ -529,7 +535,9 @@ function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedV
     const { t } = useTranslation();
     return (
         <div className="overflow-hidden rounded-lg border border-stone-200 bg-background dark:border-stone-800">
-            <video src={video.url} controls className="aspect-video w-full bg-black object-contain" />
+            <div className="aspect-video w-full overflow-hidden bg-black">
+                <CanvasVideoPlayer nodeId={`workbench-${video.id}`} src={video.url} storageKey={video.storageKey} posterUrl={video.posterUrl} />
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-stone-200 px-3 py-2.5 dark:border-stone-800">
                 <div className="flex min-w-0 flex-wrap gap-x-2 gap-y-1 text-xs text-stone-500 dark:text-stone-400">
                     <span>
@@ -671,7 +679,7 @@ async function readStoredLogs() {
 }
 
 async function normalizeLog(log: Partial<GenerationLog>): Promise<GenerationLog> {
-    const video = log.video?.storageKey ? { ...log.video, url: await resolveMediaUrl(log.video.storageKey, log.video.url) } : log.video;
+    const video = log.video?.posterStorageKey ? { ...log.video, posterUrl: await resolveMediaUrl(log.video.posterStorageKey, log.video.posterUrl) } : log.video;
     const references = await Promise.all(
         (log.references || []).map(async (item) => ({
             ...item,
@@ -703,7 +711,7 @@ function serializeLog(log: GenerationLog): GenerationLog {
     return {
         ...log,
         references: log.references.map((item) => ({ ...item, dataUrl: item.storageKey ? "" : item.dataUrl })),
-        video: log.video?.storageKey ? { ...log.video, url: "" } : log.video,
+        video: log.video?.storageKey ? { ...log.video, url: "", posterUrl: log.video.posterStorageKey ? "" : log.video.posterUrl } : log.video,
     };
 }
 

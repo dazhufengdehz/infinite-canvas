@@ -14,7 +14,8 @@ import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { cn } from "@/lib/utils";
 import { PromptDetailDialog } from "@/pages/prompts/components/prompt-detail-dialog";
 import { fetchSourcePrompts, type Prompt } from "@/services/api/prompts";
-import { uploadMediaFile } from "@/services/file-storage";
+import { getMediaBlob, uploadMediaFile } from "@/services/file-storage";
+import { CanvasVideoPlayer, LazyAudioPlayer } from "./canvas-video-player";
 import { uploadImage } from "@/services/image-storage";
 import { useAssetStore, type Asset, type AssetKind } from "@/stores/use-asset-store";
 import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
@@ -438,9 +439,9 @@ const ASSET_GROUPS: { kind: AssetKind; icon: typeof Square }[] = [
 
 function buildInsertPayload(asset: Asset): InsertAssetPayload {
     if (asset.kind === "text") return { kind: "text", content: asset.data.content, title: asset.title };
-    if (asset.kind === "video") return { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, width: asset.data.width, height: asset.data.height };
-    if (asset.kind === "audio") return { kind: "audio", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, durationMs: asset.data.durationMs };
-    return { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title };
+    if (asset.kind === "video") return { kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, posterUrl: asset.data.posterUrl, posterStorageKey: asset.data.posterStorageKey, title: asset.title, width: asset.data.width, height: asset.data.height, mimeType: asset.data.mimeType };
+    if (asset.kind === "audio") return { kind: "audio", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, durationMs: asset.data.durationMs, mimeType: asset.data.mimeType };
+    return { kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title, mimeType: asset.data.mimeType };
 }
 
 const CanvasAssetsTab = memo(function CanvasAssetsTab({ onInsert, theme }: { onInsert: (payload: InsertAssetPayload) => void; theme: CanvasTheme }) {
@@ -511,7 +512,7 @@ function UserAssetsSection({ onInsert, theme }: { onInsert: (payload: InsertAsse
                     added += 1;
                 } else if (file.type.startsWith("video/")) {
                     const media = await uploadMediaFile(file, "video");
-                    addAsset({ kind: "video", title: file.name || t("assets.kinds.video"), coverUrl: "", tags: [], data: { url: media.url, storageKey: media.storageKey, width: media.width || 0, height: media.height || 0, bytes: media.bytes, mimeType: media.mimeType } });
+                    addAsset({ kind: "video", title: file.name || t("assets.kinds.video"), coverUrl: media.posterUrl || "", tags: [], data: { url: media.url, storageKey: media.storageKey, posterUrl: media.posterUrl, posterStorageKey: media.posterStorageKey, width: media.width || 0, height: media.height || 0, bytes: media.bytes, mimeType: media.mimeType } });
                     added += 1;
                 } else if (file.type.startsWith("audio/")) {
                     const media = await uploadMediaFile(file, "audio");
@@ -678,8 +679,9 @@ function AssetCover({ asset }: { asset: Asset }) {
         );
     }
     if (asset.kind === "video") {
-        if (asset.coverUrl) return <img src={asset.coverUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
-        return <video src={`${asset.data.url}#t=0.1`} muted playsInline preload="metadata" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
+        const posterUrl = asset.data.posterUrl || asset.coverUrl;
+        if (posterUrl) return <img src={posterUrl} alt="" className="size-full object-cover transition duration-300 group-hover:scale-[1.04]" />;
+        return <div className="flex size-full items-center justify-center"><Video className="size-6 text-orange-500/80 dark:text-orange-400/80" /></div>;
     }
     if (asset.kind === "audio") {
         return (
@@ -724,13 +726,12 @@ function UserAssetPreviewModal({
         }
     };
 
-    const handleDownload = () => {
+    const handleDownload = async () => {
         if (asset.kind === "image") {
             saveAs(asset.coverUrl || asset.data.dataUrl, `${asset.title || "image"}.${asset.data.mimeType?.split("/")[1] || "png"}`);
-        } else if (asset.kind === "video") {
-            saveAs(asset.data.url, `${asset.title || "video"}.${asset.data.mimeType?.split("/")[1] || "mp4"}`);
-        } else if (asset.kind === "audio") {
-            saveAs(asset.data.url, `${asset.title || "audio"}.${asset.data.mimeType?.split("/")[1] || "mp3"}`);
+        } else if (asset.kind === "video" || asset.kind === "audio") {
+            const blob = asset.data.storageKey ? await getMediaBlob(asset.data.storageKey) : null;
+            saveAs(blob || asset.data.url, `${asset.title || asset.kind}.${asset.data.mimeType?.split("/")[1] || (asset.kind === "video" ? "mp4" : "mp3")}`);
         }
     };
 
@@ -754,7 +755,7 @@ function UserAssetPreviewModal({
                                 {t("common.copy")}
                             </Button>
                         ) : (
-                            <Button size="small" icon={<Download className="size-3.5" />} onClick={handleDownload}>
+                            <Button size="small" icon={<Download className="size-3.5" />} onClick={() => void handleDownload()}>
                                 {t("common.download")}
                             </Button>
                         )}
@@ -785,7 +786,9 @@ function UserAssetPreviewModal({
                     </div>
                 ) : asset.kind === "video" ? (
                     <div className="flex flex-col items-center gap-2">
-                        <video src={asset.data.url} controls autoPlay className="max-h-[60vh] w-full rounded-lg bg-black" />
+                        <div className="aspect-video max-h-[60vh] w-full overflow-hidden rounded-lg bg-black">
+                            <CanvasVideoPlayer nodeId={`side-panel-${asset.id}`} src={asset.data.url} storageKey={asset.data.storageKey} posterUrl={asset.data.posterUrl} autoPlay />
+                        </div>
                         <div className="text-xs text-stone-400">
                             {asset.data.width ? `${asset.data.width}x${asset.data.height} · ` : ""}{formatBytes(asset.data.bytes)} · {asset.data.mimeType}
                         </div>
@@ -801,7 +804,7 @@ function UserAssetPreviewModal({
                                 {formatBytes(asset.data.bytes)} · {asset.data.mimeType}{asset.data.durationMs ? ` · ${Math.round(asset.data.durationMs / 1000)}s` : ""}
                             </div>
                         </div>
-                        <audio src={asset.data.url} controls autoPlay className="w-full max-w-md" />
+                        <LazyAudioPlayer src={asset.data.url} storageKey={asset.data.storageKey} autoPlay className="w-full max-w-md" />
                     </div>
                 ) : (
                     <div className="flex flex-col items-center gap-2">

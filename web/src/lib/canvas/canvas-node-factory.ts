@@ -97,7 +97,7 @@ export function imageMetadata(image: UploadedImage): CanvasNodeMetadata {
 }
 
 export function videoMetadata(video: UploadedFile): CanvasNodeMetadata {
-    return { content: video.url, storageKey: video.storageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
+    return { content: video.url, storageKey: video.storageKey, posterUrl: video.posterUrl, posterStorageKey: video.posterStorageKey, status: "success", naturalWidth: video.width, naturalHeight: video.height, bytes: video.bytes, mimeType: video.mimeType || "video/mp4", durationMs: video.durationMs };
 }
 
 export function audioMetadata(audio: UploadedFile): CanvasNodeMetadata {
@@ -233,6 +233,8 @@ export function cloneNodeMetadata(metadata?: CanvasNodeMetadata, nodeType?: Canv
         // AI 视频节点：清空视频产物，保留提示词、模型、时长、参考图等生成配置，就绪重置为 idle
         cloned.content = "";
         delete cloned.storageKey;
+        delete cloned.posterUrl;
+        delete cloned.posterStorageKey;
         delete cloned.naturalWidth;
         delete cloned.naturalHeight;
         delete cloned.bytes;

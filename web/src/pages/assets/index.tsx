@@ -7,7 +7,8 @@ import { useTranslation } from "react-i18next";
 import { useCopyText } from "@/hooks/use-copy-text";
 import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { uploadImage } from "@/services/image-storage";
-import { uploadMediaFile } from "@/services/file-storage";
+import { getMediaBlob, uploadMediaFile } from "@/services/file-storage";
+import { CanvasVideoPlayer, LazyAudioPlayer } from "@/components/canvas/canvas-video-player";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type AudioAsset, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
@@ -174,8 +175,9 @@ export default function AssetsPage() {
     const readVideoFile = async (file?: File) => {
         if (!file || !file.type.startsWith("video/")) return;
         const media = await uploadMediaFile(file, "video");
-        const draft = { url: media.url, storageKey: media.storageKey, width: media.width || 0, height: media.height || 0, bytes: media.bytes, mimeType: media.mimeType };
+        const draft = { url: media.url, storageKey: media.storageKey, posterUrl: media.posterUrl, posterStorageKey: media.posterStorageKey, width: media.width || 0, height: media.height || 0, bytes: media.bytes, mimeType: media.mimeType };
         setVideoDraft(draft);
+        if (!form.getFieldValue("coverUrl") && media.posterUrl) form.setFieldValue("coverUrl", media.posterUrl);
         if (!form.getFieldValue("title")) form.setFieldValue("title", file.name);
     };
 
@@ -184,11 +186,15 @@ export default function AssetsPage() {
         copyText(asset.data.content, t("assets.textCopied"));
     };
 
-    const downloadImage = (asset: Asset) => {
+    const downloadImage = async (asset: Asset) => {
         if (asset.kind !== "image" && asset.kind !== "video" && asset.kind !== "audio") return;
-        const url = asset.kind === "image" ? asset.data.dataUrl : asset.data.url;
         const ext = asset.data.mimeType.split("/")[1] || (asset.kind === "audio" ? "mp3" : "png");
-        saveAs(url, `${asset.title || "asset"}.${ext}`);
+        const filename = `${asset.title || "asset"}.${ext}`;
+        if (asset.kind !== "image" && asset.data.storageKey) {
+            const blob = await getMediaBlob(asset.data.storageKey);
+            if (blob) return saveAs(blob, filename);
+        }
+        saveAs(asset.kind === "image" ? asset.data.dataUrl : asset.data.url, filename);
     };
 
     const exportAllAssets = async () => {
@@ -393,7 +399,7 @@ export default function AssetsPage() {
                                     </Button>
                                     {audioDraft ? (
                                         <div className="mt-3 space-y-2">
-                                            <audio src={audioDraft.url} controls className="w-full" />
+                                            <LazyAudioPlayer src={audioDraft.url} storageKey={audioDraft.storageKey} />
                                             <Typography.Text type="secondary" className="block text-xs">
                                                 {formatBytes(audioDraft.bytes)} · {audioDraft.mimeType}{audioDraft.durationMs ? ` · ${Math.round(audioDraft.durationMs / 1000)}s` : ""}
                                             </Typography.Text>
@@ -413,7 +419,7 @@ export default function AssetsPage() {
                                     </Button>
                                     {videoDraft ? (
                                         <div className="mt-3 space-y-2">
-                                            <video src={videoDraft.url} controls className="aspect-video w-full max-h-48 rounded bg-black" />
+                                            <div className="aspect-video max-h-48 w-full overflow-hidden rounded bg-black"><CanvasVideoPlayer nodeId="video-draft" src={videoDraft.url} storageKey={videoDraft.storageKey} posterUrl={videoDraft.posterUrl} /></div>
                                             <Typography.Text type="secondary" className="block text-xs">
                                                 {videoDraft.width}x{videoDraft.height} · {formatBytes(videoDraft.bytes)} · {videoDraft.mimeType}
                                             </Typography.Text>
@@ -440,7 +446,7 @@ export default function AssetsPage() {
                                     ) : null}
                                 </div>
                             ) : formKind === "video" && videoDraft ? (
-                                <video src={`${videoDraft.url}#t=0.1`} className="aspect-[4/3] w-full object-cover bg-black" muted />
+                                videoDraft.posterUrl || coverUrl ? <img src={videoDraft.posterUrl || coverUrl} alt="" className="aspect-[4/3] w-full object-cover bg-black" /> : <div className="flex aspect-[4/3] w-full items-center justify-center bg-stone-100 dark:bg-stone-900"><Video className="size-10 text-orange-500" /></div>
                             ) : formKind === "text" ? (
                                 <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-stone-100 p-5 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
                                     <FileText className="size-10 text-blue-500" />
@@ -550,8 +556,8 @@ function AssetCardCover({ asset, onOpen }: { asset: Asset; onOpen: () => void })
     if (asset.kind === "video") {
         return (
             <button type="button" className="block w-full text-left" onClick={onOpen}>
-                {asset.data.url ? (
-                    <video src={`${asset.data.url}#t=0.1`} className="aspect-[4/3] w-full object-cover bg-black" muted />
+                {asset.data.posterUrl || asset.coverUrl ? (
+                    <img src={asset.data.posterUrl || asset.coverUrl} alt={asset.title} className="aspect-[4/3] w-full object-cover bg-black" />
                 ) : (
                     <div className="flex aspect-[4/3] flex-col items-center justify-center gap-2 bg-stone-100 p-5 text-stone-500 dark:bg-stone-900 dark:text-stone-400">
                         <Video className="size-10 text-orange-500" />
@@ -668,7 +674,7 @@ function AssetDrawer({ asset, onClose, onCopy, onDownload, onEdit }: { asset: As
                         </div>
                     ) : asset.kind === "video" ? (
                         asset.data.url ? (
-                            <video src={asset.data.url} controls className="aspect-video w-full rounded-lg bg-black" />
+                            <div className="aspect-video w-full overflow-hidden rounded-lg bg-black"><CanvasVideoPlayer nodeId={`drawer-cover-${asset.id}`} src={asset.data.url} storageKey={asset.data.storageKey} posterUrl={asset.data.posterUrl} /></div>
                         ) : (
                             <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-stone-200 bg-stone-50 py-8 px-4 text-stone-600 dark:border-stone-800 dark:bg-stone-900 dark:text-stone-300">
                                 <Video className="size-12 text-orange-500" />
@@ -701,10 +707,12 @@ function AssetDrawer({ asset, onClose, onCopy, onDownload, onEdit }: { asset: As
                         {asset.kind === "text" ? (
                             <Typography.Paragraph className="mt-2 whitespace-pre-wrap">{asset.data.content}</Typography.Paragraph>
                         ) : asset.kind === "video" ? (
-                            <video src={asset.data.url} controls className="mt-2 aspect-video w-full rounded-lg bg-black" />
+                            <div className="mt-2 aspect-video w-full overflow-hidden rounded-lg bg-black">
+                                <CanvasVideoPlayer nodeId={`drawer-content-${asset.id}`} src={asset.data.url} storageKey={asset.data.storageKey} posterUrl={asset.data.posterUrl} />
+                            </div>
                         ) : asset.kind === "audio" ? (
                             <div className="mt-2 space-y-2">
-                                <audio src={asset.data.url} controls className="w-full" />
+                                <LazyAudioPlayer src={asset.data.url} storageKey={asset.data.storageKey} />
                                 <Typography.Text type="secondary" className="block text-xs">
                                     {formatBytes(asset.data.bytes)} · {asset.data.mimeType}{asset.data.durationMs ? ` · ${Math.round(asset.data.durationMs / 1000)}s` : ""}
                                 </Typography.Text>

@@ -753,7 +753,7 @@ function ItemThumbnail({ item }: { item: CanvasResourceReference }) {
         return <img src={item.previewUrl} alt="" className="size-8 rounded-lg object-cover shrink-0" />;
     }
     if (item.kind === "video" && item.previewUrl) {
-        return <video src={item.previewUrl} className="size-8 rounded-lg bg-black object-cover shrink-0" muted preload="metadata" />;
+        return <img src={item.previewUrl} alt="" className="size-8 rounded-lg bg-black object-cover shrink-0" />;
     }
     const Icon = item.kind === "audio" ? Music2 : item.kind === "video" ? Video : item.kind === "image" ? ImageIcon : FileText;
     return (
