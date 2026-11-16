@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import i18n from "@/i18n";
-import { adaptWorkflowModelPaths, applyBindings, cancelJob, collectVideoAssetIds, ComfyuiAbortedError, ComfyuiApiError, ComfyuiJobCancelledError, ComfyuiJobError, ComfyuiJobLostError, ComfyuiJobNotFoundError, ComfyuiNetworkError, ComfyuiNoWorkflowError, ComfyuiTimeoutError, downloadAsset, generateRandomSeed, getComfyuiClientId, parseSize, pollComfyuiVideoJob, pollJob, pollJobRaw, queryComfyuiJobStatus, requestComfyuiImage, resetComfyuiBatchPollers, resetComfyuiClientIds, submitComfyuiVideoJob, submitJob, validateComfyuiWorkflow } from "@/services/api/comfyui";
+import { adaptWorkflowModelPaths, applyBindings, applyTextBindings, cancelJob, collectVideoAssetIds, ComfyuiAbortedError, ComfyuiApiError, ComfyuiJobCancelledError, ComfyuiJobError, ComfyuiJobLostError, ComfyuiJobNotFoundError, ComfyuiNetworkError, ComfyuiNoWorkflowError, ComfyuiTimeoutError, downloadAsset, generateRandomSeed, getComfyuiClientId, parseSize, pollComfyuiVideoJob, pollJob, pollJobRaw, queryComfyuiJobStatus, requestComfyuiAudio, requestComfyuiImage, requestComfyuiText, resetComfyuiBatchPollers, resetComfyuiClientIds, submitComfyuiVideoJob, submitJob, validateComfyuiWorkflow } from "@/services/api/comfyui";
+import { buildCustomWorkflowProfile } from "@/services/api/models";
 import type { ComfyuiWorkflowJson } from "@/services/api/comfyui";
 import { defaultConfig, findWorkflow, type AiConfig, type ModelChannel } from "@/stores/use-config-store";
 import { DEFAULT_BUILTIN_COMFYUI_DEPTH_VIDEO_WORKFLOW, DEFAULT_BUILTIN_COMFYUI_FACE_REFINE_WORKFLOW, DEFAULT_LOCAL_COMFYUI_T2I_WORKFLOW } from "@/services/api/comfyui-default-workflows";
@@ -182,6 +183,32 @@ describe("applyBindings", () => {
         expect((bound["1"] as TestWorkflowNode).inputs.text).toBe("新提示");
         expect((workflow["1"] as TestWorkflowNode).inputs.text).toBe("old");
         expect(bound["1"]).not.toBe(workflow["1"]);
+    });
+
+    it("binds audio slots and disables implicit seed fallback in strict slot mode", () => {
+        const workflow: ComfyuiWorkflowJson = {
+            "1": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "caption" } },
+            "2": { inputs: { text: "" }, class_type: "CLIPTextEncode", _meta: { title: "lyrics" } },
+            "3": { inputs: { value: 10 }, class_type: "PrimitiveInt", _meta: { title: "duration" } },
+            "4": { inputs: { seed: 123 }, class_type: "KSampler", _meta: { title: "采样器" } },
+        };
+        const bound = applyBindings(workflow, { caption: "治愈钢琴", lyrics: "星光", duration: 90, seed: 42, strictSlots: true });
+        expect((bound["1"] as TestWorkflowNode).inputs.value).toBe("治愈钢琴");
+        expect((bound["2"] as TestWorkflowNode).inputs.text).toBe("星光");
+        expect((bound["3"] as TestWorkflowNode).inputs.value).toBe(90);
+        expect((bound["4"] as TestWorkflowNode).inputs.seed).toBe(123);
+    });
+
+    it("does not inject unmarked text generator parameters in strict slot mode", () => {
+        const workflow: ComfyuiWorkflowJson = {
+            "1": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "prompt" } },
+            "2": { inputs: { max_length: 256, thinking: false, seed: 123 }, class_type: "TextGenerate", _meta: { title: "生成文本" } },
+            "3": { inputs: { image: "cached.png" }, class_type: "LoadImage", _meta: { title: "image" } },
+        };
+        const bound = applyTextBindings(workflow, { prompt: "你好", seed: 42, maxLength: 1024, thinking: true, strictSlots: true });
+        expect((bound["1"] as TestWorkflowNode).inputs.value).toBe("你好");
+        expect((bound["2"] as TestWorkflowNode).inputs).toEqual({ max_length: 256, thinking: false, seed: 123 });
+        expect((bound["3"] as TestWorkflowNode).inputs.image).toBe("cached.png");
     });
 });
 
@@ -1097,6 +1124,122 @@ describe("requestComfyuiImage", () => {
         expect(body.prompt["2"].inputs.value).toBe(1024);
         expect(body.prompt["3"].inputs.value).toBe(768);
         expect(body.prompt["4"].inputs.seed).toBe(result.seed);
+    });
+});
+
+describe("custom ComfyUI workflow execution", () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        fetchMock = vi.fn();
+        vi.stubGlobal("fetch", fetchMock);
+    });
+
+    afterEach(() => {
+        resetComfyuiBatchPollers();
+        vi.unstubAllGlobals();
+    });
+
+    it("derives reference quotas and optional parameters from marked slots", () => {
+        const profile = buildCustomWorkflowProfile({
+            id: "custom-video",
+            name: "自定义视频",
+            category: "omniVideo",
+            createdAt: 0,
+            json: {
+                "1": { inputs: { image: "" }, class_type: "LoadImage", _meta: { title: "ref_image_01" } },
+                "2": { inputs: { image: "" }, class_type: "LoadImage", _meta: { title: "ref_image_02" } },
+                "3": { inputs: { file: "" }, class_type: "LoadVideo", _meta: { title: "ref_video_01" } },
+            },
+        });
+        expect(profile.capabilityConfig.references).toMatchObject({ maxImages: 2, maxVideos: 1, maxAudios: 0 });
+        expect(profile.capabilityConfig.size).toBeUndefined();
+        expect(profile.capabilityConfig.duration).toBeUndefined();
+    });
+
+    it("rejects an unknown image or text workflow ID without falling back or fetching", async () => {
+        const config = buildComfyuiConfig();
+        config.channels[0].workflows = [{ id: "custom-image", name: "自定义图片", category: "t2i", createdAt: 0, json: FULL_FLOW_WORKFLOW }];
+        await expect(requestComfyuiImage({ config, channelId: "comfy", workflowId: "missing", prompt: "测试", skipLog: true })).rejects.toThrow("不存在");
+        await expect(requestComfyuiText({ config, channelId: "comfy", workflowId: "missing", prompt: "测试" })).rejects.toThrow("不存在");
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it("uses strict generic image bindings even when the model ID names a built-in model", async () => {
+        fetchMock.mockImplementation(nativeFlowWith("success"));
+        const config = buildComfyuiConfig();
+        config.channels[0].workflows = [{
+            id: "custom-image",
+            name: "自定义图片",
+            category: "t2i",
+            createdAt: 0,
+            json: {
+                "1": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "prompt" } },
+                "2": { inputs: {}, class_type: "SaveImage", _meta: { title: "output_image" } },
+                "3": { inputs: { seed: 123 }, class_type: "KSampler", _meta: { title: "采样器" } },
+                "4": { inputs: { value: 512 }, class_type: "PrimitiveInt", _meta: { title: "cached_width" } },
+            },
+        }];
+        const result = await requestComfyuiImage({ config, model: "image-qwen-2.1", channelId: "comfy", workflowId: "custom-image", prompt: "新提示", size: "not-a-size", seed: 42, skipLog: true });
+        expect(result.jobId).toBe("job_1");
+        const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/prompt"))!;
+        const body = JSON.parse(String((init as RequestInit).body)) as { prompt: Record<string, TestWorkflowNode> };
+        expect(body.prompt["1"].inputs.value).toBe("新提示");
+        expect(body.prompt["3"].inputs.seed).toBe(123);
+        expect(body.prompt["4"].inputs.value).toBe(512);
+    });
+
+    it("submits custom video without built-in size, duration, or seed injection", async () => {
+        fetchMock.mockImplementation(async () => Response.json({ prompt_id: "video-job" }));
+        const config = { ...buildComfyuiConfig(), size: "invalid-size", videoSeconds: "999" };
+        config.channels[0].workflows = [{
+            id: "custom-video",
+            name: "自定义视频",
+            category: "omniVideo",
+            createdAt: 0,
+            json: {
+                "1": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "prompt" } },
+                "2": { inputs: {}, class_type: "SaveVideo", _meta: { title: "output_video" } },
+                "3": { inputs: { seed: 123 }, class_type: "KSampler", _meta: { title: "采样器" } },
+                "4": { inputs: { value: 544 }, class_type: "PrimitiveInt", _meta: { title: "cached_width" } },
+                "5": { inputs: { value: 5 }, class_type: "PrimitiveInt", _meta: { title: "cached_duration" } },
+            },
+        }];
+        await expect(submitComfyuiVideoJob({ config, model: "omni-video-minimax-h3-int8-6step-selflift", channelId: "comfy", workflowId: "custom-video", prompt: "自定义动画" })).resolves.toMatchObject({ jobId: "video-job" });
+        const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+        const body = JSON.parse(String(init.body)) as { prompt: Record<string, TestWorkflowNode> };
+        expect(body.prompt["1"].inputs.value).toBe("自定义动画");
+        expect(body.prompt["3"].inputs.seed).toBe(123);
+        expect(body.prompt["4"].inputs.value).toBe(544);
+        expect(body.prompt["5"].inputs.value).toBe(5);
+    });
+
+    it("binds custom audio caption and lyrics without built-in duration or seed fallback", async () => {
+        fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+            const url = new URL(String(input));
+            if (url.pathname === "/prompt") return Response.json({ prompt_id: "audio-job" });
+            if (url.pathname === "/history/audio-job") return Response.json({ "audio-job": { status: { status_str: "success", completed: true }, outputs: { "3": { audio: [{ filename: "result.wav", type: "output", subfolder: "" }] } } } });
+            return Response.json({});
+        });
+        const config = buildComfyuiConfig();
+        config.channels[0].workflows = [{
+            id: "custom-audio",
+            name: "自定义音频",
+            category: "audio",
+            createdAt: 0,
+            json: {
+                "1": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "caption" } },
+                "2": { inputs: { value: "" }, class_type: "PrimitiveStringMultiline", _meta: { title: "lyrics" } },
+                "3": { inputs: {}, class_type: "SaveAudio", _meta: { title: "output_audio" } },
+                "4": { inputs: { seed: 123, duration: 10 }, class_type: "CustomAudioSampler", _meta: { title: "采样器" } },
+            },
+        }];
+        await expect(requestComfyuiAudio({ config, model: "audio-minimax-music-3", channelId: "comfy", workflowId: "custom-audio", prompt: "[caption] 钢琴 [lyrics] 星光", duration: 90, seed: 42 })).resolves.toMatchObject({ jobId: "audio-job" });
+        const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith("/prompt"))!;
+        const body = JSON.parse(String((init as RequestInit).body)) as { prompt: Record<string, TestWorkflowNode> };
+        expect(body.prompt["1"].inputs.value).toBe("钢琴");
+        expect(body.prompt["2"].inputs.value).toBe("星光");
+        expect(body.prompt["4"].inputs).toEqual({ seed: 123, duration: 10 });
     });
 });
 

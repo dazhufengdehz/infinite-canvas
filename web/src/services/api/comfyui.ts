@@ -2,7 +2,7 @@ import localforage from "localforage";
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
-import { findWorkflow, getDefaultWorkflow, modelOptionName, resolveModelChannel, resolveModelRequestConfig, type AiConfig, type ChannelModel, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
+import { findWorkflow, getDefaultWorkflow, modelOptionName, resolveModelChannel, resolveModelRequestConfig, type AiConfig, type ChannelModel, type ComfyWorkflowItem, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
 import {
     DEFAULT_COMFYUI_FRAME_VIDEO_WORKFLOW,
     DEFAULT_COMFYUI_I2I_WORKFLOW,
@@ -21,8 +21,12 @@ import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
 export { formatIngestSuccessMessage, ingestWorkflow, type IngestOptions, type IngestResult, type DetectedSlotInfo, type AmbiguityInfo } from "./comfyui-adapter";
 import {
+    buildCustomWorkflowProfile,
+    CUSTOM_WORKFLOW_CATEGORIES,
     dispatchComfyuiModelWorkflow,
+    findCustomWorkflow,
     getModelProfile,
+    parseAudioPrompt,
     validateModelExecution,
     IMAGE_RESOLUTION_PRESETS,
     type ImageResolutionTier,
@@ -103,12 +107,69 @@ export type ComfyuiWorkflowJson = Record<string, unknown>;
 
 export type ComfyuiBindings = {
     prompt?: string;
+    caption?: string;
+    lyrics?: string;
     width?: number;
     height?: number;
+    duration?: number;
     seed?: number;
     refImages?: string[];
     refMask?: string;
+    strictSlots?: boolean;
 };
+
+const MINIMAX_H3_EASY_TITLE = "minimax_h3_easy";
+const MINIMAX_H3_EASY_BRIDGE_TITLE = "minimax_h3_easy_media_bridge";
+const MINIMAX_H3_EASY_MAIN_TYPE = "MiniMaxH3Easy";
+const MINIMAX_H3_EASY_MEDIA_LOADER_TYPE = "MiniMaxH3EasyMediaLoader";
+const MINIMAX_H3_EASY_MEDIA_BRIDGE_TYPE = "MiniMaxH3EasyMediaBridge";
+
+type ComfyuiNodeRecord = {
+    class_type?: unknown;
+    inputs?: Record<string, unknown>;
+    _meta?: { title?: unknown };
+};
+
+export type MiniMaxH3EasyGraph = {
+    mainId: string;
+    mediaProviderId?: string;
+    mediaProviderKind?: "loader" | "bridge";
+    saveVideoId?: string;
+};
+
+function getComfyuiWorkflowNodeTitle(node: unknown): string {
+    if (typeof node !== "object" || node === null) return "";
+    const title = (node as { _meta?: { title?: unknown } })._meta?.title;
+    return typeof title === "string" ? title.trim().toLowerCase() : "";
+}
+
+/** 按 class_type 识别 Easy 主节点、媒体入口与保存节点，不要求人工标记槽位。 */
+export function detectMiniMaxH3EasyGraph(workflow: unknown): MiniMaxH3EasyGraph | undefined {
+    if (typeof workflow !== "object" || workflow === null) return undefined;
+    const nodes = workflow as Record<string, ComfyuiNodeRecord>;
+    let mainId = "";
+    let saveVideoId: string | undefined;
+    for (const [nodeId, node] of Object.entries(nodes)) {
+        if (typeof node !== "object" || node === null) continue;
+        const classType = typeof node.class_type === "string" ? node.class_type : "";
+        if (classType === MINIMAX_H3_EASY_MAIN_TYPE && !mainId) mainId = nodeId;
+        if (!saveVideoId && (classType === "SaveVideo" || classType === "VHS_VideoCombine")) saveVideoId = nodeId;
+    }
+    if (!mainId) return undefined;
+
+    const mediaLink = nodes[mainId]?.inputs?.media;
+    if (Array.isArray(mediaLink) && mediaLink.length > 0) {
+        const providerId = String(mediaLink[0]);
+        const providerClass = typeof nodes[providerId]?.class_type === "string" ? String(nodes[providerId]?.class_type) : "";
+        if (providerClass === MINIMAX_H3_EASY_MEDIA_LOADER_TYPE) {
+            return { mainId, mediaProviderId: providerId, mediaProviderKind: "loader", saveVideoId };
+        }
+        if (providerClass === MINIMAX_H3_EASY_MEDIA_BRIDGE_TYPE) {
+            return { mainId, mediaProviderId: providerId, mediaProviderKind: "bridge", saveVideoId };
+        }
+    }
+    return { mainId, saveVideoId };
+}
 
 /**
  * Validate a workflow JSON against a specific WorkflowCategory under the strict _meta.title protocol.
@@ -147,7 +208,7 @@ export function validateComfyuiWorkflow(
         "prompt", "seed", "width", "height", "duration",
         "first_frame", "last_frame", "ref_mask", "mask", "ref_mask_01",
         "output_image", "output_video", "output_text", "output_audio",
-        "caption", "lyrics",
+        "caption", "lyrics", MINIMAX_H3_EASY_TITLE, MINIMAX_H3_EASY_BRIDGE_TITLE,
     ];
 
     for (const slot of RESERVED_SINGLE_SLOTS) {
@@ -162,9 +223,69 @@ export function validateComfyuiWorkflow(
         }
     }
 
+    const h3EasyGraph = detectMiniMaxH3EasyGraph(workflow);
+    const h3EasyTitleIds = titleToNodeIds[MINIMAX_H3_EASY_TITLE];
+    const h3EasyBridgeTitleIds = titleToNodeIds[MINIMAX_H3_EASY_BRIDGE_TITLE];
+    const hasMiniMaxH3EasyAdapter = Boolean(h3EasyGraph);
+    if (!h3EasyGraph && (h3EasyTitleIds?.length || h3EasyBridgeTitleIds?.length)) {
+        return { ok: false, error: `"${MINIMAX_H3_EASY_TITLE}" / "${MINIMAX_H3_EASY_BRIDGE_TITLE}" 只适用于含 ${MINIMAX_H3_EASY_MAIN_TYPE} 主节点的 MiniMax H3 Easy 工作流` };
+    }
+    if (h3EasyGraph) {
+        if (category !== "omniVideo" && category !== "frameVideo") {
+            return { ok: false, error: "MiniMax H3 Easy 适配器只能用于全能参考视频或首尾帧视频工作流" };
+        }
+        const workflowNodes = workflow as Record<string, ComfyuiNodeRecord>;
+        const mainInputs = workflowNodes[h3EasyGraph.mainId]?.inputs;
+        if (!mainInputs) return { ok: false, error: "MiniMax H3 Easy 主节点缺少 inputs" };
+        for (const input of ["h3_bundle", "mode", "prompt", "resolution", "aspect_ratio", "width", "height", "seconds", "media"]) {
+            if (!(input in mainInputs)) return { ok: false, error: `MiniMax H3 Easy 主节点缺少必需输入 ${input}` };
+        }
+        const mediaLink = mainInputs.media;
+        if (!Array.isArray(mediaLink) || mediaLink.length === 0) {
+            return { ok: false, error: `MiniMax H3 Easy 主节点的 media 输入必须连接 ${MINIMAX_H3_EASY_MEDIA_LOADER_TYPE}（媒体加载器）或 ${MINIMAX_H3_EASY_MEDIA_BRIDGE_TYPE}（媒体桥），否则画布素材无处可传` };
+        }
+        const providerInputs = workflowNodes[h3EasyGraph.mediaProviderId || ""]?.inputs;
+        if (!providerInputs) return { ok: false, error: "MiniMax H3 Easy 的素材入口节点缺少 inputs（请使用媒体加载器或媒体桥）" };
+
+        if (h3EasyGraph.mediaProviderKind === "loader") {
+            if (!("media_state" in providerInputs)) {
+                return { ok: false, error: `${MINIMAX_H3_EASY_MEDIA_LOADER_TYPE} 缺少 media_state 输入，画布无法把素材写进去` };
+            }
+        } else if (h3EasyGraph.mediaProviderKind === "bridge") {
+            for (const input of ["image_count", "video_count", "audio_count"]) {
+                if (typeof providerInputs[input] !== "number") return { ok: false, error: `MiniMax H3 Easy Media Bridge 缺少数值输入 ${input}` };
+            }
+            for (const [inputName, value] of Object.entries(providerInputs)) {
+                const match = /^(image|video|audio)_(\d+)$/.exec(inputName);
+                if (!match) continue;
+                const kind = match[1];
+                const index = Number(match[2]);
+                const max = kind === "image" ? 9 : 3;
+                if (index < 1 || index > max) return { ok: false, error: `MiniMax H3 Easy ${kind} 输入最多支持 ${max} 个` };
+                if (!Array.isArray(value) || value.length === 0) continue;
+                const expectedTitle = `ref_${kind}_${String(index).padStart(2, "0")}`;
+                if (getComfyuiWorkflowNodeTitle(workflowNodes[String(value[0])]) !== expectedTitle) {
+                    return { ok: false, error: `Media Bridge 的 ${inputName} 必须直接连接并标记为 ${expectedTitle}（或改用媒体加载器传素材）` };
+                }
+            }
+            for (const title of presentTitles) {
+                const match = /^ref_(image|video|audio)_(\d+)$/.exec(title);
+                if (!match) continue;
+                const kind = match[1];
+                const index = Number(match[2]);
+                const bridgeValue = providerInputs[`${kind}_${index}`];
+                if (!Array.isArray(bridgeValue) || String(bridgeValue[0]) !== titleToNodeIds[title]?.[0]) {
+                    return { ok: false, error: `${title} 必须接入 Media Bridge 的 ${kind}_${index} 输入` };
+                }
+            }
+        } else {
+            return { ok: false, error: `MiniMax H3 Easy 主节点的 media 输入必须连接 ${MINIMAX_H3_EASY_MEDIA_LOADER_TYPE} 或 ${MINIMAX_H3_EASY_MEDIA_BRIDGE_TYPE}` };
+        }
+    }
+
     // 2. 输出标记检查
     const hasOutputImage = Boolean(titleToNodeIds["output_image"]?.length || titleToNodeIds["out_image"]?.length);
-    const hasOutputVideo = Boolean(titleToNodeIds["output_video"]?.length);
+    const hasOutputVideo = Boolean(titleToNodeIds["output_video"]?.length || h3EasyGraph?.saveVideoId);
     const hasOutputText = Boolean(titleToNodeIds["output_text"]?.length);
     const hasOutputAudio = Boolean(titleToNodeIds["output_audio"]?.length);
 
@@ -199,7 +320,7 @@ export function validateComfyuiWorkflow(
     }
 
     // 3. 各分类针对性槽位检查
-    const hasPrompt = Boolean(titleToNodeIds["prompt"]?.length);
+    const hasPrompt = Boolean(titleToNodeIds["prompt"]?.length || hasMiniMaxH3EasyAdapter);
     const hasRefMask = Boolean(titleToNodeIds["ref_mask"]?.length || titleToNodeIds["mask"]?.length || titleToNodeIds["ref_mask_01"]?.length);
     const hasFirstFrame = Boolean(titleToNodeIds["first_frame"]?.length);
     const hasLastFrame = Boolean(titleToNodeIds["last_frame"]?.length);
@@ -289,7 +410,7 @@ export function validateComfyuiWorkflow(
             break;
 
         case "frameVideo":
-            if (!hasFirstFrame || !hasLastFrame) {
+            if (!hasMiniMaxH3EasyAdapter && (!hasFirstFrame || !hasLastFrame)) {
                 return { ok: false, error: "首尾帧视频工作流必须同时包含 \"first_frame\" 与 \"last_frame\" 槽位节点" };
             }
             if (hasRefVideo || hasRefAudio) {
@@ -363,12 +484,18 @@ export function applyBindings(workflow: ComfyuiWorkflowJson, params: ComfyuiBind
         if (title === "prompt" && params.prompt !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.prompt[record.class_type] || ("value" in record.inputs ? "value" : "text" in record.inputs ? "text" : "prompt" in record.inputs ? "prompt" : undefined);
             value = params.prompt;
+        } else if ((title === "caption" || title === "lyrics") && params[title] !== undefined) {
+            slot = BINDING_TITLE_TO_INPUT_SLOT[title][record.class_type] || ("value" in record.inputs ? "value" : "text" in record.inputs ? "text" : title in record.inputs ? title : undefined);
+            value = params[title];
         } else if (title === "width" && params.width !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.width[record.class_type] || ("value" in record.inputs ? "value" : "width" in record.inputs ? "width" : undefined);
             value = params.width;
         } else if (title === "height" && params.height !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.height[record.class_type] || ("value" in record.inputs ? "value" : "height" in record.inputs ? "height" : undefined);
             value = params.height;
+        } else if (title === "duration" && params.duration !== undefined) {
+            slot = BINDING_TITLE_TO_INPUT_SLOT.duration[record.class_type] || ("value" in record.inputs ? "value" : "duration" in record.inputs ? "duration" : "Number" in record.inputs ? "Number" : undefined);
+            value = slot === "Number" ? String(params.duration) : params.duration;
         } else if (title === "seed" && params.seed !== undefined) {
             slot = BINDING_TITLE_TO_INPUT_SLOT.seed[record.class_type];
             if (!slot) {
@@ -392,7 +519,7 @@ export function applyBindings(workflow: ComfyuiWorkflowJson, params: ComfyuiBind
         if (slot) record.inputs[slot] = value;
     }
     // Fallback: if no node had _meta.title === "seed", find any sampler with a literal numeric seed
-    if (!boundSeed && params.seed !== undefined) {
+    if (!boundSeed && params.seed !== undefined && !params.strictSlots) {
         for (const node of Object.values(cloned)) {
             if (typeof node !== "object" || node === null) continue;
             const record = node as NodeRecord;
@@ -2178,6 +2305,39 @@ function imageReferenceSlots(workflow: ComfyuiWorkflowJson) {
         .sort();
 }
 
+function resolveRequestChannel(config: AiConfig, rawModel: string, channelId?: string) {
+    if (!channelId) return resolveModelChannel(config, rawModel);
+    const channel = config.channels.find((item) => item.id === channelId);
+    if (!channel) throw new ComfyuiApiError(`所选渠道「${channelId}」不存在，请重新选择渠道后执行`);
+    return channel;
+}
+
+function findExactRequestedWorkflow(config: AiConfig, channelId: string, workflowId?: string) {
+    if (!workflowId) return undefined;
+    const workflow = findWorkflow(config, channelId, workflowId);
+    if (workflow?.id !== workflowId) {
+        throw new ComfyuiApiError(`所选工作流「${workflowId}」不存在，请重新选择工作流后执行`);
+    }
+    return workflow;
+}
+
+function resolveCustomWorkflowExecution(
+    channel: ModelChannel,
+    target: ComfyWorkflowItem | undefined,
+    categories: WorkflowCategory[],
+) {
+    const workflow = findCustomWorkflow(channel, target?.id);
+    if (!workflow) return undefined;
+    if (!categories.includes(workflow.category)) {
+        throw new ComfyuiError(`所选工作流「${workflow.name}」的分类与当前生成类型不一致，请重新选择`);
+    }
+    const validation = validateComfyuiWorkflow(workflow.json, workflow.category);
+    if (!validation.ok) {
+        throw new ComfyuiError(`自定义工作流「${workflow.name}」校验失败：${validation.error}`);
+    }
+    return { workflow, profile: buildCustomWorkflowProfile(workflow) };
+}
+
 /**
  * Run a full ComfyUI image generation: resolve the channel and model, bind the
  * generation params into the model's workflow, submit the job, poll it until
@@ -2198,20 +2358,21 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
     try {
         const rawModel = req.model || req.config.imageModel || req.config.model;
         requestConfig = resolveModelRequestConfig(req.config, rawModel);
-        const channel = resolveModelChannel(req.config, rawModel);
+        const channel = resolveRequestChannel(req.config, rawModel, req.channelId);
         channelName = channel.name;
         const requestModel = modelOptionName(rawModel);
         const channelModel = channel.models.find((model) => model.name === requestModel);
         const references = req.references || [];
         const isI2i = references.length > 0;
-        const category: WorkflowCategory = req.category || (isI2i ? "i2i" : "t2i");
+        const requestedCategory: WorkflowCategory = req.category || (isI2i ? "i2i" : "t2i");
         const channelId = req.channelId || req.config.channelId || channel.id;
         const workflowId = req.workflowId || req.config.workflowId;
         const targetWorkflowItem = workflowId
-            ? findWorkflow(req.config, channelId, workflowId, category)
+            ? findExactRequestedWorkflow(req.config, channelId, workflowId)
             : Array.isArray(channel.workflows)
-              ? getDefaultWorkflow(channel, category)
+              ? getDefaultWorkflow(channel, requestedCategory)
               : undefined;
+        const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, CUSTOM_WORKFLOW_CATEGORIES.image);
         const channelWorkflow = isI2i
             ? (channelModel && isI2iWorkflowModel(channelModel) ? channelModel.comfyuiWorkflow : undefined) ||
               channel.comfyuiI2iWorkflow ||
@@ -2220,9 +2381,12 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
               channel.comfyuiT2iWorkflow ||
               channel.models.find((m) => isT2iWorkflowModel(m))?.comfyuiWorkflow;
 
-        const modelProfile = getModelProfile(req.model || targetWorkflowItem?.id || targetWorkflowItem?.name || rawModel);
-        if (modelProfile) {
-            validateModelExecution(modelProfile, {
+        const modelProfile = customExecution
+            ? undefined
+            : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || req.model || rawModel);
+        const validationProfile = customExecution?.profile || modelProfile;
+        if (validationProfile) {
+            validateModelExecution(validationProfile, {
                 imagesCount: references.length,
                 size: req.size,
             });
@@ -2240,26 +2404,32 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
         const token = channel.comfyuiProxyToken;
 
         if (!jobId) {
-            if (!modelProfile) {
+            if (!validationProfile) {
                 const referenceSlots = imageReferenceSlots(workflow.json);
                 if (references.length && !referenceSlots.length) throw new ComfyuiError(i18n.t("comfyui.noImageReferenceSlot"));
                 if (references.length > referenceSlots.length) throw new ComfyuiError(i18n.t("comfyui.imageReferenceLimit", { count: referenceSlots.length }));
             }
 
+            const shouldBindSize = !customExecution || Boolean(customExecution.profile.capabilityConfig.size);
             const isAutoOrEmptySize = !req.size || req.size.toLowerCase() === "auto";
-            const size = parseSize(req.size);
+            const size = shouldBindSize ? parseSize(req.size) : undefined;
             if (seed === undefined) seed = generateRandomSeed();
-            const refImages = await Promise.all(references.map((image, index) => uploadComfyuiAsset(baseUrl, token, image.dataUrl, image.name || `ref_image_${index + 1}.png`, req.signal)));
+            const uploadedImages = await Promise.all(references.map((image, index) => uploadComfyuiAsset(baseUrl, token, image.dataUrl, image.name || `ref_image_${index + 1}.png`, req.signal)));
+            const isCustomInpaint = customExecution?.workflow.category === "inpaint";
+            const refImages = isCustomInpaint ? [uploadedImages[0], ...uploadedImages.slice(2)] : uploadedImages;
+            const refMask = isCustomInpaint ? uploadedImages[1] : undefined;
+            const width = shouldBindSize && !isAutoOrEmptySize ? size?.width : undefined;
+            const height = shouldBindSize && !isAutoOrEmptySize ? size?.height : undefined;
             const boundWorkflow = modelProfile
                 ? dispatchComfyuiModelWorkflow(modelProfile, workflow.json, {
                       prompt: req.prompt,
-                      width: isAutoOrEmptySize ? undefined : size.width,
-                      height: isAutoOrEmptySize ? undefined : size.height,
+                      width,
+                      height,
                       seed,
                       step: req.step ?? req.config.step,
-                      assetIds: refImages,
+                      assetIds: uploadedImages,
                   })
-                : applyBindings(workflow.json, { prompt: req.prompt, width: isAutoOrEmptySize ? undefined : size.width, height: isAutoOrEmptySize ? undefined : size.height, seed, refImages });
+                : applyBindings(workflow.json, { prompt: req.prompt, width, height, seed, refImages, refMask, strictSlots: Boolean(customExecution) });
             jobId = await submitJob(boundWorkflow, baseUrl, token);
             req.onProgress?.("submitted", { jobId });
         }
@@ -2387,18 +2557,24 @@ export async function requestComfyuiInpaint(req: ComfyuiInpaintRequest): Promise
     let seed: number | undefined = req.seed;
     try {
         const rawModel = req.model || req.config.imageModel || req.config.model;
-        const channel = resolveModelChannel(req.config, rawModel);
+        const channel = resolveRequestChannel(req.config, rawModel, req.channelId);
         channelName = channel.name;
         const requestModel = modelOptionName(rawModel);
         const channelModel = channel.models.find((model) => model.name === requestModel);
         const channelId = req.channelId || req.config.channelId || channel.id;
         const workflowId = req.workflowId || req.config.workflowId;
         const targetWorkflowItem = workflowId
-            ? findWorkflow(req.config, channelId, workflowId, "inpaint")
+            ? findExactRequestedWorkflow(req.config, channelId, workflowId)
             : Array.isArray(channel.workflows)
               ? getDefaultWorkflow(channel, "inpaint")
               : undefined;
-        const modelProfile = getModelProfile(req.model || targetWorkflowItem?.id || targetWorkflowItem?.name || rawModel || "inpaint");
+        const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, ["inpaint"]);
+        const modelProfile = customExecution
+            ? undefined
+            : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || req.model || rawModel || "inpaint");
+        if (customExecution) {
+            validateModelExecution(customExecution.profile, { imagesCount: 2 });
+        }
         const profileWorkflow = modelProfile ? getWorkflowForModelProfile(modelProfile.id) : undefined;
         const inpaintWorkflow =
             targetWorkflowItem
@@ -2436,6 +2612,7 @@ export async function requestComfyuiInpaint(req: ComfyuiInpaintRequest): Promise
                       seed,
                       refImages: [refAssetId],
                       refMask: maskAssetId,
+                      strictSlots: Boolean(customExecution),
                   });
 
             // 3. Submit job
@@ -2597,6 +2774,7 @@ export function applyTextBindings(
         seed?: number;
         maxLength?: number;
         thinking?: boolean;
+        strictSlots?: boolean;
     },
 ): ComfyuiWorkflowJson {
     const cloned = structuredClone(workflow);
@@ -2630,7 +2808,7 @@ export function applyTextBindings(
             if ("value" in record.inputs) record.inputs.value = promptVal;
             else if ("text" in record.inputs) record.inputs.text = promptVal;
             else if ("prompt" in record.inputs) record.inputs.prompt = promptVal;
-        } else if (title === "image" || title === "ref_image_01" || title === "ref_image") {
+        } else if (title === "ref_image_01" || title === "ref_image" || (!params.strictSlots && title === "image")) {
             imageNodeId = nodeId;
         } else if (title === "seed" && params.seed !== undefined && record.inputs) {
             if ("value" in record.inputs) record.inputs.value = params.seed;
@@ -2667,7 +2845,7 @@ export function applyTextBindings(
     }
 
     // 3. Fallback: handle seed only if no node has _meta.title === "seed"
-    if (params.seed !== undefined && !boundSeedTitle) {
+    if (params.seed !== undefined && !boundSeedTitle && !params.strictSlots) {
         for (const node of Object.values(cloned)) {
             if (typeof node !== "object" || node === null) continue;
             const record = node as NodeRecord;
@@ -2681,7 +2859,7 @@ export function applyTextBindings(
     }
 
     // 4. Handle text generator parameters: max_length, thinking
-    for (const node of Object.values(cloned)) {
+    for (const node of params.strictSlots ? [] : Object.values(cloned)) {
         if (typeof node !== "object" || node === null) continue;
         const record = node as NodeRecord;
         if (!record.inputs) continue;
@@ -2806,17 +2984,21 @@ export async function requestComfyuiText(req: ComfyuiTextRequest): Promise<{ tex
     let seed: number | undefined = req.seed;
     try {
         const rawModel = req.model || req.config.textModel || req.config.model;
-        const channel = resolveModelChannel(req.config, rawModel);
+        const channel = resolveRequestChannel(req.config, rawModel, req.channelId);
         channelName = channel.name;
         const requestModel = modelOptionName(rawModel);
         const channelModel = channel.models.find((model) => model.name === requestModel);
         const channelId = req.channelId || req.config.channelId || channel.id;
         const workflowId = req.workflowId || req.config.workflowId;
         const targetWorkflowItem = workflowId
-            ? findWorkflow(req.config, channelId, workflowId, "text")
+            ? findExactRequestedWorkflow(req.config, channelId, workflowId)
             : Array.isArray(channel.workflows)
               ? getDefaultWorkflow(channel, "text")
               : undefined;
+        const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, CUSTOM_WORKFLOW_CATEGORIES.text);
+        if (customExecution) {
+            validateModelExecution(customExecution.profile, { imagesCount: req.imageDataUrl ? 1 : 0 });
+        }
         const textWorkflow =
             targetWorkflowItem
                 ? { json: targetWorkflowItem.json }
@@ -2843,6 +3025,7 @@ export async function requestComfyuiText(req: ComfyuiTextRequest): Promise<{ tex
                 seed,
                 maxLength: req.maxLength,
                 thinking: req.thinking,
+                strictSlots: Boolean(customExecution),
             });
 
             jobId = await submitJob(boundWorkflow, baseUrl, token);
@@ -3047,6 +3230,86 @@ export function collectAudioAssetIds(outputs: unknown): string[] {
  * Deep-copy a video workflow and bind prompt, reference images, and random seed.
  */
 
+/** Easy 的 widget 可能被 Primitive 节点接管，此时改写上游字面量而保留连线。 */
+function setMiniMaxH3EasyInput(
+    nodes: Record<string, ComfyuiNodeRecord>,
+    nodeId: string,
+    key: string,
+    value: string | number,
+): boolean {
+    const inputs = nodes[nodeId]?.inputs;
+    if (!inputs) return false;
+    const current = inputs[key];
+    if (Array.isArray(current) && current.length > 0) {
+        const upstreamInputs = nodes[String(current[0])]?.inputs;
+        if (!upstreamInputs) return false;
+        for (const upstreamKey of ["value", "Number", "Int", "text", "prompt", "string"]) {
+            if (!(upstreamKey in upstreamInputs)) continue;
+            upstreamInputs[upstreamKey] = upstreamKey === "Number" && typeof value === "number" ? String(value) : value;
+            return true;
+        }
+        return false;
+    }
+    inputs[key] = value;
+    return true;
+}
+
+function applyMiniMaxH3EasyBindings(
+    workflow: ComfyuiWorkflowJson,
+    graph: MiniMaxH3EasyGraph,
+    params: {
+        prompt: string;
+        assetIds?: string[];
+        videoAssetIds?: string[];
+        audioAssetIds?: string[];
+        firstFrameAssetId?: string;
+        lastFrameAssetId?: string;
+        videoMode?: "omni" | "frame";
+        width?: number;
+        height?: number;
+        duration?: number;
+    },
+): void {
+    const nodes = workflow as Record<string, ComfyuiNodeRecord>;
+    if (params.prompt) setMiniMaxH3EasyInput(nodes, graph.mainId, "prompt", params.prompt);
+    if (params.width !== undefined) setMiniMaxH3EasyInput(nodes, graph.mainId, "width", params.width);
+    if (params.height !== undefined) setMiniMaxH3EasyInput(nodes, graph.mainId, "height", params.height);
+    if (params.width !== undefined || params.height !== undefined) {
+        setMiniMaxH3EasyInput(nodes, graph.mainId, "resolution", "custom");
+    }
+    if (params.duration !== undefined) setMiniMaxH3EasyInput(nodes, graph.mainId, "seconds", Number(params.duration));
+
+    const isFrameMode = params.videoMode === "frame";
+    const images = isFrameMode
+        ? [params.firstFrameAssetId, params.lastFrameAssetId].filter((id): id is string => Boolean(id))
+        : params.assetIds || [];
+    const videos = isFrameMode ? [] : params.videoAssetIds || [];
+    const audios = isFrameMode ? [] : params.audioAssetIds || [];
+    const mainInputs = nodes[graph.mainId]?.inputs;
+    const declaredMode = typeof mainInputs?.mode === "string" ? String(mainInputs.mode) : "";
+    const targetMode = isFrameMode
+        ? "image"
+        : declaredMode === "digital_human" && audios.length === 1
+        ? "digital_human"
+        : "reference";
+    setMiniMaxH3EasyInput(nodes, graph.mainId, "mode", targetMode);
+    if (isFrameMode) setMiniMaxH3EasyInput(nodes, graph.mainId, "keyframe_role", "first");
+
+    if (graph.mediaProviderKind === "loader" && graph.mediaProviderId) {
+        const inputs = nodes[graph.mediaProviderId]?.inputs;
+        if (!inputs) return;
+        inputs.media_state = JSON.stringify({
+            images: images.map((filename) => ({ filename })),
+            videos: videos.map((filename) => ({ filename })),
+            audios: audios.map((filename) => ({ filename })),
+        });
+    } else if (graph.mediaProviderKind === "bridge" && graph.mediaProviderId) {
+        setMiniMaxH3EasyInput(nodes, graph.mediaProviderId, "image_count", images.length);
+        setMiniMaxH3EasyInput(nodes, graph.mediaProviderId, "video_count", videos.length);
+        setMiniMaxH3EasyInput(nodes, graph.mediaProviderId, "audio_count", audios.length);
+    }
+}
+
 export function applyVideoBindings(
     workflow: ComfyuiWorkflowJson,
     params: {
@@ -3061,9 +3324,12 @@ export function applyVideoBindings(
         height?: number;
         duration?: number;
         seed?: number;
+        strictSlots?: boolean;
     },
 ): ComfyuiWorkflowJson {
     const cloned = structuredClone(workflow);
+    const miniMaxH3EasyGraph = detectMiniMaxH3EasyGraph(cloned);
+    if (miniMaxH3EasyGraph) applyMiniMaxH3EasyBindings(cloned, miniMaxH3EasyGraph, params);
     type NodeRecord = {
         class_type?: string;
         inputs?: Record<string, unknown>;
@@ -3120,7 +3386,7 @@ export function applyVideoBindings(
                 if (params.assetIds[idx]) {
                     record.inputs.image = params.assetIds[idx];
                 }
-            } else if (title === "ref_image" || title === "image" || title.includes("input_image")) {
+            } else if (title === "ref_image" || (!params.strictSlots && (title === "image" || title.includes("input_image")))) {
                 const assetId = params.assetIds[refIndex % params.assetIds.length];
                 refIndex++;
                 record.inputs.image = assetId;
@@ -3155,7 +3421,7 @@ export function applyVideoBindings(
             }
         }
 
-        if (params.seed !== undefined) {
+        if (params.seed !== undefined && (!params.strictSlots || title === "seed" || miniMaxH3EasyGraph)) {
             if ("seed" in record.inputs) record.inputs.seed = params.seed;
             else if ("sampling_mode.seed" in record.inputs) record.inputs["sampling_mode.seed"] = params.seed;
             else if ("noise_seed" in record.inputs) record.inputs.noise_seed = params.seed;
@@ -3163,7 +3429,7 @@ export function applyVideoBindings(
         }
     }
 
-    if (!boundPrompt && params.prompt) {
+    if (!boundPrompt && params.prompt && !params.strictSlots) {
         for (const node of Object.values(cloned)) {
             if (typeof node !== "object" || node === null) continue;
             const record = node as NodeRecord;
@@ -3376,10 +3642,7 @@ export function validateVideoToolInputs(category: "faceRefine" | "depthVideo", i
 }
 
 function resolveVideoRequestChannel(req: ComfyuiVideoRequest, rawModel: string): ModelChannel {
-    if (!req.channelId) return resolveModelChannel(req.config, rawModel);
-    const channel = req.config.channels.find((item) => item.id === req.channelId);
-    if (!channel) throw new ComfyuiApiError(`所选渠道「${req.channelId}」不存在，请重新选择渠道后执行`);
-    return channel;
+    return resolveRequestChannel(req.config, rawModel, req.channelId);
 }
 
 export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{ jobId: string; baseUrl: string; token?: string }> {
@@ -3398,9 +3661,13 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
     if (workflowId && targetWorkflowItem?.id !== workflowId) {
         throw addComfyuiChannelContext(new ComfyuiApiError(`所选工作流「${workflowId}」不存在，请重新选择工作流后执行`), channel.name);
     }
+    const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, [...CUSTOM_WORKFLOW_CATEGORIES.video, "faceRefine", "depthVideo"]);
     const isVideoTool = targetWorkflowItem?.category === "faceRefine" || targetWorkflowItem?.category === "depthVideo";
-    const modelProfile = isVideoTool ? undefined : getModelProfile(req.model || targetWorkflowItem?.id || targetWorkflowItem?.name || rawModel || initialVideoMode);
-    const isFrameWorkflow = targetWorkflowItem?.category === "frameVideo";
+    const modelProfile = customExecution || isVideoTool
+        ? undefined
+        : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || req.model || rawModel || initialVideoMode);
+    const isEasyWorkflow = Boolean(targetWorkflowItem && detectMiniMaxH3EasyGraph(targetWorkflowItem.json));
+    const isFrameWorkflow = targetWorkflowItem?.category === "frameVideo" && !isEasyWorkflow;
     const isFrameMode = !isVideoTool && (modelProfile?.category === "frameVideo" || isFrameWorkflow || initialVideoMode === "frame");
     const videoMode = isFrameMode ? "frame" : "omni";
     const frameImages: ReferenceImage[] = [];
@@ -3415,8 +3682,9 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
             frameImages.push(candidate);
         }
     }
-    if (modelProfile) {
-        validateModelExecution(modelProfile, {
+    const validationProfile = customExecution?.profile || modelProfile;
+    if (validationProfile) {
+        validateModelExecution(validationProfile, {
             imagesCount: isFrameMode ? frameImages.length : (req.references?.length || 0),
             videosCount: req.referenceVideos?.length || 0,
             audiosCount: req.referenceAudios?.length || 0,
@@ -3465,7 +3733,7 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
 
         if (videoMode === "frame") {
             // 首尾帧模式 - 严格校验（Fail-loud）：在任何上传之前先校验数量/类型
-            if (frameImages.length > 2) {
+            if ((!customExecution || isEasyWorkflow) && frameImages.length > 2) {
                 throw new ComfyuiError(`首尾帧模式最多支持 2 张参考图，已连接 ${frameImages.length} 张`);
             }
             if ((req.referenceVideos && req.referenceVideos.length > 0) || (req.referenceAudios && req.referenceAudios.length > 0)) {
@@ -3478,6 +3746,11 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
             }
             if (lastFrameImg?.dataUrl) {
                 lastFrameAssetId = await uploadComfyuiAsset(baseUrl, token, lastFrameImg.dataUrl, "last_frame.png", req.signal);
+            }
+            if (customExecution) {
+                for (const [index, image] of frameImages.slice(2).entries()) {
+                    if (image.dataUrl) assetIds.push(await uploadComfyuiAsset(baseUrl, token, image.dataUrl, `ref_${index + 1}.png`, req.signal));
+                }
             }
         } else {
             // 全能参考模式 - 严格校验（Fail-loud）
@@ -3531,10 +3804,12 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
             }
         }
 
+        const shouldBindSize = !customExecution || Boolean(customExecution.profile.capabilityConfig.size);
+        const shouldBindDuration = !customExecution || Boolean(customExecution.profile.capabilityConfig.duration);
         const sizeMatch = (req.config.size || "").match(/^(\d+)x(\d+)$/);
-        const width = sizeMatch ? Number(sizeMatch[1]) : 544;
-        const height = sizeMatch ? Number(sizeMatch[2]) : 960;
-        const duration = req.config.videoSeconds ? Number(req.config.videoSeconds) : 5;
+        const width = shouldBindSize ? (sizeMatch ? Number(sizeMatch[1]) : 544) : undefined;
+        const height = shouldBindSize ? (sizeMatch ? Number(sizeMatch[2]) : 960) : undefined;
+        const duration = shouldBindDuration ? (req.config.videoSeconds ? Number(req.config.videoSeconds) : 5) : undefined;
 
         const seed = req.seed !== undefined ? req.seed : generateRandomSeed() % 1_000_000_000;
         const boundWorkflow = modelProfile
@@ -3563,6 +3838,7 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
                   width,
                   height,
                   duration,
+                  strictSlots: Boolean(customExecution),
               });
 
         const jobId = await submitJob(boundWorkflow, baseUrl, token);
@@ -3670,18 +3946,19 @@ export type ComfyuiAudioResult = {
 
 export async function requestComfyuiAudio(req: ComfyuiAudioRequest): Promise<ComfyuiAudioResult> {
     const rawModel = req.model || req.config.audioModel || req.config.model;
-    const channel = req.channelId
-        ? req.config.channels?.find((c) => c.id === req.channelId) || resolveModelChannel(req.config, rawModel)
-        : resolveModelChannel(req.config, rawModel);
+    const channel = resolveRequestChannel(req.config, rawModel, req.channelId);
     const baseUrl = (channel.comfyuiProxyUrl || "").trim();
     const token = channel.comfyuiProxyToken;
+    const workflowId = req.workflowId || req.config.workflowId;
+    const targetWorkflowItem = workflowId
+        ? findExactRequestedWorkflow(req.config, channel.id, workflowId)
+        : getDefaultWorkflow(channel, "audio");
+    const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, CUSTOM_WORKFLOW_CATEGORIES.audio);
+    const modelProfile = customExecution
+        ? undefined
+        : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || rawModel || "audio-minimax-music-3");
 
-    const modelProfile = getModelProfile(rawModel || "audio-minimax-music-3");
-
-    let workflowItem = req.workflowId ? findWorkflow(req.config, channel.id, req.workflowId, "audio") : undefined;
-    if (!workflowItem) {
-        workflowItem = getDefaultWorkflow(channel, "audio");
-    }
+    let workflowItem = targetWorkflowItem;
     if (!workflowItem && modelProfile) {
         workflowItem = getWorkflowForModelProfile(modelProfile.id);
     }
@@ -3705,9 +3982,17 @@ export async function requestComfyuiAudio(req: ComfyuiAudioRequest): Promise<Com
     let jobId = req.jobId || "";
     try {
         if (!jobId) {
-            const profileToUse = modelProfile || getModelProfile("audio-minimax-music-3")!;
-            validateModelExecution(profileToUse, { prompt: req.prompt, duration });
-            const boundWorkflow = dispatchComfyuiModelWorkflow(profileToUse, workflowItem.json, { prompt: req.prompt, duration, seed });
+            const profileToUse = customExecution?.profile || modelProfile || getModelProfile("audio-minimax-music-3")!;
+            validateModelExecution(profileToUse, { duration });
+            const boundWorkflow = customExecution
+                ? applyBindings(workflowItem.json, {
+                      prompt: req.prompt,
+                      ...parseAudioPrompt(req.prompt),
+                      duration: customExecution.profile.capabilityConfig.duration ? duration : undefined,
+                      seed,
+                      strictSlots: true,
+                  })
+                : dispatchComfyuiModelWorkflow(modelProfile || getModelProfile("audio-minimax-music-3")!, workflowItem.json, { prompt: req.prompt, duration, seed });
             jobId = await submitJob(boundWorkflow, baseUrl, token);
             req.onProgress?.("submitted", { jobId });
         }

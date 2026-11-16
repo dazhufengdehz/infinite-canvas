@@ -87,6 +87,10 @@ description: 槽位词汇表、标注约定、解析规则、传输契约与数�
 - 输出标记：`output_image` / `output_video` / `output_text`，必须标在**保存/输出节点**（SaveImage、VHS_VideoCombine、SaveText 等）上，不可标在预览节点。
 - 一张工作流有且仅有一个 `output_*` 标记。
 
+### MiniMax H3 Easy 专用适配例外
+
+包含 `MiniMaxH3Easy` 主节点的视频工作流按插件 `class_type` 识别，不要求标记 `prompt`、尺寸、时长或 `output_video`。主节点的 `media` 必须连接 `MiniMaxH3EasyMediaLoader` 或 `MiniMaxH3EasyMediaBridge`：前者通过 `media_state` 接收有序图片、视频、音频，后者仍用 `ref_image_0N` 等标准槽位传文件名并同步媒体计数。该例外仅适用于全能参考与首尾帧视频；其他自定义工作流继续遵循“未标记 = 不可用”，不得按 `class_type` 白名单猜测通用槽位。
+
 ### 动态模型选择扩展标准 (`select_models_*`)
 
 系统支持在工作流编辑页面中为工作流配置大模型，并通过 `_meta.title` 标注动态拉取 ComfyUI 原生 API 模型库：

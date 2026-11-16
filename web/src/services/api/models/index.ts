@@ -48,6 +48,7 @@ export * from "./image-models";
 export * from "./text-models";
 export * from "./audio-models";
 export * from "./constraint-engine";
+export * from "./custom-workflow";
 
 /**
  * 系统内置视频工作流模型清单（4 款 FP8 + 6 款 INT8 量化模型）

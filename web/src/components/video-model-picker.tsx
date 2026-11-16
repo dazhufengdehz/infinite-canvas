@@ -1,10 +1,13 @@
 import { Select, Tooltip } from "antd";
-import { AlertTriangle, Film, HelpCircle, Server, Sparkles } from "lucide-react";
+import { AlertTriangle, Film, HelpCircle, Server, Sparkles, Workflow } from "lucide-react";
 import { useMemo } from "react";
 
 import {
     BUILTIN_VIDEO_WORKFLOW_MODELS,
+    buildCustomWorkflowProfile,
+    CUSTOM_WORKFLOW_CATEGORIES,
     evaluateModelAvailability,
+    findCustomWorkflowProfile,
     getModelProfile,
     type WorkflowModelProfile,
 } from "@/services/api/models";
@@ -50,20 +53,25 @@ export function VideoModelPicker({
 
     const activeProfile = useMemo(() => {
         if (modelId) {
-            const profile = getModelProfile(modelId);
+            const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, modelId, CUSTOM_WORKFLOW_CATEGORIES.video);
             if (profile) return profile;
         }
-        const defaultWf = activeChannel ? getDefaultWorkflow(activeChannel, "omniVideo") : undefined;
+        const defaultWf = activeChannel ? getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.video) : undefined;
         if (defaultWf) {
-            const profile = getModelProfile(defaultWf.id);
+            const profile = getModelProfile(defaultWf.id) || findCustomWorkflowProfile(activeChannel, defaultWf.id, CUSTOM_WORKFLOW_CATEGORIES.video);
             if (profile) return profile;
         }
         return BUILTIN_VIDEO_WORKFLOW_MODELS[0];
     }, [modelId, activeChannel]);
+    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile.id));
 
     const options = useMemo(() => {
         const orderedChannels = [activeChannel, ...channels.filter((channel) => channel.id !== activeChannel.id)];
-        return orderedChannels.flatMap((channel) => BUILTIN_VIDEO_WORKFLOW_MODELS.map((model) => {
+        return orderedChannels.flatMap((channel) => [
+            ...BUILTIN_VIDEO_WORKFLOW_MODELS,
+            ...(channel.workflows || []).filter((workflow) => !workflow.isBuiltin && CUSTOM_WORKFLOW_CATEGORIES.video.includes(workflow.category)).map(buildCustomWorkflowProfile),
+        ].map((model) => {
+            const isCustom = Boolean(channel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === model.id));
             const isFrame = model.category === "frameVideo";
             const availability = evaluateModelAvailability({
                 targetModel: model,
@@ -83,14 +91,16 @@ export function VideoModelPicker({
                 label: (
                     <div className={`flex items-center justify-between gap-2 py-0.5 min-w-[200px] ${isBlocked ? "opacity-60" : ""}`}>
                         <div className="flex items-center gap-1.5 truncate">
-                            {isFrame ? (
+                            {isCustom ? (
+                                <Workflow className="size-3.5 shrink-0 text-cyan-500" />
+                            ) : isFrame ? (
                                 <Sparkles className="size-3.5 shrink-0 text-purple-500" />
                             ) : (
                                 <Film className="size-3.5 shrink-0 text-emerald-500" />
                             )}
                             <div className="flex min-w-0 flex-col">
                                 <span className="font-medium text-xs truncate">{model.name}</span>
-                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}</span>
+                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}{isCustom ? " · 自定义" : ""}</span>
                             </div>
                         </div>
                         {isBlocked ? (
@@ -152,7 +162,9 @@ export function VideoModelPicker({
 
     const handleSelectChange = (value: string) => {
         const [selectedChannelId, selectedModelId] = JSON.parse(value) as [string, string];
-        const found = getModelProfile(selectedModelId) || activeProfile;
+        const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) || activeChannel;
+        const found = getModelProfile(selectedModelId) || findCustomWorkflowProfile(selectedChannel, selectedModelId, CUSTOM_WORKFLOW_CATEGORIES.video);
+        if (!found) return;
         onChange(selectedChannelId, found.id, found);
     };
 
@@ -194,7 +206,9 @@ export function VideoModelPicker({
                             {channelName}
                         </span>
                         <span className="opacity-30">/</span>
-                        {isFrame ? (
+                        {activeIsCustom ? (
+                            <Workflow className="size-3.5 shrink-0 text-cyan-500" />
+                        ) : isFrame ? (
                             <Sparkles className="size-3.5 shrink-0 text-purple-500" />
                         ) : (
                             <Film className="size-3.5 shrink-0 text-emerald-500" />

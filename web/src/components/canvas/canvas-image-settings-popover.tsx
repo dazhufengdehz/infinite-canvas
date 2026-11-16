@@ -8,11 +8,12 @@ import { useDeferredOutsideClick } from "./use-deferred-outside-click";
 import { ImageSettingsPanel, imageSizeLabel } from "@/components/image-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { getModelProfile, imageQwen21Profile } from "@/services/api/models";
+import { getModelProfile, imageQwen21Profile, type WorkflowModelProfile } from "@/services/api/models";
 import type { AiConfig } from "@/stores/use-config-store";
 
 type CanvasImageSettingsPopoverProps = {
     modelId?: string;
+    profile?: WorkflowModelProfile;
     config: AiConfig;
     onConfigChange: (key: keyof AiConfig, value: string) => void;
     onMissingConfig?: () => void;
@@ -23,7 +24,7 @@ type CanvasImageSettingsPopoverProps = {
     autoAdjustOverflow?: boolean;
 };
 
-export function CanvasImageSettingsPopover({ modelId, config, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasImageSettingsPopoverProps) {
+export function CanvasImageSettingsPopover({ modelId, profile: profileProp, config, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasImageSettingsPopoverProps) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const buttonRef = useRef<HTMLSpanElement>(null);
@@ -33,7 +34,7 @@ export function CanvasImageSettingsPopover({ modelId, config, onConfigChange, on
     const [open, setOpen] = useState(false);
     const [buttonRect, setButtonRect] = useState<DOMRect | null>(null);
     const count = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
-    const profile = getModelProfile(modelId) || imageQwen21Profile;
+    const profile = profileProp || getModelProfile(modelId) || imageQwen21Profile;
     const hasSizeConfig = Boolean(profile.capabilityConfig.size);
     const activeSize = config.size || profile.capabilityConfig.size?.default || "auto";
     const updateOpen = (nextOpen: boolean) => {
@@ -56,6 +57,7 @@ export function CanvasImageSettingsPopover({ modelId, config, onConfigChange, on
             placement={placement}
             theme={theme}
             modelId={modelId}
+            profile={profile}
             config={config}
             onConfigChange={onConfigChange}
         />
@@ -82,6 +84,7 @@ function ImageSettingsPortal({
     placement,
     theme,
     modelId,
+    profile,
     config,
     onConfigChange,
 }: {
@@ -90,6 +93,7 @@ function ImageSettingsPortal({
     placement: CanvasImageSettingsPopoverProps["placement"];
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     modelId?: string;
+    profile: WorkflowModelProfile;
     config: AiConfig;
     onConfigChange: (key: keyof AiConfig, value: string) => void;
 }) {
@@ -130,7 +134,7 @@ function ImageSettingsPortal({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
         >
-            <ImageSettingsPanel modelId={modelId} config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-3" />
+            <ImageSettingsPanel modelId={modelId} profile={profile} config={config} onConfigChange={(key, value) => onConfigChange(key, value)} theme={theme} className="space-y-3" />
         </div>,
         document.body,
     );

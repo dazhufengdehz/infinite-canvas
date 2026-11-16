@@ -8,6 +8,7 @@ import {
     defaultConfig,
     isAiConfigReady,
     isModelSupportedByHost,
+    modelCapabilityOf,
     modelOptionLabel,
     modelOptionsFromChannels,
     normalizeApiFormat,
@@ -150,6 +151,41 @@ describe("ComfyUI model resolution", () => {
         const res2 = resolveModelChannel(cfg, "channel-2::MiniMax H3 全能视频");
         expect(res2.id).toBe("channel-2");
         expect(res2.comfyuiProxyUrl).toBe("http://192.168.1.200:8188");
+    });
+});
+
+describe("custom workflow capabilities", () => {
+    const channel = createModelChannel({
+        id: "custom",
+        models: [],
+        supportedModelIds: ["image-z-turbo"],
+        workflows: [
+            { id: "custom-image", name: "自定义图片", category: "t2i", json: {}, createdAt: 0 },
+            { id: "custom-video", name: "自定义视频", category: "omniVideo", json: {}, createdAt: 0 },
+            { id: "custom-text", name: "自定义文本", category: "text", json: {}, createdAt: 0 },
+            { id: "custom-audio", name: "自定义音频", category: "audio", json: {}, createdAt: 0 },
+            { id: "image-qwen-2.1", name: "重名自定义文本", category: "text", json: {}, createdAt: 0 },
+        ],
+    });
+    const config: AiConfig = { ...defaultConfig, channels: [channel] };
+
+    it("resolves all four capabilities from the exact custom workflow", () => {
+        expect(modelCapabilityOf(config, "custom::custom-image")).toBe("image");
+        expect(modelCapabilityOf(config, "custom::custom-video")).toBe("video");
+        expect(modelCapabilityOf(config, "custom::custom-text")).toBe("text");
+        expect(modelCapabilityOf(config, "custom::custom-audio")).toBe("audio");
+        expect(resolveModelForCapability(config, "custom::custom-video", "video")).toBe("custom::custom-video");
+    });
+
+    it("prefers a custom workflow over a colliding built-in model alias", () => {
+        expect(modelCapabilityOf(config, "custom::image-qwen-2.1")).toBe("text");
+        expect(resolveModelForCapability(config, "custom::image-qwen-2.1", "text")).toBe("custom::image-qwen-2.1");
+    });
+
+    it("allows only custom workflows explicitly stored on a restricted host", () => {
+        expect(isModelSupportedByHost(channel, "custom-image")).toBe(true);
+        expect(isModelSupportedByHost(channel, "custom-video")).toBe(true);
+        expect(isModelSupportedByHost(channel, "missing-custom")).toBe(false);
     });
 });
 

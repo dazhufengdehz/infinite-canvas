@@ -4,14 +4,14 @@ import { useTranslation } from "react-i18next";
 
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { audioMinimaxMusic3Profile, getModelProfile } from "@/services/api/models";
+import { audioMinimaxMusic3Profile, getModelProfile, type WorkflowModelProfile } from "@/services/api/models";
 import type { AiConfig } from "@/stores/use-config-store";
 
 export const audioQuickSecondOptions = [60, 120, 180];
 
-export function audioSecondsLabel(value?: string | number, modelId?: string): string {
-    const profile = getModelProfile(modelId) || audioMinimaxMusic3Profile;
-    const durConfig = profile.capabilityConfig.duration;
+export function audioSecondsLabel(value?: string | number, modelId?: string, profile?: WorkflowModelProfile): string {
+    const resolvedProfile = profile || getModelProfile(modelId) || audioMinimaxMusic3Profile;
+    const durConfig = resolvedProfile.capabilityConfig.duration;
     const minSeconds = durConfig?.min ?? 10;
     const maxSeconds = durConfig?.max ?? 300;
     const defaultSeconds = durConfig?.default ?? 60;
@@ -22,6 +22,7 @@ export function audioSecondsLabel(value?: string | number, modelId?: string): st
 type AudioSettingsPanelProps = {
     config: AiConfig;
     modelId?: string;
+    profile?: WorkflowModelProfile;
     onConfigChange: (key: "audioSeconds", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
@@ -31,13 +32,14 @@ type AudioSettingsPanelProps = {
 export function AudioSettingsPanel({
     config,
     modelId,
+    profile: profileProp,
     onConfigChange,
     theme,
     showTitle = true,
     className = "space-y-4",
 }: AudioSettingsPanelProps) {
     const { t } = useTranslation();
-    const profile = getModelProfile(modelId) || audioMinimaxMusic3Profile;
+    const profile = profileProp || getModelProfile(modelId) || audioMinimaxMusic3Profile;
     const durConfig = profile.capabilityConfig.duration;
     const minSeconds = durConfig?.min ?? 10;
     const maxSeconds = durConfig?.max ?? 300;
@@ -53,12 +55,15 @@ export function AudioSettingsPanel({
                 {showTitle ? (
                     <div className="flex items-center justify-between">
                         <span className="text-base font-semibold">{t("settingsPanels.audio.title", { defaultValue: "音频设置" })}</span>
-                        <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full" style={{ background: theme.mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.node.text }}>
-                            {currentSeconds} 秒
-                        </span>
+                        {durConfig ? (
+                            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full" style={{ background: theme.mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)", color: theme.node.text }}>
+                                {currentSeconds} 秒
+                            </span>
+                        ) : null}
                     </div>
                 ) : null}
 
+                {durConfig ? (
                 <SettingGroup title="生成时长" color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2">
                         {quickOptions.map((sec) => (
@@ -90,6 +95,7 @@ export function AudioSettingsPanel({
                         />
                     </div>
                 </SettingGroup>
+                ) : null}
             </div>
         </ImageSettingsTheme>
     );

@@ -1,5 +1,5 @@
 import { defaultConfig, findWorkflow, resolveModelForCapability, type AiConfig } from "@/stores/use-config-store";
-import { getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
+import { CUSTOM_WORKFLOW_CATEGORIES, findCustomWorkflowProfile, getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
 import { normalizeVideoSizeValue } from "@/components/video-settings-panel";
 import i18n from "@/i18n";
 import { TaskExecutionError } from "@/services/api/task";
@@ -160,13 +160,13 @@ export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | u
     const workflowId = node?.metadata?.workflowId || config.workflowId;
     const model = videoTool ? workflowId! : resolveModelForCapability(config, rawModel, mode);
     let videoMode = node?.metadata?.videoMode;
-    if (mode === "video" && node?.metadata?.modelId) {
-        videoMode = node.metadata.modelId.includes("frame") ? "frame" : "omni";
-    }
-    if (mode === "video" && workflowId && !videoMode) {
+    if (mode === "video" && workflowId) {
         const wf = findWorkflow(config, channelId, workflowId);
-        if (wf?.category === "frameVideo") videoMode = "frame";
-        else if (wf?.category === "omniVideo" || wf?.category === "faceRefine") videoMode = "omni";
+        if (wf?.id === workflowId && wf.category === "frameVideo") videoMode = "frame";
+        else if (wf?.id === workflowId && (wf.category === "omniVideo" || wf.category === "faceRefine")) videoMode = "omni";
+    }
+    if (mode === "video" && node?.metadata?.modelId && !workflowId) {
+        videoMode = node.metadata.modelId.includes("frame") ? "frame" : "omni";
     }
     if (videoTool) {
         videoMode = "omni";
@@ -176,7 +176,10 @@ export function buildGenerationConfig(config: AiConfig, node: CanvasNodeData | u
     }
 
     const rawSize = node?.metadata?.size || config.size || defaultConfig.size;
-    const modelProfile = mode === "video" && !videoTool ? getModelProfile(model) : undefined;
+    const channel = config.channels.find((item) => item.id === channelId);
+    const modelProfile = mode === "video" && !videoTool
+        ? findCustomWorkflowProfile(channel, workflowId, CUSTOM_WORKFLOW_CATEGORIES.video) || getModelProfile(model)
+        : undefined;
     const size = mode === "video" && !videoTool ? normalizeVideoSizeValue(rawSize, modelProfile) : rawSize;
 
     return {

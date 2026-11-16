@@ -8,19 +8,22 @@ import { AudioSettingsPanel, audioSecondsLabel } from "@/components/audio-settin
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
+import { audioMinimaxMusic3Profile, getModelProfile, type WorkflowModelProfile } from "@/services/api/models";
 
 export type CanvasAudioSettingKey = "audioSeconds";
 
 type CanvasAudioSettingsPopoverProps = {
     config: AiConfig;
     modelId?: string;
+    profile?: WorkflowModelProfile;
     onConfigChange: (key: CanvasAudioSettingKey, value: string) => void;
     onOpenChange?: (open: boolean) => void;
     buttonClassName?: string;
     placement?: "topLeft" | "top" | "topRight" | "bottomLeft" | "bottom" | "bottomRight";
 };
 
-export function CanvasAudioSettingsPopover({ config, modelId, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasAudioSettingsPopoverProps) {
+export function CanvasAudioSettingsPopover({ config, modelId, profile: profileProp, onConfigChange, onOpenChange, buttonClassName, placement = "topLeft" }: CanvasAudioSettingsPopoverProps) {
+    const profile = profileProp || getModelProfile(modelId) || audioMinimaxMusic3Profile;
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const buttonRef = useRef<HTMLSpanElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
@@ -42,14 +45,16 @@ export function CanvasAudioSettingsPopover({ config, modelId, onConfigChange, on
         onSyncPosition: () => setButtonRect(buttonRef.current?.getBoundingClientRect() || null),
     });
 
-    const panel = open && buttonRect ? <AudioSettingsPortal buttonRect={buttonRect} panelRef={panelRef} placement={placement} theme={theme} config={config} modelId={modelId} onConfigChange={onConfigChange} /> : null;
+    if (!profile.capabilityConfig.duration) return null;
+
+    const panel = open && buttonRect ? <AudioSettingsPortal buttonRect={buttonRect} panelRef={panelRef} placement={placement} theme={theme} config={config} modelId={modelId} profile={profile} onConfigChange={onConfigChange} /> : null;
 
     return (
         <>
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
                 <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[120px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Clock className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">
-                        {audioSecondsLabel(config.audioSeconds, modelId)}
+                        {audioSecondsLabel(config.audioSeconds, modelId, profile)}
                     </span>
                 </Button>
             </span>
@@ -65,6 +70,7 @@ function AudioSettingsPortal({
     theme,
     config,
     modelId,
+    profile,
     onConfigChange,
 }: {
     buttonRect: DOMRect;
@@ -73,6 +79,7 @@ function AudioSettingsPortal({
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     config: AiConfig;
     modelId?: string;
+    profile: WorkflowModelProfile;
     onConfigChange: (key: CanvasAudioSettingKey, value: string) => void;
 }) {
     const width = 320;
@@ -114,7 +121,7 @@ function AudioSettingsPortal({
             onMouseDown={(event) => event.stopPropagation()}
             onClick={(event) => event.stopPropagation()}
         >
-            <AudioSettingsPanel config={config} modelId={modelId} onConfigChange={onConfigChange} theme={theme} className="space-y-3" />
+            <AudioSettingsPanel config={config} modelId={modelId} profile={profile} onConfigChange={onConfigChange} theme={theme} className="space-y-3" />
         </div>,
         document.body,
     );

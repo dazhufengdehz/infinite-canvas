@@ -9,8 +9,8 @@ import { AudioModelPicker } from "@/components/audio-model-picker";
 import { VideoModelPicker } from "@/components/video-model-picker";
 import { ImageModelPicker } from "@/components/image-model-picker";
 import { TextModelPicker } from "@/components/text-model-picker";
-import { decodeChannelModel, defaultConfig, encodeChannelModel, findWorkflow, getChannelWorkflows, isModelSupportedByHost, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
-import { BUILTIN_VIDEO_WORKFLOW_MODELS, evaluateModelAvailability, getModelProfile, imageQwen21Profile, resolveModelIdFromWorkflowId, resolveVideoModelIdForMode, textQwen35Profile } from "@/services/api/models";
+import { decodeChannelModel, defaultConfig, encodeChannelModel, findWorkflow, getChannelWorkflows, isModelSupportedByHost, resolveModelChannel, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig, type ModelChannel, type WorkflowCategory } from "@/stores/use-config-store";
+import { audioMinimaxMusic3Profile, BUILTIN_VIDEO_WORKFLOW_MODELS, CUSTOM_WORKFLOW_CATEGORIES, customWorkflowHasPrompt, evaluateModelAvailability, findCustomWorkflow, findCustomWorkflowProfile, getModelProfile, imageQwen21Profile, isMiniMaxH3EasyWorkflow, resolveModelIdFromWorkflowId, resolveVideoModelIdForMode, textQwen35Profile } from "@/services/api/models";
 import { getNodeResourceCounts } from "@/lib/canvas/canvas-node-geometry";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -72,6 +72,21 @@ export function CanvasNodePromptPanel({
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = modeOverride ?? defaultMode(node.type);
     const config = buildNodeConfig(globalConfig, node, mode);
+    const activeChannel = globalConfig.channels.find((channel) => channel.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
+    const nodeCustomWorkflow = findCustomWorkflow(activeChannel, node.metadata?.workflowId, CUSTOM_WORKFLOW_CATEGORIES[mode]);
+    const isEasyWorkflow = Boolean(nodeCustomWorkflow && isMiniMaxH3EasyWorkflow(nodeCustomWorkflow));
+    const fallbackModelId = mode === "video"
+        ? (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")
+        : mode === "image"
+          ? config.imageModel || "image-qwen-2.1"
+          : mode === "audio"
+            ? "audio-minimax-music-3"
+            : "text-qwen-35";
+    const effectiveModelId = nodeCustomWorkflow?.id || node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || fallbackModelId;
+    const baseNodeProfile = nodeCustomWorkflow ? findCustomWorkflowProfile(activeChannel, nodeCustomWorkflow.id, CUSTOM_WORKFLOW_CATEGORIES[mode]) : getModelProfile(effectiveModelId);
+    const nodeProfile = isEasyWorkflow && config.videoMode === "frame" && baseNodeProfile
+        ? { ...baseNodeProfile, capabilityConfig: { ...baseNodeProfile.capabilityConfig, references: { ...baseNodeProfile.capabilityConfig.references, maxImages: 2, maxVideos: 0, maxAudios: 0 } } }
+        : baseNodeProfile;
     const nodeWorkflow = mode === "video" && node.metadata?.workflowId ? findWorkflow(globalConfig, node.metadata.channelId || globalConfig.channelId, node.metadata.workflowId) : undefined;
     const workflowCategory = nodeWorkflow?.id === node.metadata?.workflowId ? nodeWorkflow?.category : undefined;
     const videoTool = workflowCategory === "faceRefine" || workflowCategory === "depthVideo" ? workflowCategory : undefined;
@@ -119,63 +134,61 @@ export function CanvasNodePromptPanel({
 
     const videoModelAvailability = useMemo(() => {
         if (mode !== "video" || videoTool) return { isAvailable: true, reasons: [] };
-        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift");
-        const profile = getModelProfile(effectiveModelId) || BUILTIN_VIDEO_WORKFLOW_MODELS[0];
-        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
         return evaluateModelAvailability({
-            targetModel: profile,
+            targetModel: nodeProfile || BUILTIN_VIDEO_WORKFLOW_MODELS[0],
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
             promptText: prompt,
             activeChannel,
         });
-    }, [mode, videoTool, node.metadata?.modelId, node.metadata?.workflowId, node.metadata?.videoMode, node.metadata?.channelId, config.videoMode, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+    }, [mode, videoTool, nodeProfile, activeChannel, connectedResources, prompt]);
 
     const imageModelAvailability = useMemo(() => {
         if (mode !== "image") return { isAvailable: true, reasons: [] };
-        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1";
-        const profile = getModelProfile(effectiveModelId) || imageQwen21Profile;
-        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
         return evaluateModelAvailability({
-            targetModel: profile,
+            targetModel: nodeProfile || imageQwen21Profile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
             promptText: prompt,
             activeChannel,
         });
-    }, [mode, node.metadata?.modelId, node.metadata?.workflowId, config.imageModel, node.metadata?.channelId, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+    }, [mode, nodeProfile, activeChannel, connectedResources, prompt]);
 
     const textModelAvailability = useMemo(() => {
         if (mode !== "text") return { isAvailable: true, reasons: [] };
-        const effectiveModelId = node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35";
-        const profile = getModelProfile(effectiveModelId) || textQwen35Profile;
-        const activeChannel = globalConfig.channels.find((c) => c.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
         return evaluateModelAvailability({
-            targetModel: profile,
+            targetModel: nodeProfile || textQwen35Profile,
             connectedImages: connectedResources.images,
             connectedVideos: connectedResources.videos,
             connectedAudios: connectedResources.audios,
             promptText: prompt,
             activeChannel,
         });
-    }, [mode, node.metadata?.modelId, node.metadata?.workflowId, node.metadata?.channelId, globalConfig.channels, globalConfig.channelId, connectedResources, prompt]);
+    }, [mode, nodeProfile, activeChannel, connectedResources, prompt]);
 
-    const isCurrentModelAvailable = mode === "video"
-        ? videoModelAvailability.isAvailable
+    const audioModelAvailability = useMemo(() => {
+        if (mode !== "audio") return { isAvailable: true, reasons: [] };
+        return evaluateModelAvailability({
+            targetModel: nodeProfile || audioMinimaxMusic3Profile,
+            connectedImages: connectedResources.images,
+            connectedVideos: connectedResources.videos,
+            connectedAudios: connectedResources.audios,
+            promptText: prompt,
+            activeChannel,
+        });
+    }, [mode, nodeProfile, activeChannel, connectedResources, prompt]);
+
+    const currentAvailability = mode === "video"
+        ? videoModelAvailability
         : mode === "image"
-        ? imageModelAvailability.isAvailable
-        : mode === "text"
-        ? textModelAvailability.isAvailable
-        : true;
-    const currentModelUnavailabilityReasons = mode === "video"
-        ? videoModelAvailability.reasons
-        : mode === "image"
-        ? imageModelAvailability.reasons
-        : mode === "text"
-        ? textModelAvailability.reasons
-        : [];
+          ? imageModelAvailability
+          : mode === "text"
+            ? textModelAvailability
+            : audioModelAvailability;
+    const isCurrentModelAvailable = currentAvailability.isAvailable;
+    const currentModelUnavailabilityReasons = currentAvailability.reasons;
 
     // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
     useEffect(() => {
@@ -189,7 +202,7 @@ export function CanvasNodePromptPanel({
         else onPromptChange(node.id, value);
     };
 
-    const canSubmitEmptyPrompt = videoTool === "depthVideo" || (mode === "text" && connectedResources.images > 0);
+    const canSubmitEmptyPrompt = videoTool === "depthVideo" || (mode === "text" && connectedResources.images > 0) || Boolean(nodeCustomWorkflow && !customWorkflowHasPrompt(nodeCustomWorkflow));
     const promptPlaceholder = videoTool === "faceRefine"
         ? t("canvas.faceRefine.modal.promptPlaceholder")
         : videoTool === "depthVideo"
@@ -335,14 +348,14 @@ export function CanvasNodePromptPanel({
                         <>
                             <ImageModelPicker
                                 channelId={node.metadata?.channelId || config.channelId}
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1"}
+                                modelId={effectiveModelId}
                                 connectedImages={connectedResources.images}
                                 connectedVideos={connectedResources.videos}
                                 connectedAudios={connectedResources.audios}
                                 promptText={prompt}
                                 onChange={(nextChannelId, nextModelId) => {
                                     const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "t2i").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.image);
                                     onConfigChange(node.id, {
                                         channelId: nextChannelId,
                                         modelId: nextModelId,
@@ -351,7 +364,8 @@ export function CanvasNodePromptPanel({
                                 }}
                             />
                             <CanvasImageSettingsPopover
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || config.imageModel || "image-qwen-2.1"}
+                                modelId={effectiveModelId}
+                                profile={nodeProfile}
                                 config={config}
                                 placement="topLeft"
                                 buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
@@ -366,7 +380,7 @@ export function CanvasNodePromptPanel({
                         <>
                             <VideoModelPicker
                                 channelId={node.metadata?.channelId || config.channelId}
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")}
+                                modelId={effectiveModelId}
                                 connectedImages={connectedResources.images}
                                 connectedVideos={connectedResources.videos}
                                 connectedAudios={connectedResources.audios}
@@ -374,7 +388,7 @@ export function CanvasNodePromptPanel({
                                 onChange={(nextChannelId, nextModelId, profile) => {
                                     const nextVideoMode = profile.category === "frameVideo" ? "frame" : "omni";
                                     const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, profile.category).find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.video);
                                     onConfigChange(node.id, {
                                         channelId: nextChannelId,
                                         modelId: nextModelId,
@@ -384,16 +398,18 @@ export function CanvasNodePromptPanel({
                                 }}
                             />
                             <CanvasVideoSettingsPopover
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || (node.metadata?.videoMode === "frame" || config.videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : "omni-video-minimax-h3-int8-6step-selflift")}
+                                modelId={effectiveModelId}
+                                profile={nodeProfile}
+                                allowModeSwitch={!nodeCustomWorkflow || isEasyWorkflow}
                                 size={node.metadata?.size || config.size}
                                 duration={node.metadata?.seconds || config.videoSeconds}
                                 videoMode={(node.metadata?.videoMode as "omni" | "frame") || (config.videoMode as "omni" | "frame")}
                                 onParamChange={(patch) => {
-                                    onConfigChange(node.id, patch);
+                                    onConfigChange(node.id, isEasyWorkflow && patch.videoMode ? { videoMode: patch.videoMode } : patch);
                                 }}
                                 config={config}
                                 buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
-                                onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value, config, node.metadata?.modelId))}
+                                onConfigChange={(key, value) => onConfigChange(node.id, key === "videoMode" && isEasyWorkflow ? { videoMode: value } : videoConfigPatch(key, value, config, node.metadata?.modelId))}
                                 onOpenChange={handleSettingsOpenChange}
                             />
                         </>
@@ -401,14 +417,14 @@ export function CanvasNodePromptPanel({
                         <>
                             <AudioModelPicker
                                 channelId={node.metadata?.channelId || config.channelId}
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "audio-minimax-music-3"}
+                                modelId={effectiveModelId}
                                 connectedImages={connectedResources.images}
                                 connectedVideos={connectedResources.videos}
                                 connectedAudios={connectedResources.audios}
                                 promptText={prompt}
                                 onChange={(nextChannelId, nextModelId) => {
                                     const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "audio").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.audio);
                                     onConfigChange(node.id, {
                                         channelId: nextChannelId,
                                         modelId: nextModelId,
@@ -418,7 +434,8 @@ export function CanvasNodePromptPanel({
                             />
                             <CanvasAudioSettingsPopover
                                 config={config}
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "audio-minimax-music-3"}
+                                modelId={effectiveModelId}
+                                profile={nodeProfile}
                                 buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
                                 onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))}
                                 onOpenChange={handleSettingsOpenChange}
@@ -428,14 +445,14 @@ export function CanvasNodePromptPanel({
                         <>
                             <TextModelPicker
                                 channelId={node.metadata?.channelId || config.channelId}
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35"}
+                                modelId={effectiveModelId}
                                 connectedImages={connectedResources.images}
                                 connectedVideos={connectedResources.videos}
                                 connectedAudios={connectedResources.audios}
                                 promptText={prompt}
                                 onChange={(nextChannelId, nextModelId) => {
                                     const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = targetChannel ? getChannelWorkflows(targetChannel, "text").find((w) => resolveModelIdFromWorkflowId(w.id) === nextModelId) : undefined;
+                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.text);
                                     onConfigChange(node.id, {
                                         channelId: nextChannelId,
                                         modelId: nextModelId,
@@ -444,7 +461,7 @@ export function CanvasNodePromptPanel({
                                 }}
                             />
                             <CanvasTextSettingsPopover
-                                modelId={node.metadata?.modelId || (node.metadata?.workflowId ? resolveModelIdFromWorkflowId(node.metadata.workflowId) : undefined) || "text-qwen-35"}
+                                modelId={effectiveModelId}
                                 maxLength={node.metadata?.maxLength}
                                 thinking={node.metadata?.thinking}
                                 onParamChange={(patch) => onConfigChange(node.id, patch)}
@@ -645,6 +662,12 @@ export function CanvasNodePromptPanel({
     );
 }
 
+function resolveWorkflowSelection(channel: ModelChannel | undefined, modelId: string, categories: WorkflowCategory[]) {
+    const customWorkflow = findCustomWorkflow(channel, modelId, categories);
+    if (customWorkflow) return customWorkflow;
+    return getChannelWorkflows(channel, categories).find((workflow) => workflow.isBuiltin && resolveModelIdFromWorkflowId(workflow.id) === modelId);
+}
+
 function defaultMode(type: CanvasNodeData["type"]): CanvasNodeGenerationMode {
     return type === CanvasNodeType.Text ? "text" : type === CanvasNodeType.Video ? "video" : type === CanvasNodeType.Audio ? "audio" : "image";
 }
@@ -657,8 +680,10 @@ function buildNodeConfig(globalConfig: AiConfig, node: CanvasNodeData, mode: Can
     let videoMode = node.metadata?.videoMode;
     if (mode === "video" && node.metadata?.workflowId) {
         const wf = findWorkflow(globalConfig, node.metadata.channelId, node.metadata.workflowId);
-        if (wf?.category === "frameVideo") videoMode = "frame";
-        else if (wf?.category === "omniVideo") videoMode = "omni";
+        if (wf && !isMiniMaxH3EasyWorkflow(wf)) {
+            if (wf.category === "frameVideo") videoMode = "frame";
+            else if (wf.category === "omniVideo") videoMode = "omni";
+        }
     }
     if (!videoMode) {
         videoMode = isFrame ? "frame" : isOmni ? "omni" : globalConfig.videoMode || defaultConfig.videoMode || "omni";

@@ -2,7 +2,7 @@ import { nanoid } from "nanoid";
 import { getNodeSpec, NODE_DEFAULT_SIZE } from "@/constant/canvas";
 import { CANVAS_NODE_MAX_BOUND, nodeSizeFromRatio, resolveSkeletonDimensions } from "@/lib/canvas/canvas-node-size";
 import { getDefaultWorkflow, type AiConfig } from "@/stores/use-config-store";
-import { getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
+import { CUSTOM_WORKFLOW_CATEGORIES, findCustomWorkflowProfile, getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
 import { normalizeVideoSizeValue } from "@/components/video-settings-panel";
 import type { UploadedImage } from "@/services/image-storage";
 import type { UploadedFile } from "@/services/file-storage";
@@ -14,8 +14,8 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     if (!activeChannel) return undefined;
 
     if (type === CanvasNodeType.Image) {
-        const wf = getDefaultWorkflow(activeChannel, "t2i");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id : undefined) || "image-qwen-2.1";
+        const wf = getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.image);
+        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "image-qwen-2.1";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
@@ -24,9 +24,9 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
         };
     }
     if (type === CanvasNodeType.Video) {
-        const wf = getDefaultWorkflow(activeChannel, "omniVideo");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id : undefined) || "omni-video-minimax-h3-fp8-4step-pdmd";
-        const profile = getModelProfile(modelId);
+        const wf = getDefaultWorkflow(activeChannel, CUSTOM_WORKFLOW_CATEGORIES.video);
+        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "omni-video-minimax-h3-fp8-4step-pdmd";
+        const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, wf?.id, CUSTOM_WORKFLOW_CATEGORIES.video);
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
@@ -38,7 +38,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     }
     if (type === CanvasNodeType.Text) {
         const wf = getDefaultWorkflow(activeChannel, "text");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id : undefined) || "text-qwen-35";
+        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "text-qwen-35";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),
@@ -48,7 +48,7 @@ export function createDefaultNodeMetadata(type: CanvasNodeTypeId, config: AiConf
     }
     if (type === CanvasNodeType.Audio) {
         const wf = getDefaultWorkflow(activeChannel, "audio");
-        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id : undefined) || "audio-minimax-music-3";
+        const modelId = (wf ? resolveModelIdFromWorkflowId(wf.id) || getModelProfile(wf.id)?.id || wf.id : undefined) || "audio-minimax-music-3";
         return {
             channelId: activeChannel.id,
             ...(wf ? { workflowId: wf.id } : {}),

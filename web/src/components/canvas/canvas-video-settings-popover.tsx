@@ -15,11 +15,14 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
 import {
     getModelProfile,
+    type WorkflowModelProfile,
     videoMinimaxH3OmniProfile,
 } from "@/services/api/models";
 
 export type CanvasVideoSettingsPopoverProps = {
     modelId?: string;
+    profile?: WorkflowModelProfile;
+    allowModeSwitch?: boolean;
     size?: string;
     duration?: number | string;
     videoMode?: "omni" | "frame";
@@ -39,6 +42,8 @@ export type CanvasVideoSettingsPopoverProps = {
 
 export function CanvasVideoSettingsPopover({
     modelId,
+    profile: profileProp,
+    allowModeSwitch = true,
     size,
     duration,
     videoMode,
@@ -71,10 +76,15 @@ export function CanvasVideoSettingsPopover({
     });
 
     const effectiveModelId = modelId || (videoMode === "frame" ? "frame-video-minimax-h3-int8-6step-selflift" : videoMode === "omni" ? "omni-video-minimax-h3-int8-6step-selflift" : undefined) || config?.videoModel || config?.model;
-    const profile = getModelProfile(effectiveModelId) || videoMinimaxH3OmniProfile;
+    const profile = profileProp || getModelProfile(effectiveModelId) || videoMinimaxH3OmniProfile;
     const currentMode = videoMode || (profile.category === "frameVideo" ? "frame" : (config?.videoMode === "frame" ? "frame" : "omni"));
     const currentSize = size || config?.size;
     const currentDuration = duration !== undefined ? duration : config?.videoSeconds;
+    const summary = [
+        currentMode === "frame" ? "首尾帧" : "全能参考",
+        profile.capabilityConfig.size ? videoSizeLabel(currentSize, profile) : null,
+        profile.capabilityConfig.duration ? videoSecondsLabel(currentDuration, profile) : null,
+    ].filter(Boolean).join(" · ");
 
     const panel = open && buttonRect ? (
         <VideoSettingsPortal
@@ -83,6 +93,8 @@ export function CanvasVideoSettingsPopover({
             placement={placement}
             theme={theme}
             modelId={effectiveModelId}
+            profile={profile}
+            allowModeSwitch={allowModeSwitch}
             size={currentSize}
             duration={currentDuration}
             videoMode={currentMode}
@@ -97,7 +109,7 @@ export function CanvasVideoSettingsPopover({
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
                 <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[230px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">
-                        {currentMode === "frame" ? "首尾帧" : "全能参考"} · {videoSizeLabel(currentSize, profile)} · {videoSecondsLabel(currentDuration, profile)}
+                        {summary}
                     </span>
                 </Button>
             </span>
@@ -112,6 +124,8 @@ function VideoSettingsPortal({
     placement,
     theme,
     modelId,
+    profile,
+    allowModeSwitch,
     size,
     duration,
     videoMode,
@@ -124,6 +138,8 @@ function VideoSettingsPortal({
     placement: CanvasVideoSettingsPopoverProps["placement"];
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     modelId?: string;
+    profile: WorkflowModelProfile;
+    allowModeSwitch: boolean;
     size?: string;
     duration?: number | string;
     videoMode?: "omni" | "frame";
@@ -170,6 +186,8 @@ function VideoSettingsPortal({
         >
             <VideoSettingsPanel
                 modelId={modelId}
+                profile={profile}
+                allowModeSwitch={allowModeSwitch}
                 size={size}
                 duration={duration}
                 videoMode={videoMode}

@@ -16,9 +16,11 @@ import {
     Sliders,
     Sparkles,
     Star,
+    Upload,
     Workflow as WorkflowIcon,
 } from "lucide-react";
 import { App, Button, Empty, Input, InputNumber, Segmented, Select, Tag, Tooltip } from "antd";
+import { nanoid } from "nanoid";
 
 import { ComfyFlowGraph } from "@/components/workflow-graph/comfy-flow-graph";
 
@@ -36,6 +38,7 @@ import {
     findWorkflowSelectNodes,
     findWorkflowStepNode,
     updateWorkflowNodeInput,
+    validateComfyuiWorkflow,
     type ComfyuiModelItem,
     type ComfyuiWorkflowJson,
 } from "@/services/api/comfyui";
@@ -47,6 +50,19 @@ function formatFileSize(bytes?: number): string {
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function validateApiWorkflowShape(workflow: unknown): string | undefined {
+    if (typeof workflow !== "object" || workflow === null || Array.isArray(workflow)) return "工作流 JSON 必须为 ComfyUI API 对象格式";
+    const nodes = Object.entries(workflow);
+    if (!nodes.length) return "工作流内容为空";
+    for (const [id, value] of nodes) {
+        if (typeof value !== "object" || value === null || Array.isArray(value)) return `节点 ${id} 结构无效`;
+        const node = value as { class_type?: unknown; inputs?: unknown };
+        if (typeof node.class_type !== "string" || !node.class_type.trim()) return `节点 ${id} 缺少 class_type`;
+        if (typeof node.inputs !== "object" || node.inputs === null || Array.isArray(node.inputs)) return `节点 ${id} 缺少 inputs 对象`;
+    }
+    return undefined;
 }
 
 const CATEGORY_KEYS = [
@@ -61,6 +77,11 @@ const CATEGORY_KEYS = [
     "faceRefine",
     "depthVideo",
 ] as const;
+
+// Easy 没有首尾帧槽位，必须先按全能参考视频识别，避免被自动归为 frameVideo。
+const AUTO_DETECT_CATEGORIES: WorkflowCategory[] = [
+    "i2i", "inpaint", "omniVideo", "frameVideo", "faceRefine", "depthVideo", "audio", "text", "superResolve", "angle", "upscale", "t2i",
+];
 
 export default function WorkflowsPage() {
     const { t } = useTranslation();
@@ -114,18 +135,18 @@ export default function WorkflowsPage() {
     // 当前选中的正在编辑的工作流
     const [activeWorkflowId, setActiveWorkflowId] = useState<string>(queryWorkflowId || "");
 
-    // 响应 URL 参数变化定位目标工作流与分类
+    // 仅在 URL 参数变化时定位目标，避免上传后列表刷新把新工作流重置回旧参数
+    const lastQueryRef = useRef("");
     useEffect(() => {
-        if (queryCategory) {
-            setSelectedCategory(queryCategory);
-        }
+        const queryKey = `${queryChannelId || ""}|${queryCategory || ""}|${queryWorkflowId || ""}`;
+        if (lastQueryRef.current === queryKey) return;
+        lastQueryRef.current = queryKey;
+        if (queryCategory) setSelectedCategory(queryCategory);
         if (queryWorkflowId) {
             const found = allWorkflows.find((w) => w.id === queryWorkflowId || w.name === queryWorkflowId);
-            if (found) {
-                setActiveWorkflowId(found.id);
-            }
+            if (found) setActiveWorkflowId(found.id);
         }
-    }, [queryCategory, queryWorkflowId, allWorkflows]);
+    }, [queryChannelId, queryCategory, queryWorkflowId, allWorkflows]);
 
     const filteredWorkflows = useMemo(() => {
         return allWorkflows.filter((wf) => {
@@ -163,6 +184,7 @@ export default function WorkflowsPage() {
     const [isDirty, setIsDirty] = useState(false);
     const [copied, setCopied] = useState(false);
     const [viewMode, setViewMode] = useState<"graph" | "json">("graph");
+    const uploadInputRef = useRef<HTMLInputElement>(null);
 
     // 切换工作流时重置本地状态
     useEffect(() => {
@@ -288,6 +310,53 @@ export default function WorkflowsPage() {
         message.success(t("workflowsPage.resetDefaultSuccess", { name: builtinCounterpart.name }));
     };
 
+    const handleUploadWorkflow = async (file?: File) => {
+        if (!file) return;
+        if (!primaryChannel) {
+            message.error(t("workflowsPage.noChannel"));
+            return;
+        }
+        try {
+            const parsed: unknown = JSON.parse(await file.text());
+            const shapeError = validateApiWorkflowShape(parsed);
+            if (shapeError) {
+                message.error(shapeError);
+                return;
+            }
+            const categories: WorkflowCategory[] = selectedCategory !== "all" ? [selectedCategory as WorkflowCategory] : AUTO_DETECT_CATEGORIES;
+            let category: WorkflowCategory | undefined;
+            let lastError = "";
+            for (const candidate of categories) {
+                const validation = validateComfyuiWorkflow(parsed, candidate);
+                if (validation.ok) {
+                    category = candidate;
+                    break;
+                }
+                lastError = validation.error || lastError;
+            }
+            if (!category) {
+                message.error(lastError || t("workflowsPage.invalidWorkflow"));
+                return;
+            }
+            const workflowId = nanoid();
+            const name = file.name.replace(/\.json$/i, "").trim() || t("workflowsPage.unnamedWorkflow");
+            saveWorkflowGlobally({
+                id: workflowId,
+                name,
+                category,
+                json: parsed as ComfyuiWorkflowJson,
+                createdAt: Date.now(),
+                isBuiltin: false,
+                description: "",
+            });
+            setSelectedCategory(category);
+            setActiveWorkflowId(workflowId);
+            message.success(t("workflowsPage.uploadSuccess", { name }));
+        } catch {
+            message.error(t("workflowsPage.parseJsonFailed"));
+        }
+    };
+
     // 导出文件
     const handleExportJson = () => {
         const jsonStr = JSON.stringify(currentJson, null, 2);
@@ -330,6 +399,20 @@ export default function WorkflowsPage() {
                     </div>
 
                     <div className="flex items-center gap-2 text-xs">
+                        <input
+                            ref={uploadInputRef}
+                            type="file"
+                            accept=".json,application/json"
+                            className="sr-only"
+                            onChange={(event) => {
+                                const file = event.target.files?.[0];
+                                event.target.value = "";
+                                void handleUploadWorkflow(file);
+                            }}
+                        />
+                        <Button size="small" icon={<Upload className="size-3.5" />} title={t("workflowsPage.uploadHint")} onClick={() => uploadInputRef.current?.click()}>
+                            {t("workflowsPage.uploadWorkflow")}
+                        </Button>
                         <span className="text-stone-400">{t("workflowsPage.instance")}</span>
                         <code className="rounded bg-stone-100 px-2 py-0.5 font-mono text-[11px] text-stone-700 dark:bg-stone-800 dark:text-stone-300">
                             {comfyEndpoint}

@@ -47,6 +47,8 @@ export const videoSizeOptions = MINIMAX_VIDEO_SIZE_TIERS.flatMap((tier) => [
 
 export type VideoSettingsPanelProps = {
     modelId?: string;
+    profile?: WorkflowModelProfile;
+    allowModeSwitch?: boolean;
     size?: string;
     duration?: number | string;
     videoMode?: "omni" | "frame";
@@ -66,6 +68,8 @@ export type VideoSettingsPanelProps = {
 
 export function VideoSettingsPanel({
     modelId,
+    profile: profileProp,
+    allowModeSwitch = true,
     size,
     duration,
     videoMode,
@@ -80,7 +84,7 @@ export function VideoSettingsPanel({
 
     // 动态解析绑定的工作流模型 Profile
     const effectiveModelId = modelId || (videoMode === "frame" ? "frame-video-minimax-h3-fp8-4step-pdmd" : videoMode === "omni" ? "omni-video-minimax-h3-fp8-4step-pdmd" : undefined) || config?.videoModel || config?.model;
-    const profile = getModelProfile(effectiveModelId) || videoMinimaxH3OmniProfile;
+    const profile = profileProp || getModelProfile(effectiveModelId) || videoMinimaxH3OmniProfile;
 
     const currentMode: "omni" | "frame" = videoMode || (profile.category === "frameVideo" ? "frame" : (config?.videoMode === "frame" ? "frame" : "omni"));
 
@@ -148,6 +152,7 @@ export function VideoSettingsPanel({
                 )}
 
                 {/* 0. 生成模式切换：全能参考 vs 首尾帧 */}
+                {allowModeSwitch ? (
                 <SettingGroup title="生成模式" color={theme.node.muted}>
                     <div className="grid grid-cols-2 gap-2">
                         <button
@@ -180,8 +185,11 @@ export function VideoSettingsPanel({
                         </button>
                     </div>
                 </SettingGroup>
+                ) : null}
 
                 {/* 1. 比例切换：16:9 横屏 vs 9:16 竖屏 */}
+                {sizeConfig ? (
+                <>
                 <SettingGroup title="视频宽高比" color={theme.node.muted}>
                     <div className="grid grid-cols-2 gap-2">
                         <button
@@ -244,8 +252,11 @@ export function VideoSettingsPanel({
                         })}
                     </div>
                 </SettingGroup>
+                </>
+                ) : null}
 
                 {/* 3. 视频时长 */}
+                {durationConfig ? (
                 <SettingGroup title={`视频时长: ${secondsNum} 秒`} color={theme.node.muted}>
                     <div className="grid grid-cols-3 gap-2">
                         {quickTags.map((value) => (
@@ -270,6 +281,7 @@ export function VideoSettingsPanel({
                         />
                     </div>
                 </SettingGroup>
+                ) : null}
             </div>
         </ImageSettingsTheme>
     );

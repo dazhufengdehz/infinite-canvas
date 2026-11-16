@@ -1,10 +1,13 @@
 import { Select, Tooltip } from "antd";
-import { AlertTriangle, Eye, HelpCircle, MessageSquareText, Sparkles } from "lucide-react";
+import { AlertTriangle, HelpCircle, Sparkles, Workflow } from "lucide-react";
 import { useMemo } from "react";
 
 import {
     BUILTIN_TEXT_WORKFLOW_MODELS,
+    buildCustomWorkflowProfile,
+    CUSTOM_WORKFLOW_CATEGORIES,
     evaluateModelAvailability,
+    findCustomWorkflowProfile,
     getModelProfile,
     textQwen35Profile,
     type WorkflowModelProfile,
@@ -55,20 +58,25 @@ export function TextModelPicker({
 
     const activeProfile = useMemo(() => {
         if (modelId) {
-            const profile = getModelProfile(modelId);
+            const profile = getModelProfile(modelId) || findCustomWorkflowProfile(activeChannel, modelId, CUSTOM_WORKFLOW_CATEGORIES.text);
             if (profile) return profile;
         }
         const defaultWf = activeChannel ? getDefaultWorkflow(activeChannel, "text") : undefined;
         if (defaultWf) {
-            const profile = getModelProfile(defaultWf.id);
+            const profile = getModelProfile(defaultWf.id) || findCustomWorkflowProfile(activeChannel, defaultWf.id, CUSTOM_WORKFLOW_CATEGORIES.text);
             if (profile) return profile;
         }
         return textQwen35Profile;
     }, [modelId, activeChannel]);
+    const activeIsCustom = Boolean(activeChannel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === activeProfile.id));
 
     const options = useMemo(() => {
         const orderedChannels = [activeChannel, ...channels.filter((channel) => channel.id !== activeChannel.id)];
-        return orderedChannels.flatMap((channel) => BUILTIN_TEXT_WORKFLOW_MODELS.map((model) => {
+        return orderedChannels.flatMap((channel) => [
+            ...BUILTIN_TEXT_WORKFLOW_MODELS,
+            ...(channel.workflows || []).filter((workflow) => !workflow.isBuiltin && CUSTOM_WORKFLOW_CATEGORIES.text.includes(workflow.category)).map(buildCustomWorkflowProfile),
+        ].map((model) => {
+            const isCustom = Boolean(channel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === model.id));
             const availability = evaluateModelAvailability({
                 targetModel: model,
                 connectedImages,
@@ -87,10 +95,10 @@ export function TextModelPicker({
                 label: (
                     <div className={`flex items-center justify-between gap-2 py-0.5 min-w-[200px] ${isBlocked ? "opacity-60" : ""}`}>
                         <div className="flex items-center gap-1.5 truncate">
-                            {getModelIcon(model.id)}
+                            {isCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(model.id)}
                             <div className="flex min-w-0 flex-col">
                                 <span className="font-medium text-xs truncate">{model.name}</span>
-                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}</span>
+                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}{isCustom ? " · 自定义" : ""}</span>
                             </div>
                         </div>
                         {isBlocked ? (
@@ -152,7 +160,9 @@ export function TextModelPicker({
 
     const handleSelectChange = (value: string) => {
         const [selectedChannelId, selectedModelId] = JSON.parse(value) as [string, string];
-        const found = getModelProfile(selectedModelId) || activeProfile;
+        const selectedChannel = channels.find((channel) => channel.id === selectedChannelId) || activeChannel;
+        const found = getModelProfile(selectedModelId) || findCustomWorkflowProfile(selectedChannel, selectedModelId, CUSTOM_WORKFLOW_CATEGORIES.text);
+        if (!found) return;
         onChange(selectedChannelId, found.id, found);
     };
 
@@ -185,7 +195,7 @@ export function TextModelPicker({
             }}
             labelRender={() => (
                 <div className="flex items-center gap-1.5 truncate max-w-[170px]">
-                    {getModelIcon(activeProfile.id)}
+                    {activeIsCustom ? <Workflow className="size-3.5 shrink-0 text-cyan-500" /> : getModelIcon(activeProfile.id)}
                     <span className="font-semibold text-xs truncate">{activeProfile.name}</span>
                     {!activeAvailability.isAvailable && (
                         <Tooltip

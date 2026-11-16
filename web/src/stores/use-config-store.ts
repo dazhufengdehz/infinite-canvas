@@ -252,6 +252,9 @@ export function isModelSupportedByHost(channel: ModelChannel | undefined, modelI
     if (!channel.supportedModelIds || channel.supportedModelIds.length === 0) {
         return true;
     }
+    if (channel.workflows?.some((workflow) => !workflow.isBuiltin && workflow.id === modelId)) {
+        return true;
+    }
     // 兼容历史模型别名映射
     const normalizedId = modelId === "video_minimax_h3_omni"
         ? "omni-video-minimax-h3-fp8-4step-pdmd"
@@ -405,7 +408,23 @@ function findChannelModel(config: AiConfig, value: string): { channel: ModelChan
     return channel && model ? { channel, model } : null;
 }
 
+function findCustomWorkflowItem(config: AiConfig, value: string) {
+    const decoded = decodeChannelModel(value);
+    const workflowId = decoded?.model || value;
+    return config.channels
+        .filter((channel) => !decoded || channel.id === decoded.channelId)
+        .flatMap((channel) => channel.workflows || [])
+        .find((item) => !item.isBuiltin && item.id === workflowId);
+}
+
 export function modelCapabilityOf(config: AiConfig, value: string): ModelCapability | undefined {
+    const workflow = findCustomWorkflowItem(config, value);
+    if (workflow) {
+        if (["omniVideo", "frameVideo", "faceRefine", "depthVideo"].includes(workflow.category)) return "video";
+        if (workflow.category === "text") return "text";
+        if (workflow.category === "audio") return "audio";
+        return "image";
+    }
     const profile = getModelProfile(value);
     if (profile?.capability) return profile.capability;
     return findChannelModel(config, value)?.model.capability;
@@ -418,6 +437,7 @@ function isInpaintModelName(name: string): boolean {
 
 export function modelMatchesCapability(config: AiConfig, value: string, capability?: ModelCapability) {
     if (!capability) return true;
+    if (findCustomWorkflowItem(config, value)) return modelCapabilityOf(config, value) === capability;
     const profile = getModelProfile(value);
     if (profile) return profile.capability === capability;
     if (capability === "image") {

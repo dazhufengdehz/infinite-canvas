@@ -15,6 +15,7 @@ import {
     parseImageSizeTierAndRatio,
     type ImageResolutionTier,
     type ImageAspectRatio,
+    type WorkflowModelProfile,
 } from "@/services/api/models";
 
 const qualityOptions = [
@@ -63,15 +64,16 @@ type ImageSettingsPanelProps = {
     onConfigChange: (key: "size" | "count", value: string) => void;
     theme: CanvasTheme;
     modelId?: string;
+    profile?: WorkflowModelProfile;
     showTitle?: boolean;
     className?: string;
     maxCount?: number;
     quickCount?: number;
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, modelId, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, modelId, profile: profileProp, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
     const { t } = useTranslation();
-    const profile = getModelProfile(modelId) || imageQwen21Profile;
+    const profile = profileProp || getModelProfile(modelId) || imageQwen21Profile;
     const sizeConfig = profile.capabilityConfig.size;
     const hasSizeConfig = Boolean(sizeConfig);
 
