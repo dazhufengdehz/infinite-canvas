@@ -33,9 +33,12 @@ export async function hasStorageServer() {
                 if (await probeStorageServer()) return true;
                 if (configuredBaseUrl) await new Promise((resolve) => window.setTimeout(resolve, 100));
             }
-            if (configuredBaseUrl) throw new Error("本地磁盘存储服务连接失败，请重启桌面应用");
+            if (configuredBaseUrl) throw new Error("本地磁盘存储服务连接失败，请稍后重试或重启客户端");
             return false;
-        })();
+        })().catch((error) => {
+            healthPromise = null;
+            throw error;
+        });
     }
     return healthPromise;
 }

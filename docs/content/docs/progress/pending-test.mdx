@@ -7,6 +7,10 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Desktop storage health-check recovery:
+  - Trigger one storage connection failure while the Sidecar is unavailable or port `18080` is temporarily occupied. Restore the Sidecar and create a canvas again without restarting the client. Confirm it probes `127.0.0.1:18080/api/health` again instead of reusing the initial failure.
+  - Install the new NSIS package on a computer running only the canvas while ComfyUI runs on another computer, then verify project creation and reopening. A persistently unavailable Sidecar must still produce an explicit error without falling back to browser storage.
+
 - Trae provider and bidirectional canvas connection:
   - Select WorkBuddy, Codex, and Trae in the canvas Agent connection settings and refresh after each selection. Confirm persistence and that only Codex loads models, Skills, and conversation history. Provider switching and disconnecting must be blocked while a task is running.
   - Without Trae CLI 2.0 installed or signed in, select Trae and confirm the status card explains the problem. Sending must show an installation/sign-in error without starting or falling back to Codex.
