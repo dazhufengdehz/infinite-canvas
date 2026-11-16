@@ -263,7 +263,7 @@ export function createDesktopServer(options = {}) {
     }
 }
 
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && resolve(process.argv[1].replace(/^\\\\\?\\/, "")) === fileURLToPath(import.meta.url)) {
     const port = Number(process.env.PORT) || 18080;
     createDesktopServer().listen(port, "127.0.0.1", () => {
         console.log(`[DesktopServer] Storage server running at http://127.0.0.1:${port}`);

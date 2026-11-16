@@ -8,6 +8,7 @@ description: Implemented changes that still need manual verification
 The current release needs manual verification in these areas:
 
 - Desktop storage health-check recovery:
+  - Start the Windows desktop client from the new NSIS package and confirm the bundled Sidecar listens on port `18080` even when launched through a `\\?\` extended resource path. Create, save, and reopen a canvas without manually starting Node.
   - Trigger one storage connection failure while the Sidecar is unavailable or port `18080` is temporarily occupied. Restore the Sidecar and create a canvas again without restarting the client. Confirm it probes `127.0.0.1:18080/api/health` again instead of reusing the initial failure.
   - Install the new NSIS package on a computer running only the canvas while ComfyUI runs on another computer, then verify project creation and reopening. A persistently unavailable Sidecar must still produce an explicit error without falling back to browser storage.
 
