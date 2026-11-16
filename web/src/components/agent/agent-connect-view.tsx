@@ -1,33 +1,42 @@
-import { useEffect, useState } from "react";
-import { App, Button, Input, Tooltip } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { App, Button, Input, Segmented, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
 import { Bot, Copy, KeyRound, Link2, PlugZap, RefreshCw, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveWorkbuddyConfig } from "@/services/api/canvas-agent";
+import { fetchTraeStatus, fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveWorkbuddyConfig, type TraeStatusResponse } from "@/services/api/canvas-agent";
+import type { AgentProvider } from "@/stores/use-agent-store";
 
 const LOCAL_AGENT_COMMAND = "npx -y @zhuyichuan/canvas-agent";
+const TRAE_LOGIN_COMMAND = "traecli login";
+const TRAE_MCP_CONFIG = JSON.stringify({ mcpServers: { "infinite-canvas": { command: "npx", args: ["-y", "@zhuyichuan/canvas-agent", "mcp"] } } }, null, 2);
 
 export function AgentConnectView({
     theme,
+    provider,
     url,
     token,
     enabled,
     connected,
+    busy,
     activity,
     connectError,
+    onProviderChange,
     onUrlChange,
     onTokenChange,
     onToggleEnabled,
 }: {
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+    provider: AgentProvider;
     url: string;
     token: string;
     enabled: boolean;
     connected: boolean;
+    busy: boolean;
     activity: string;
     connectError: string;
+    onProviderChange: (value: AgentProvider) => void;
     onUrlChange: (value: string) => void;
     onTokenChange: (value: string) => void;
     onToggleEnabled: () => void;
@@ -38,6 +47,28 @@ export function AgentConnectView({
     const [wbOnline, setWbOnline] = useState<boolean | null>(null);
     const [wbChecking, setWbChecking] = useState(false);
     const [wbSaving, setWbSaving] = useState(false);
+    const [traeStatus, setTraeStatus] = useState<TraeStatusResponse | null>(null);
+    const [traeChecking, setTraeChecking] = useState(false);
+
+    const handleCheckTraeStatus = useCallback(async () => {
+        if (!connected) return;
+        setTraeChecking(true);
+        try {
+            setTraeStatus(await fetchTraeStatus(url, token));
+        } catch (error) {
+            setTraeStatus({ available: false, error: error instanceof Error ? error.message : String(error) });
+        } finally {
+            setTraeChecking(false);
+        }
+    }, [connected, token, url]);
+
+    useEffect(() => {
+        if (provider !== "trae" || !connected) {
+            setTraeStatus(null);
+            return;
+        }
+        void handleCheckTraeStatus();
+    }, [connected, handleCheckTraeStatus, provider]);
 
     useEffect(() => {
         if (!connected || !url || !token) return;
@@ -103,6 +134,59 @@ export function AgentConnectView({
                         {t("agent.connect.description")}
                     </div>
                 </div>
+
+                <div className="grid gap-2">
+                    <span className="text-xs font-medium" style={{ color: theme.node.muted }}>{t("agent.connect.provider")}</span>
+                    <Segmented
+                        block
+                        value={provider}
+                        disabled={busy}
+                        options={[
+                            { label: "WorkBuddy", value: "workbuddy" },
+                            { label: "Codex", value: "codex" },
+                            { label: "Trae", value: "trae" },
+                        ]}
+                        onChange={(value) => onProviderChange(value as AgentProvider)}
+                    />
+                </div>
+
+                {provider === "trae" ? (
+                    <div className="rounded-lg border p-3.5" style={{ borderColor: theme.node.stroke }}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <Bot className="size-4 shrink-0" />
+                                    <span className="text-sm font-medium leading-5">Trae CLI</span>
+                                    <span className="text-[11px]" style={{ color: traeStatus?.available ? "#16a34a" : traeStatus ? "#d97706" : theme.node.muted }}>
+                                        {traeChecking ? t("agent.connect.traeChecking") : traeStatus?.available ? t("agent.connect.traeAvailable") : traeStatus ? t("agent.connect.traeUnavailable") : t("agent.connect.traeWaiting")}
+                                    </span>
+                                </div>
+                                <div className="mt-1 text-xs leading-5" style={{ color: theme.node.muted }}>
+                                    {traeStatus?.available ? traeStatus.version || t("agent.connect.traeDescription") : traeStatus?.error || t("agent.connect.traeDescription")}
+                                </div>
+                            </div>
+                            <Button className="!h-8 !px-3" icon={<RefreshCw className={`size-3.5 ${traeChecking ? "animate-spin" : ""}`} />} onClick={() => void handleCheckTraeStatus()} disabled={!connected || traeChecking}>
+                                {t("agent.connect.refreshStatus")}
+                            </Button>
+                        </div>
+                        {!traeStatus?.available ? (
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-[11px] leading-4" style={{ color: theme.node.muted }}>{t("agent.connect.traeInstallHint")}</span>
+                                <Button size="small" type="text" icon={<Copy className="size-3.5" />} onClick={() => copyCommand(TRAE_LOGIN_COMMAND)}>{TRAE_LOGIN_COMMAND}</Button>
+                            </div>
+                        ) : null}
+                        <div className="mt-3 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-medium">{t("agent.connect.traeMcpTitle")}</span>
+                                <Button size="small" type="text" icon={<Copy className="size-3.5" />} onClick={() => { copyToClipboard(TRAE_MCP_CONFIG); message.success(t("agent.connect.mcpCopied")); }}>
+                                    {t("agent.connect.copyMcpConfig")}
+                                </Button>
+                            </div>
+                            <div className="mt-1 text-[11px] leading-4" style={{ color: theme.node.muted }}>{t("agent.connect.traeMcpHint")}</div>
+                            <pre className="thin-scrollbar mt-2 max-h-40 overflow-auto rounded-md border p-2 text-[10px] leading-4" style={{ borderColor: theme.node.stroke, color: theme.node.text }}><code>{TRAE_MCP_CONFIG}</code></pre>
+                        </div>
+                    </div>
+                ) : null}
 
                 {/* 1. WorkBuddy 桌面助理配置卡片（暂时隐藏） */}
                 {/* <div className="rounded-lg border p-3.5" style={{ borderColor: theme.node.stroke }}>
@@ -177,7 +261,7 @@ export function AgentConnectView({
                                 {t("agent.connect.autoDiscover")}
                             </div>
                         </div>
-                        <Button className="!h-8 !px-3" type={enabled ? "default" : "primary"} icon={<PlugZap className="size-4" />} onClick={onToggleEnabled}>
+                        <Button className="!h-8 !px-3" type={enabled ? "default" : "primary"} icon={<PlugZap className="size-4" />} onClick={onToggleEnabled} disabled={busy}>
                             {t(enabled ? "agent.connect.disconnect" : "agent.connect.connect")}
                         </Button>
                     </div>

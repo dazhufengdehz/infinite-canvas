@@ -7,6 +7,13 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Trae provider and bidirectional canvas connection:
+  - Select WorkBuddy, Codex, and Trae in the canvas Agent connection settings and refresh after each selection. Confirm persistence and that only Codex loads models, Skills, and conversation history. Provider switching and disconnecting must be blocked while a task is running.
+  - Without Trae CLI 2.0 installed or signed in, select Trae and confirm the status card explains the problem. Sending must show an installation/sign-in error without starting or falling back to Codex.
+  - After installing and signing in to Trae CLI, refresh its status and send a text task. Confirm exactly one final response titled Trae and that the waiting state ends. Send another task with an image and confirm the CLI receives it. Stop a running task, confirm process termination and temporary-file cleanup, then run another turn. Duplicate submissions must be rejected without cross-provider messages.
+  - In Trae IDE, paste the supplied configuration under Settings → MCP → Add manually. Call `canvas_open` and `canvas_get_state`, then create a text node and confirm the current canvas changes.
+  - Save the same MCP JSON as `.trae/mcp.json` in a test project root, then read and modify the canvas through Trae CLI. Confirm IDE and CLI reuse the same Canvas Agent bridge and that generated project configuration never overwrites an existing file.
+
 - ComfyUI 自定义工作流上传与画布接入：
   - 在「工作流管理」分别选择具体分类和「全部工作流」上传有效 API JSON，确认结构、能力及输出槽位校验正确，自动分类不会串类；上传后新项保持选中并同步到全部渠道，非法 JSON、缺失槽位及未知工作流 ID 必须明确报错。
   - 在图片、视频、音频、文本节点确认内置模型与自定义工作流同时可选，切换及刷新后 `channelId`、`modelId`、`workflowId` 绑定一致，不会自动改绑其他已有节点或回退内置模型。

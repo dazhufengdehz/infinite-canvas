@@ -38,7 +38,13 @@ export type AgentConversationState = {
     error?: string;
 };
 export type AgentPanelTab = "chat" | "setup" | "history" | "skills" | "log";
-export type AgentProvider = "workbuddy" | "codex";
+export type AgentProvider = "workbuddy" | "codex" | "trae";
+
+function readAgentProvider(): AgentProvider {
+    if (typeof window === "undefined") return "workbuddy";
+    const provider = localStorage.getItem("canvas-agent-provider");
+    return provider === "codex" || provider === "trae" ? provider : "workbuddy";
+}
 
 const CONNECT_TIMEOUT_MS = 6000;
 let agentSource: EventSource | null = null;
@@ -137,7 +143,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     connectError: "",
     pendingTool: null,
     pendingApprovals: [],
-    agentProvider: "workbuddy",
+    agentProvider: readAgentProvider(),
     workbuddyOnline: false,
     workbuddyConfigured: false,
     setAgentState: (patch) => set(patch),

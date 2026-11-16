@@ -79,6 +79,12 @@ function initializeWorkspace(workspacePath: string) {
     const instructionsFile = path.join(workspacePath, "AGENTS.md");
     const current = fs.existsSync(instructionsFile) ? fs.readFileSync(instructionsFile, "utf8") : "";
     if (!current || current.startsWith("# Infinite Canvas Agent")) fs.writeFileSync(instructionsFile, AGENT_PROMPT);
+    const traeDir = path.join(workspacePath, ".trae");
+    const traeMcpFile = path.join(traeDir, "mcp.json");
+    if (!fs.existsSync(traeMcpFile)) {
+        fs.mkdirSync(traeDir, { recursive: true });
+        fs.writeFileSync(traeMcpFile, JSON.stringify({ mcpServers: { "infinite-canvas": { command: "npx", args: ["-y", "@zhuyichuan/canvas-agent", "mcp"] } } }, null, 2));
+    }
     initializedWorkspaces.add(workspacePath);
 }
 

@@ -134,6 +134,20 @@ export async function discoverAgentConfig(endpoint: string) {
     }
 }
 
+export type TraeStatusResponse = { ok?: boolean; available?: boolean; version?: string; error?: string; busy?: boolean; threadId?: string; turnId?: string };
+
+export function fetchTraeStatus(endpoint: string, token: string) {
+    return fetchAgentJson<TraeStatusResponse>(endpoint, token, "/agent/trae/status");
+}
+
+export function runTraeTurn(endpoint: string, token: string, body: { prompt: string; clientId: string; attachments?: Array<{ id?: string; name?: string; type?: string; size?: number; width?: number; height?: number; dataUrl?: string }>; messageMetadata?: unknown }) {
+    return fetchAgentJson<{ ok?: boolean; threadId?: string; turnId?: string }>(endpoint, token, "/agent/trae/turn", jsonPost(body));
+}
+
+export function interruptTraeTurn(endpoint: string, token: string, threadId?: string) {
+    return fetchAgentJson<{ ok?: boolean }>(endpoint, token, "/agent/trae/interrupt", jsonPost({ threadId }));
+}
+
 export type WorkbuddyConfigResponse = { ok?: boolean; hasToken?: boolean; baseUrl?: string };
 export type WorkbuddyStatusResponse = { ok?: boolean; online?: boolean; error?: string };
 

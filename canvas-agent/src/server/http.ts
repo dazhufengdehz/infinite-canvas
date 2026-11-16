@@ -5,6 +5,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 
 import { runClaudeTurn } from "../agent/claude.js";
 import { checkWorkbuddyStatus, replyWorkbuddyPermission, runWorkbuddyTurn, updateWorkbuddyConfig } from "../agent/workbuddy.js";
+import { checkTraeStatus, interruptTraeTurn, startTraeTurn, TRAE_THREAD_ID, TraeTurnError } from "../agent/trae.js";
 import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -429,6 +430,27 @@ export function startHttpServer() {
         runClaudeTurn(String(req.body?.prompt || ""), emit);
         res.json({ ok: true });
     });
+    app.get("/agent/trae/status", route(async (_req, res) => {
+        res.json(await checkTraeStatus());
+    }));
+    app.post("/agent/trae/turn", route(async (req, res) => {
+        const prompt = String(req.body?.prompt || "");
+        if (!prompt.trim()) return res.status(400).json({ ok: false, error: "请输入任务内容" });
+        const clientId = String(req.body?.clientId || "");
+        if (!clientId || !session.hasClient(clientId)) return res.status(409).json({ ok: false, error: "发起任务的网页已断开，请重新连接后再试" });
+        const workspace = ensureSiteWorkspace(config);
+        const result = await startTraeTurn({
+            prompt,
+            cwd: workspace.workspacePath,
+            sourceClientId: clientId,
+            attachments: Array.isArray(req.body?.attachments) ? req.body.attachments as AgentAttachment[] : [],
+        }, emit);
+        res.json({ ok: true, ...result });
+    }));
+    app.post("/agent/trae/interrupt", route(async (req, res) => {
+        const ok = interruptTraeTurn(String(req.body?.threadId || "") || TRAE_THREAD_ID);
+        res.status(ok ? 200 : 409).json({ ok, ...(ok ? {} : { error: "当前没有可停止的 Trae 任务" }) });
+    }));
     app.post("/agent/workbuddy/turn", route(async (req, res) => {
         void runWorkbuddyTurn(String(req.body?.prompt || ""), emit, {
             threadId: req.body?.threadId ? String(req.body.threadId) : undefined,
@@ -469,7 +491,7 @@ export function startHttpServer() {
     app.use((_req, res) => res.status(404).json({ ok: false, error: "not found" }));
     app.use((error: Error, req: Request, res: Response, _next: NextFunction) => {
         logger.error("HTTP request failed", { method: req.method, path: req.path, error });
-        if (error instanceof SkillStoreError || error instanceof CodexSkillLookupError) return void res.status(error.statusCode).json({ ok: false, error: error.message });
+        if (error instanceof SkillStoreError || error instanceof CodexSkillLookupError || error instanceof TraeTurnError) return void res.status(error.statusCode).json({ ok: false, error: error.message });
         res.status(500).json({ ok: false, error: error.message });
     });
 
@@ -478,7 +500,7 @@ export function startHttpServer() {
         checkVersions();
         console.log(`Local URL: ${config.url}`);
         console.log(`Connect token: ${config.token}`);
-        console.log("WorkBuddy / MCP: npx -y @zhuyichuan/canvas-agent mcp");
+        console.log("WorkBuddy / Trae / MCP: npx -y @zhuyichuan/canvas-agent mcp");
         if (logger.enabled) console.log(`Debug log: ${logger.filePath}`);
         logger.info("Canvas Agent started", { url: config.url, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
         const activeThreadId = initialWorkspace.activeThreadId || "";
