@@ -63,5 +63,6 @@ export default defineConfig({
     define: {
         __APP_VERSION__: JSON.stringify(localVersion),
         __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
+        "import.meta.env.VITE_STORAGE_SERVER_URL": JSON.stringify(process.env.VITE_STORAGE_SERVER_URL || (process.env.TAURI_ENV_PLATFORM ? "http://127.0.0.1:18080" : "")),
     },
 });

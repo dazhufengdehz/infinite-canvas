@@ -1,0 +1,33 @@
+{
+    "$schema": "https://schema.tauri.app/config/2",
+    "productName": "无限画布",
+    "version": "0.25.1",
+    "identifier": "com.imihoo.infinite-canvas",
+    "build": {
+        "beforeDevCommand": { "script": "bun run dev", "cwd": ".." },
+        "beforeBuildCommand": { "script": "bun run build", "cwd": ".." },
+        "devUrl": "http://localhost:3000",
+        "frontendDist": "../dist"
+    },
+    "app": {
+        "windows": [
+            {
+                "title": "无限画布",
+                "width": 1440,
+                "height": 960,
+                "minWidth": 960,
+                "minHeight": 640
+            }
+        ]
+    },
+    "bundle": {
+        "active": true,
+        "targets": "all",
+        "icon": [],
+        "externalBin": ["binaries/node"],
+        "resources": {
+            "../server/desktop-server.mjs": "server/desktop-server.mjs",
+            "../server/storage-files.mjs": "server/storage-files.mjs"
+        }
+    }
+}

@@ -12,19 +12,29 @@ export function storageApiUrl(path: string) {
     return `${configuredBaseUrl}/api/storage${path}`;
 }
 
+async function probeStorageServer() {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), 1500);
+    try {
+        const response = await fetch(`${configuredBaseUrl}/api/health`, { signal: controller.signal });
+        const data = await response.json();
+        return response.ok && data?.ok === true;
+    } catch {
+        return false;
+    } finally {
+        window.clearTimeout(timer);
+    }
+}
+
 export async function hasStorageServer() {
     if (!healthPromise) {
         healthPromise = (async () => {
-            try {
-                const controller = new AbortController();
-                const timer = window.setTimeout(() => controller.abort(), 1500);
-                const response = await fetch(`${configuredBaseUrl}/api/health`, { signal: controller.signal });
-                window.clearTimeout(timer);
-                const data = await response.json();
-                return response.ok && data?.ok === true;
-            } catch {
-                return false;
+            for (let attempt = 0; attempt < (configuredBaseUrl ? 20 : 1); attempt++) {
+                if (await probeStorageServer()) return true;
+                if (configuredBaseUrl) await new Promise((resolve) => window.setTimeout(resolve, 100));
             }
+            if (configuredBaseUrl) throw new Error("本地磁盘存储服务连接失败，请重启桌面应用");
+            return false;
         })();
     }
     return healthPromise;

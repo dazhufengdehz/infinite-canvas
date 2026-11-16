@@ -31,7 +31,9 @@ function setCors(req, res) {
     if (origin) {
         try {
             const url = new URL(origin);
-            if (["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) {
+            const localWeb = ["http:", "https:"].includes(url.protocol) && ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname);
+            const tauri = (url.protocol === "tauri:" && url.hostname === "localhost") || (["http:", "https:"].includes(url.protocol) && url.hostname === "tauri.localhost");
+            if (localWeb || tauri) {
                 res.setHeader("Access-Control-Allow-Origin", origin);
                 res.setHeader("Vary", "Origin");
             }

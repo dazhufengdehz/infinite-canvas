@@ -13,7 +13,10 @@
         "start": "vite preview --host 0.0.0.0 --port 3000",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "collab:server": "node server/standalone.mjs"
+        "collab:server": "node server/standalone.mjs",
+        "desktop:prepare": "node scripts/prepare-desktop-sidecar.mjs",
+        "desktop:dev": "bun run desktop:prepare && tauri dev",
+        "desktop:build": "bun run desktop:prepare && tauri build"
     },
     "dependencies": {
         "@ant-design/icons": "^6.1.1",
@@ -51,6 +54,7 @@
     },
     "devDependencies": {
         "@tailwindcss/postcss": "^4",
+        "@tauri-apps/cli": "^2",
         "@types/file-saver": "^2.0.7",
         "@types/node": "^20",
         "@types/react": "19.1.12",

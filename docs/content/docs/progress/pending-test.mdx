@@ -7,6 +7,12 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Tauri 2 桌面壳与 Sidecar 生命周期：
+  - 在当前平台准备 Rust、Node.js 与 Tauri 2 系统依赖后运行 `bun run desktop:dev`，确认自动准备 Node Sidecar、打开桌面窗口并连接 `127.0.0.1:18080`，启动期间不会回退到浏览器项目数据。
+  - 运行 `bun run desktop:build` 生成生产安装包，安装后确认无需单独启动 Node 或静态网站即可创建、重开项目及播放已落盘媒体；关闭窗口后 Sidecar 进程一并退出。
+  - 检查系统应用数据目录下的 `storage/projects/`、`storage/assets/` 与项目媒体目录，确认磁盘为权威数据位置；备份整个 `storage/` 后可在同版本环境中恢复。
+  - 保持 ComfyUI 独立运行在 `127.0.0.1:8188`，验证桌面端生成、候选采用和 ComfyUI 媒体输入；临时停止 Sidecar 或占用 18080 端口时应显式报错，不静默写入 IndexedDB。
+
 - ComfyUI 候选媒体与采用复制：
   - 在生图和视频工作台完成生成，确认历史记录仅保存远程候选引用；图片不转为 Data URL，视频只额外保存 WebP 封面，生成完成时不会完整下载原媒体到浏览器或项目目录。画布音频结果同样不再经过完整 Blob，而是在生成成功后直接采用到当前项目。
   - 在生图工作台将候选「添加为参考图」或「保存到素材」，在视频工作台将候选「保存到素材」，确认此时才通过 Sidecar 写入独立媒体文件，JPG、PNG、WebP 等格式保持真实 MIME，刷新后仍可读取。

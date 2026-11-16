@@ -53,7 +53,7 @@
 - 本地 Agent：通过本机 Canvas Agent 连接 Codex / Claude Code，让 Agent 通过 MCP 操作当前画布；提供 Codex App 插件。
 - 插件系统：支持通过 URL 动态安装 / 启用 / 更新 / 卸载远程节点插件，并提供 TypeScript SDK 开发画布节点插件。
 - 提示词库：浏览器前端直连多个 GitHub 开源项目，并缓存到 IndexedDB。
-- 纯前端架构：画布、素材、生成记录与 ComfyUI 访问凭据（如可选 Token）均保存在浏览器本地，无服务端依赖。
+- 本地数据：Web 版画布与素材保存在浏览器本地；Tauri 桌面版通过本机 Sidecar 将项目、素材与媒体保存到系统应用数据目录，无云端依赖。
 
 完整功能说明见 [功能介绍](docs/content/docs/overview/features.zh-CN.mdx)。
 
@@ -74,6 +74,18 @@ bun run dev
 ```
 
 启动后访问 `http://localhost:3000`。
+
+### Tauri 桌面应用
+
+需要额外安装 Rust、Node.js 与 [Tauri 2 系统依赖](https://v2.tauri.app/start/prerequisites/)，并保持 ComfyUI 在 `http://127.0.0.1:8188` 运行。
+
+```bash
+cd infinite-canvas/web
+bun install
+bun run desktop:dev
+```
+
+生产安装包通过 `bun run desktop:build` 生成，产物位于 `web/src-tauri/target/release/bundle/`。桌面端自动启动本机存储 Sidecar（仅监听 `127.0.0.1:18080`），Windows 数据默认位于 `%APPDATA%/com.imihoo.infinite-canvas/storage/`，macOS 位于 `~/Library/Application Support/com.imihoo.infinite-canvas/storage/`，Linux 位于 `~/.local/share/com.imihoo.infinite-canvas/storage/`。详见 [部署与发布](DEPLOY.md)。
 
 ### Docker 运行
 

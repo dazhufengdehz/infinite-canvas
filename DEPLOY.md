@@ -26,11 +26,39 @@
 | 形态 | 入口 | 适用场景 |
 | --- | --- | --- |
 | 本地开发 | `cd web && bun install && bun run dev` → `http://localhost:3000` | 开发调试 |
+| Tauri 桌面应用 | `cd web && bun run desktop:dev`；安装包使用 `bun run desktop:build` | 本机磁盘存储与桌面使用，见第 2.1 节 |
 | Docker | 仓库根目录 `docker compose up -d`（官方镜像 `916446339/infinite-canvas`），或 `docker-compose.local.yml` 本地构建 | 单机容器部署，详见 `docs/content/docs/overview/docker.zh-CN.mdx` |
 | 静态 nginx 服务器 | 本文第 4 节 | **当前生产环境（canvas.imihoo.com）** |
 | Vercel / Render | `vercel.json` / `render.yaml` | 一键云部署 |
 
 > Docker 与静态部署的区别：Docker 镜像在容器启动时用 `web/docker-entrypoint.sh` 按环境变量（`ANALYTICS_GA4_ID` / `ANALYTICS_BAIDU_ID`）**生成** `config.js`；静态部署直接使用 `web/public/config.js` 的内置空默认值（不启用任何统计）。
+
+### 2.1 Tauri 桌面应用
+
+桌面版将 `web/dist` 直接打包进应用，不需要 nginx 或静态网站服务。Rust 壳启动随包 Node Sidecar，Sidecar 仅监听 `127.0.0.1:18080` 并提供磁盘存储与 Range 媒体接口；关闭应用时一并退出。ComfyUI 是独立进程，仍需单独启动，默认使用 `http://127.0.0.1:8188`，不要将存储端口误配为 ComfyUI 地址。
+
+前置依赖：Bun、Node.js、Rust 与 [Tauri 2 平台依赖](https://v2.tauri.app/start/prerequisites/)。首次执行 `bun install` 后：
+
+```bash
+# 开发运行
+cd web
+bun run desktop:dev
+
+# 生产打包，产物在 src-tauri/target/release/bundle/
+bun run desktop:build
+```
+
+`desktop:prepare` 会把当前 Node.js 可执行文件复制为当前 Rust target triple 对应的 Sidecar；交叉编译其他平台或架构时，需准备对应目标平台的 Node 二进制，不能直接复用宿主文件。
+
+桌面数据以磁盘为权威，不会在 Sidecar 未就绪时回退到浏览器存储。默认位置：
+
+| 平台 | 数据目录 |
+| --- | --- |
+| Windows | `%APPDATA%/com.imihoo.infinite-canvas/storage/` |
+| macOS | `~/Library/Application Support/com.imihoo.infinite-canvas/storage/` |
+| Linux | `$XDG_DATA_HOME/com.imihoo.infinite-canvas/storage/`；未设置时为 `~/.local/share/com.imihoo.infinite-canvas/storage/` |
+
+其中 `projects/` 保存项目索引与各项目 JSON，`assets/` 保存素材索引与素材媒体，项目专属媒体保存在各自项目目录。备份时复制整个 `storage/` 目录；第一阶段不提供浏览器 IndexedDB 旧数据自动迁移。
 
 ## 3. 发布流程（打版本）
 
