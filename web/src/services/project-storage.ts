@@ -125,5 +125,5 @@ export async function saveAssets(assets: Asset[]) {
 }
 
 export function scopedStorageKey(kind: string, ownerId = "assets") {
-    return `${kind}:${ownerId === "assets" ? "assets" : `p_${ownerId}`}_${nanoid()}`;
+    return `${kind}:${ownerId === "assets" ? "assets" : `p_${ownerId}`}_m${nanoid()}`;
 }

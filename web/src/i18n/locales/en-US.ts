@@ -1011,7 +1011,7 @@ export default {
             "boxSelect": "Select multiple nodes",
             "addSelection": "Add nodes to selection",
             "selectAll": "Select all nodes",
-            "copyPaste": "Copy/paste nodes or paste clipboard text/images",
+            "copyPaste": "Copy/paste nodes or paste clipboard text/images/videos/audio",
             "copyPasteNodes": "Copy/paste nodes",
             "delete": "Delete selection",
             "escape": "Clear selection and close overlays",

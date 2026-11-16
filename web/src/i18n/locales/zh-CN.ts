@@ -1011,7 +1011,7 @@ export default {
             "boxSelect": "框选多个节点",
             "addSelection": "追加选择节点",
             "selectAll": "全选节点",
-            "copyPaste": "复制 / 粘贴节点，或粘贴剪切板文本/图片",
+            "copyPaste": "复制 / 粘贴节点，或粘贴剪贴板文本/图片/视频/音频",
             "copyPasteNodes": "复制 / 粘贴节点",
             "delete": "删除选中",
             "escape": "取消选择并关闭浮层",

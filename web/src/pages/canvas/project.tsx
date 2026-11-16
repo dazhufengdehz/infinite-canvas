@@ -2066,6 +2066,17 @@ function InfiniteCanvasPage() {
         setSelectedConnectionId(null);
     }, [projectId]);
 
+    const createMediaFileNodes = useCallback(async (files: File[], basePos: Position) => {
+        const mediaFiles = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/") || isAudioFile(file));
+        for (const [index, file] of mediaFiles.entries()) {
+            const position = { x: basePos.x + index * 40, y: basePos.y + index * 40 };
+            if (isAudioFile(file)) await createAudioFileNode(file, position);
+            else if (file.type.startsWith("video/")) await createVideoFileNode(file, position);
+            else await createImageFileNode(file, position);
+        }
+        return mediaFiles.length;
+    }, [createAudioFileNode, createImageFileNode, createVideoFileNode]);
+
     const createTextNodeFromClipboard = useCallback(
         (text: string) => {
             const trimmed = text.trim();
@@ -2103,6 +2114,26 @@ function InfiniteCanvasPage() {
         const text = await navigator.clipboard.readText();
         if (createTextNodeFromClipboard(text)) message.success(t("canvas.projectPage.clipboardTextAdded"));
     }, [createImageFileNode, createTextNodeFromClipboard, getCanvasCenter, message, t]);
+
+    useEffect(() => {
+        const handlePaste = (event: ClipboardEvent) => {
+            const target = event.target instanceof Element ? event.target : null;
+            if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-shortcuts-ignore]")) return;
+            const files = Array.from(event.clipboardData?.files || []);
+            if (files.length) {
+                event.preventDefault();
+                void createMediaFileNodes(files, getCanvasCenter()).catch((error) => message.error(error instanceof Error ? error.message : String(error)));
+                return;
+            }
+            if (pasteCopiedNodes()) {
+                event.preventDefault();
+                return;
+            }
+            void pasteSystemClipboard();
+        };
+        window.addEventListener("paste", handlePaste);
+        return () => window.removeEventListener("paste", handlePaste);
+    }, [createMediaFileNodes, getCanvasCenter, message, pasteCopiedNodes, pasteSystemClipboard]);
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
@@ -2152,12 +2183,6 @@ function InfiniteCanvasPage() {
                 return;
             }
 
-            if (isModifierShortcut && !event.altKey && key === "v") {
-                event.preventDefault();
-                if (!pasteCopiedNodes()) void pasteSystemClipboard();
-                return;
-            }
-
             if (event.key === "Delete" || event.key === "Backspace") {
                 if (selectedNodeIdsRef.current.size) {
                     deleteNodes(new Set(selectedNodeIdsRef.current));
@@ -2185,7 +2210,7 @@ function InfiniteCanvasPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [copySelectedNodes, deleteConnection, deleteNodes, pasteCopiedNodes, pasteSystemClipboard, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
+    }, [copySelectedNodes, deleteConnection, deleteNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
 
     const handleConnectStart = useCallback(
         (event: ReactMouseEvent | React.PointerEvent, nodeId: string, handleType: "source" | "target") => {
@@ -3339,26 +3364,10 @@ function InfiniteCanvasPage() {
                 }
             }
 
-            const files = Array.from(event.dataTransfer.files).filter(
-                (item) => item.type.startsWith("image/") || item.type.startsWith("video/") || isAudioFile(item),
-            );
-            if (!files.length) return;
-
-            const basePos = screenToCanvas(event.clientX, event.clientY);
-            const STAGGER = 40;
-            for (let i = 0; i < files.length; i++) {
-                const pos = { x: basePos.x + i * STAGGER, y: basePos.y + i * STAGGER };
-                const f = files[i];
-                if (isAudioFile(f)) {
-                    await createAudioFileNode(f, pos);
-                } else if (f.type.startsWith("video/")) {
-                    await createVideoFileNode(f, pos);
-                } else {
-                    await createImageFileNode(f, pos);
-                }
-            }
+            const files = Array.from(event.dataTransfer.files);
+            if (files.length) await createMediaFileNodes(files, screenToCanvas(event.clientX, event.clientY));
         },
-        [createAudioFileNode, createImageFileNode, createVideoFileNode, handleAssetInsert, screenToCanvas],
+        [createMediaFileNodes, handleAssetInsert, screenToCanvas],
     );
 
     const startTitleEditing = useCallback(() => {

@@ -12,6 +12,11 @@ The current release needs manual verification in these areas:
   - 在图片、视频、音频、文本节点确认内置模型与自定义工作流同时可选，切换及刷新后 `channelId`、`modelId`、`workflowId` 绑定一致，不会自动改绑其他已有节点或回退内置模型。
   - 使用未标记尺寸、时长或高级文本参数的工作流，确认对应控件隐藏且请求不注入这些字段；按 `ref_image_0N`、`ref_video_0N`、`ref_audio_0N` 和首尾帧槽位连接资源，确认配额、顺序、未使用槽位修剪及生成按钮布局正确。
 
+- 媒体落盘与外部素材导入：
+  - 使用桌面端连续生成并采用多个视频，确认 ComfyUI 成功后媒体均能落盘播放，不再随机出现“媒体ID不合法”；图片、音频及对应封面也应正常保存。
+  - 从文件管理器复制图片、视频、音频或多个混合文件，在画布非输入区域按 `Ctrl+V`，确认按原类型创建节点；复制节点、粘贴文本或截图的既有行为保持可用。
+  - 将本地图片、视频、音频拖到空白画布及节点参考区，确认均能在释放位置创建媒体节点，节点内部参考资源拖拽排序不受影响。
+
 - MiniMax H3 Easy 插件工作流接入（按 `class_type` 识别，不要求任何 `_meta.title` 标注）：
   - 上传主节点 `MiniMaxH3Easy`、素材入口 `MiniMaxH3EasyMediaLoader`、保存节点 `SaveVideo` 的 API JSON，确认在「全部工作流」下自动识别为全能参考视频；未标 `prompt`、`output_video` 也能通过校验，缺失媒体入口或必需输入时明确报错。
   - 在画布视频节点连接 1~9 张图、0~3 个视频、0~3 个音频后生成，确认 `media_state` 文件名与连线顺序一致；切换尺寸档与时长后，主节点 `width`、`height`、`seconds` 同步变化且 `resolution` 为 `custom`。

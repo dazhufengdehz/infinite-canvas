@@ -117,6 +117,7 @@ export function CanvasNodeReferenceBar({
     };
 
     const handleDragOver = (e: DragEvent, index: number) => {
+        if (dragIndexRef.current === null) return;
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
@@ -135,6 +136,7 @@ export function CanvasNodeReferenceBar({
     };
 
     const handleDrop = (e: DragEvent, index?: number) => {
+        if (dragIndexRef.current === null) return;
         e.preventDefault();
         e.stopPropagation();
 
