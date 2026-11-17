@@ -493,7 +493,9 @@ export class CanvasSession {
         const clientId = this.targetClientId;
         const client = this.clients.get(clientId);
         if (!client) throw new Error("当前没有已连接画布");
-        sendEvent(client, "tool_call", { requestId, name, input });
+        const snapshot = this.canvasStates.get(clientId);
+        if (!SITE_TOOLS.has(name) && (!snapshot?.projectId || !snapshot.canvasId)) throw new Error("当前画布缺少项目或画布标识");
+        sendEvent(client, "tool_call", { requestId, name, input, projectId: snapshot?.projectId, canvasId: snapshot?.canvasId });
         logger.debug("Canvas tool request sent", { requestId, name, input, clientId });
         return await new Promise((resolve, reject) => {
             const timer = setTimeout(() => {

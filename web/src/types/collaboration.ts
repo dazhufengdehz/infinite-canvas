@@ -25,6 +25,8 @@ export type CollabPeerPresence = {
 };
 
 export type CollabRoomSnapshot = {
+    projectId: string;
+    canvasId: string;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
     title: string;

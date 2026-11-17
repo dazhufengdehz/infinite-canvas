@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Empty, Input, Modal, Pagination, Tabs, Tag } from "antd";
-import { FileText, Image as ImageIcon, Music2, Search, Video } from "lucide-react";
+import { FileText, Image as ImageIcon, Music2, Search, Trash2, Video } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { SystemPresetGallery } from "@/components/assets/system-preset-gallery";
@@ -20,10 +20,11 @@ type Props = {
     defaultTab?: string;
     projectAssets?: Asset[];
     onInsert: (payload: InsertAssetPayload) => void;
+    onRemove?: (asset: Asset) => void;
     onClose: () => void;
 };
 
-export function AssetPickerModal({ open, defaultTab, projectAssets, onInsert, onClose }: Props) {
+export function AssetPickerModal({ open, defaultTab, projectAssets, onInsert, onRemove, onClose }: Props) {
     const { t } = useTranslation();
     const globalAssets = useAssetStore((state) => state.assets);
     const initialTab = defaultTab || (projectAssets ? "project-assets" : "my-assets");
@@ -51,7 +52,7 @@ export function AssetPickerModal({ open, defaultTab, projectAssets, onInsert, on
                     ...(projectAssets ? [{
                         key: "project-assets",
                         label: t("canvas.assetPicker.tabProjectAssets"),
-                        children: <AssetListTab assets={projectAssets} onInsert={onInsert} />,
+                        children: <AssetListTab assets={projectAssets} onInsert={onInsert} onRemove={onRemove} />,
                     }] : []),
                     {
                         key: "my-assets",
@@ -122,7 +123,7 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
     return (
         <button
             type="button"
-            className="group relative cursor-pointer overflow-hidden rounded-lg border border-stone-200 bg-white text-left transition hover:border-stone-400 hover:shadow-md dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-500"
+            className="group relative w-full cursor-pointer overflow-hidden rounded-lg border border-stone-200 bg-white text-left transition hover:border-stone-400 hover:shadow-md dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-500"
             onClick={onClick}
         >
             {coverElement}
@@ -139,7 +140,7 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
     );
 }
 
-function AssetListTab({ assets, onInsert }: { assets: Asset[]; onInsert: (payload: InsertAssetPayload) => void }) {
+function AssetListTab({ assets, onInsert, onRemove }: { assets: Asset[]; onInsert: (payload: InsertAssetPayload) => void; onRemove?: (asset: Asset) => void }) {
     const { t } = useTranslation();
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState("all");
@@ -206,13 +207,25 @@ function AssetListTab({ assets, onInsert }: { assets: Asset[]; onInsert: (payloa
             {visible.length ? (
                 <div className="grid grid-cols-4 gap-3">
                     {visible.map((asset) => (
-                        <PickerCard
-                            key={asset.id}
-                            title={asset.title}
-                            kind={asset.kind}
-                            cover={asset.kind === "image" ? (asset.data.dataUrl || asset.coverUrl) : (asset.kind === "video" ? (asset.coverUrl || "") : "")}
-                            onClick={() => handleInsert(asset)}
-                        />
+                        <div key={asset.id} className="group relative">
+                            <PickerCard
+                                title={asset.title}
+                                kind={asset.kind}
+                                cover={asset.kind === "image" ? (asset.data.dataUrl || asset.coverUrl) : (asset.kind === "video" ? (asset.coverUrl || "") : "")}
+                                onClick={() => handleInsert(asset)}
+                            />
+                            {onRemove ? (
+                                <button
+                                    type="button"
+                                    title={t("canvas.assetPicker.remove")}
+                                    aria-label={t("canvas.assetPicker.remove")}
+                                    className="absolute right-2 top-2 z-10 rounded-md bg-white/85 p-1.5 text-stone-500 opacity-0 transition hover:bg-white hover:text-red-500 focus:opacity-100 group-hover:opacity-100 dark:bg-stone-900/85 dark:text-stone-400 dark:hover:bg-stone-900"
+                                    onClick={() => onRemove(asset)}
+                                >
+                                    <Trash2 className="size-4" />
+                                </button>
+                            ) : null}
+                        </div>
                     ))}
                 </div>
             ) : (

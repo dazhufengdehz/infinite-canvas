@@ -132,6 +132,15 @@ function conversationBootstrapView(conversation: AgentConversationState) {
     return { bootstrapStatus, mcpStartupStatuses };
 }
 
+function assertCanvasToolTarget(payload: AgentPendingToolCall, context: AgentCanvasContext | null) {
+    if (!context) throw new Error(rt("openCanvasFirst"));
+    const { projectId, canvasId } = context.snapshot;
+    if (!payload.projectId || !payload.canvasId || payload.projectId !== projectId || payload.canvasId !== canvasId) {
+        throw new Error(rt("canvasTargetChanged"));
+    }
+    return context;
+}
+
 export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?: boolean; headless?: boolean; autoConnect?: boolean }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -929,6 +938,8 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             return;
         }
         try {
+            const context = canvasContextRef.current;
+            assertCanvasToolTarget(payload, context);
             const input: { ops?: CanvasAgentOp[]; path?: string } = payload.input || {};
             addEventLog(toolName(payload.name), payload, payload);
             let result: unknown;
@@ -938,25 +949,20 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                 navigate(path);
                 result = { ok: true, path };
             } else if (payload.name === "canvas_apply_ops") {
-                const context = canvasContextRef.current;
-                if (!context) throw new Error(rt("openCanvasFirst"));
                 const before = context.snapshot;
                 appliedOps = bindAgentCanvasWorkflows(appliedOps, before, useConfigStore.getState().config);
                 const snapshot = context.applyOps(appliedOps);
                 result = buildCanvasAgentToolResult(payload.requestId, before, snapshot, appliedOps);
                 void postState(endpoint, token, clientIdRef.current, snapshot);
             } else if (payload.name === "canvas_create_attachment_nodes") {
-                const context = canvasContextRef.current;
-                if (!context) throw new Error(rt("openCanvasFirst"));
                 const before = context.snapshot;
                 appliedOps = await attachmentNodeOps(endpoint, token, clientIdRef.current, payload.input?.nodes);
+                assertCanvasToolTarget(payload, canvasContextRef.current);
                 const snapshot = context.applyOps(appliedOps);
                 result = buildCanvasAgentToolResult(payload.requestId, before, snapshot, appliedOps);
                 await postState(endpoint, token, clientIdRef.current, snapshot);
             } else {
-                const snapshot = canvasContextRef.current?.snapshot;
-                if (!snapshot) throw new Error(rt("openCanvasFirst"));
-                result = snapshot;
+                result = context.snapshot;
             }
             await postToolResult(endpoint, token, clientIdRef.current, { requestId: payload.requestId, result });
             addEventLog(rt("toolCompleted", { tool: toolName(payload.name) }), result, result);

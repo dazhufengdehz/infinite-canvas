@@ -665,7 +665,11 @@ export default {
             "empty": "没有资产",
             "tabMyAssets": "我的素材",
             "tabProjectAssets": "本项目资产",
-            "tabSystemPresets": "系统预设"
+            "tabSystemPresets": "系统预设",
+            "remove": "删除项目资产",
+            "removeDescription": "确定从本项目删除“{{title}}”吗？",
+            "removeReferenced": "无法删除项目资产",
+            "removeReferencedDescription": "以下画布仍引用该资产，请先移除对应节点或改用其他资产：\n{{references}}"
         },
         "imageTools": {
             "copyPrompt": "复制提示词",
@@ -2110,6 +2114,7 @@ export default {
             "toolCompleted": "{{tool}}完成",
             "toolExecutionFailed": "工具执行失败",
             "openCanvasFirst": "当前不在画布页，请先用 site_navigate 打开画布",
+            "canvasTargetChanged": "画布已切换，已阻止对原项目或画布执行过期操作",
             "canvasOperationFailed": "画布操作失败",
             "canvasToolCanceled": "用户取消了画布工具调用",
             "submittingApproval": "正在提交权限决定",

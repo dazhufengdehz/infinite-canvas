@@ -166,11 +166,15 @@ export async function ensureCollabAssetCached(storageKey: string, isMedia = fals
 }
 
 export function useCanvasCollab({
+    projectId,
+    canvasId,
     onRemoteCanvasUpdate,
     onRemoteNodesPatch,
     onRemoteGenerationStatus,
     getCurrentSnapshot,
 }: {
+    projectId: string;
+    canvasId: string;
     onRemoteCanvasUpdate?: (nodes: CanvasNodeData[], connections: CanvasConnection[], title?: string) => void;
     onRemoteNodesPatch?: (nodes: CanvasNodeData[], connections: CanvasConnection[]) => void;
     onRemoteGenerationStatus?: (nodeId: string, status: CanvasNodeStatus, errorDetails?: string, metadata?: CanvasNodeMetadata) => void;
@@ -236,12 +240,14 @@ export function useCanvasCollab({
                 type: "sync_canvas",
                 roomId: state.activeRoomId,
                 clientId: state.clientId,
+                projectId,
+                canvasId,
                 nodes: sharedNodes,
                 connections,
                 title,
             });
         },
-        [send],
+        [canvasId, projectId, send],
     );
 
     // Broadcast patch (Host only)
@@ -257,11 +263,13 @@ export function useCanvasCollab({
                 type: "patch_nodes",
                 roomId: state.activeRoomId,
                 clientId: state.clientId,
+                projectId,
+                canvasId,
                 nodes: sharedNodes,
                 connections,
             });
         },
-        [send],
+        [canvasId, projectId, send],
     );
 
     // Broadcast generation status (Host only)
@@ -282,13 +290,15 @@ export function useCanvasCollab({
                 type: "generation_status",
                 roomId: state.activeRoomId,
                 clientId: state.clientId,
+                projectId,
+                canvasId,
                 nodeId,
                 status,
                 errorDetails,
                 metadata: sanitizedMeta,
             });
         },
-        [send],
+        [canvasId, projectId, send],
     );
 
     // Broadcast cursor position (All roles)
@@ -300,11 +310,13 @@ export function useCanvasCollab({
                 type: "cursor",
                 roomId: state.activeRoomId,
                 clientId: state.clientId,
+                projectId,
+                canvasId,
                 cursor,
                 selectedNodeIds,
             });
         },
-        [send],
+        [canvasId, projectId, send],
     );
 
     // Connect & maintain WebSocket
@@ -338,6 +350,8 @@ export function useCanvasCollab({
                         type: "join",
                         roomId: activeRoomId,
                         clientId: state.clientId,
+                        projectId,
+                        canvasId,
                         role: state.role,
                         hostToken: state.hostToken,
                         nickname: state.nickname,
@@ -355,6 +369,8 @@ export function useCanvasCollab({
                                 type: "sync_canvas",
                                 roomId: activeRoomId,
                                 clientId: state.clientId,
+                                projectId,
+                                canvasId,
                                 nodes: sharedNodes,
                                 connections: snap.connections,
                                 title: snap.title,
@@ -365,10 +381,17 @@ export function useCanvasCollab({
             };
 
             ws.onmessage = (event) => {
+                if (isUnmounted) return;
                 try {
                     const data = JSON.parse(event.data);
+                    if (data.projectId !== projectId || data.canvasId !== canvasId) return;
                     const currentRole = useCollabStore.getState().role;
 
+                    if (data.type === "collab_error") {
+                        console.warn("[Collab]", data.error);
+                        setStatus("disconnected");
+                        return;
+                    }
                     if (data.type === "join_ack") {
                         setHostOnline(Boolean(data.isHostOnline));
                         // If viewer and server has a cached snapshot, load it!
@@ -396,6 +419,8 @@ export function useCanvasCollab({
                                         type: "sync_canvas",
                                         roomId: activeRoomId,
                                         clientId: useCollabStore.getState().clientId,
+                                        projectId,
+                                        canvasId,
                                         nodes: sharedNodes,
                                         connections: snapshot.connections,
                                         title: snapshot.title,
@@ -475,7 +500,7 @@ export function useCanvasCollab({
                 wsRef.current = null;
             }
         };
-    }, [activeRoomId, role, hostToken, setStatus, setOnlineUsers, updatePeerPresence, setHostOnline]);
+    }, [activeRoomId, role, hostToken, projectId, canvasId, setStatus, setOnlineUsers, updatePeerPresence, setHostOnline]);
 
     return {
         broadcastCanvasSync,

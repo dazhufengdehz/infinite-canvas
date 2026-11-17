@@ -13,7 +13,7 @@ import { getModelProfile } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
-import { addStoredProjectAsset, readProjectAssets, readProjectBundle } from "@/services/project-storage";
+import { addStoredProjectAsset, readProjectAssets, readProjectBundle, saveStoredProjectAssets } from "@/services/project-storage";
 import { assetFromCanvasNode, copyAssetToOwner, resolveAssetMedia, toAssetDraft } from "@/services/project-assets";
 import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
@@ -370,6 +370,8 @@ function InfiniteCanvasPage() {
     const lastCursorBroadcastRef = useRef(0);
 
     const { broadcastCanvasSync, broadcastNodesPatch, broadcastGenerationStatus, broadcastCursor } = useCanvasCollab({
+        projectId,
+        canvasId: currentCanvas?.id || canvasId,
         onRemoteCanvasUpdate: (remoteNodes, remoteConnections, remoteTitle) => {
             setNodes(remoteNodes);
             setConnections(remoteConnections);
@@ -1733,6 +1735,41 @@ function InfiniteCanvasPage() {
             hide();
         }
     }, [flushProject, message, projectId, t]);
+
+    const removeProjectAsset = useCallback(async (asset: Asset) => {
+        try {
+            await flushProject();
+            const project = await readProjectBundle(projectId);
+            if (!project) throw new Error(t("canvas.projectPage.notFound"));
+            const references = project.canvases.flatMap((canvas) =>
+                canvas.nodes
+                    .filter((node) => node.metadata?.assetId === asset.id)
+                    .map((node) => `${canvas.title} / ${node.title || node.id}`),
+            );
+            if (references.length) {
+                modal.warning({
+                    title: t("canvas.assetPicker.removeReferenced"),
+                    content: <div className="whitespace-pre-line">{t("canvas.assetPicker.removeReferencedDescription", { references: references.join("\n") })}</div>,
+                });
+                return;
+            }
+            modal.confirm({
+                title: t("canvas.assetPicker.remove"),
+                content: t("canvas.assetPicker.removeDescription", { title: asset.title }),
+                okText: t("common.delete"),
+                cancelText: t("common.cancel"),
+                okButtonProps: { danger: true },
+                onOk: async () => {
+                    const next = projectAssetsRef.current.filter((item) => item.id !== asset.id);
+                    await saveStoredProjectAssets(projectId, next);
+                    updateProjectAssets(next);
+                    message.success(t("assets.deleted"));
+                },
+            });
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : String(error));
+        }
+    }, [flushProject, message, modal, projectId, t, updateProjectAssets]);
 
     const handleCanvasMouseDown = useCallback(
         (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -5277,7 +5314,7 @@ function InfiniteCanvasPage() {
                     </Modal>
                 ) : null}
 
-                <AssetPickerModal open={assetPickerOpen} projectAssets={projectAssets} onInsert={handleAssetInsert} onClose={() => setAssetPickerOpen(false)} />
+                <AssetPickerModal open={assetPickerOpen} projectAssets={projectAssets} onInsert={handleAssetInsert} onRemove={removeProjectAsset} onClose={() => setAssetPickerOpen(false)} />
                 <CanvasCollabModal
                     projectId={projectId}
                     canvasId={currentCanvas?.id || canvasId}

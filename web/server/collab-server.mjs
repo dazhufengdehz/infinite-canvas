@@ -122,13 +122,15 @@ export function attachCollabServer(httpServer) {
 }
 
 function handleMessage(ws, msg, setSession) {
-    const { type, roomId, clientId } = msg;
-    if (!roomId || !clientId) return;
+    const { type, roomId, clientId, projectId, canvasId } = msg;
+    if (!roomId || !clientId || !projectId || !canvasId) return;
 
     let room = rooms.get(roomId);
-    if (!room) {
+    if (type === "join" && !room) {
         room = {
             id: roomId,
+            projectId,
+            canvasId,
             hostId: null,
             hostToken: null,
             title: "",
@@ -138,6 +140,10 @@ function handleMessage(ws, msg, setSession) {
             lastUpdated: Date.now(),
         };
         rooms.set(roomId, room);
+    }
+    if (!room || room.projectId !== projectId || room.canvasId !== canvasId) {
+        send(ws, { type: "collab_error", projectId, canvasId, error: "协同房间已绑定其他项目或画布" });
+        return;
     }
 
     if (type === "join") {
@@ -173,10 +179,14 @@ function handleMessage(ws, msg, setSession) {
             type: "join_ack",
             roomId,
             clientId,
+            projectId: room.projectId,
+            canvasId: room.canvasId,
             role: client.role,
             hostToken: isHost ? room.hostToken : undefined,
             isHostOnline: Boolean(room.hostId && room.clients.has(room.hostId)),
             snapshot: {
+                projectId: room.projectId,
+                canvasId: room.canvasId,
                 nodes: room.nodes,
                 connections: room.connections,
                 title: room.title,
@@ -191,6 +201,8 @@ function handleMessage(ws, msg, setSession) {
             const hostClient = room.clients.get(room.hostId);
             send(hostClient.ws, {
                 type: "request_snapshot",
+                projectId: room.projectId,
+                canvasId: room.canvasId,
                 requesterId: clientId,
             });
         }
@@ -295,7 +307,7 @@ function broadcastUserList(room) {
 }
 
 function broadcastToRoom(room, payload, excludeClientId = null) {
-    const raw = JSON.stringify(payload);
+    const raw = JSON.stringify({ projectId: room.projectId, canvasId: room.canvasId, ...payload });
     for (const client of room.clients.values()) {
         if (excludeClientId && client.id === excludeClientId) continue;
         if (client.ws.readyState === WebSocket.OPEN) {

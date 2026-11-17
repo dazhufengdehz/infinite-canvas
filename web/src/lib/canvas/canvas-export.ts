@@ -15,7 +15,7 @@ export async function exportCanvasProjects(projects: CanvasProjectBundle[], file
         const files: CanvasExportAsset[] = [];
         for (const storageKey of collectStorageKeys(project)) {
             const blob = storageKey.startsWith("image:") ? await getImageBlob(storageKey) : await getMediaBlob(storageKey);
-            if (!blob) continue;
+            if (!blob) throw new Error(`Missing export media: ${storageKey}`);
             const path = `projects/${project.id}/files/${safeFileName(storageKey)}.${fileExtension(blob.type, storageKey)}`;
             files.push({ storageKey, path, mimeType: blob.type || "application/octet-stream", bytes: blob.size });
             zipFiles.push({ name: path, data: blob });
@@ -63,7 +63,7 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
     saveAs(zip, `${safeFileName(fileName)}.zip`);
 }
 
-function collectStorageKeys(value: unknown, keys = new Set<string>()) {
+export function collectStorageKeys(value: unknown, keys = new Set<string>()) {
     if (!value || typeof value !== "object") return [...keys];
     if ("storageKey" in value && typeof value.storageKey === "string" && value.storageKey.includes(":")) keys.add(value.storageKey);
     if ("posterStorageKey" in value && typeof value.posterStorageKey === "string" && value.posterStorageKey.includes(":")) keys.add(value.posterStorageKey);

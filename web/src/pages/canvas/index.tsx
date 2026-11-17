@@ -8,13 +8,13 @@ import { nanoid } from "nanoid";
 import { readZip } from "@/lib/zip";
 import { setMediaBlob } from "@/services/file-storage";
 import { setImageBlob } from "@/services/image-storage";
-import { readProjects } from "@/services/project-storage";
+import { readProjects, scopedStorageKey } from "@/services/project-storage";
 import { CanvasDeleteProjectsDialog } from "@/components/canvas/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "@/components/canvas/canvas-project-card";
 import type { CanvasExportFile } from "@/types/canvas-export";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
-import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
+import { collectStorageKeys, exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
 
 export default function CanvasPage() {
@@ -54,21 +54,20 @@ export default function CanvasPage() {
             const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
             for (const exported of data.projects) {
                 const id = nanoid();
-                const keyMap = new Map<string, string>();
-                for (const file of exported.files) {
-                    const [kind, scopedId] = file.storageKey.split(":", 2);
-                    const prefix = `p_${exported.project.id}_`;
-                    if (scopedId?.startsWith(prefix)) keyMap.set(file.storageKey, `${kind}:p_${id}_${scopedId.slice(prefix.length)}`);
-                }
-                const project = remapImportedStrings(exported.project, keyMap);
-                await importProject(project, id);
-                for (const file of exported.files) {
-                    const blob = zip.get(file.path);
-                    if (!blob) continue;
+                const referencedKeys = collectStorageKeys(exported.project);
+                const filesByKey = new Map(exported.files.map((file) => [file.storageKey, file]));
+                const keyMap = new Map(referencedKeys.map((storageKey) => [storageKey, scopedStorageKey(storageKey.split(":", 1)[0], id)]));
+                const files = referencedKeys.map((storageKey) => {
+                    const file = filesByKey.get(storageKey);
+                    const blob = file ? zip.get(file.path) : null;
+                    if (!file || !blob) throw new Error(`Missing import media: ${storageKey}`);
+                    return { file, blob, storageKey: keyMap.get(storageKey)! };
+                });
+                for (const { file, blob, storageKey } of files) {
                     const typedBlob = blob.type ? blob : blob.slice(0, blob.size, file.mimeType);
-                    const storageKey = keyMap.get(file.storageKey) || file.storageKey;
                     await (storageKey.startsWith("image:") ? setImageBlob(storageKey, typedBlob) : setMediaBlob(storageKey, typedBlob));
                 }
+                await importProject(exported.project, id, keyMap);
             }
             message.success(t("canvas.imported", { count: data.projects.length }));
         } catch {
@@ -148,17 +147,4 @@ export default function CanvasPage() {
             <CanvasDeleteProjectsDialog />
         </main>
     );
-}
-
-function remapImportedStrings<T>(value: T, keyMap: Map<string, string>): T {
-    if (typeof value === "string") {
-        let next = value;
-        keyMap.forEach((replacement, storageKey) => {
-            next = next.split(storageKey).join(replacement).split(encodeURIComponent(storageKey)).join(encodeURIComponent(replacement));
-        });
-        return next as T;
-    }
-    if (Array.isArray(value)) return value.map((item) => remapImportedStrings(item, keyMap)) as T;
-    if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remapImportedStrings(item, keyMap)])) as T;
-    return value;
 }

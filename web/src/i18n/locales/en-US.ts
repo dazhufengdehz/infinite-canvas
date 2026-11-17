@@ -665,7 +665,11 @@ export default {
             "empty": "No assets",
             "tabMyAssets": "My Assets",
             "tabProjectAssets": "Project Assets",
-            "tabSystemPresets": "System presets"
+            "tabSystemPresets": "System presets",
+            "remove": "Remove project asset",
+            "removeDescription": "Remove “{{title}}” from this project?",
+            "removeReferenced": "Cannot remove project asset",
+            "removeReferencedDescription": "These canvases still reference this asset. Remove the nodes or relink them first:\n{{references}}"
         },
         "imageTools": {
             "copyPrompt": "Copy prompt",
@@ -2110,6 +2114,7 @@ export default {
             "toolCompleted": "{{tool}} completed",
             "toolExecutionFailed": "Tool execution failed",
             "openCanvasFirst": "The canvas is not open. Use site_navigate to open it first.",
+            "canvasTargetChanged": "The canvas has changed. The stale operation was blocked from modifying its original project or canvas.",
             "canvasOperationFailed": "Canvas operation failed",
             "canvasToolCanceled": "The user canceled the canvas tool call",
             "submittingApproval": "Submitting permission decision",
