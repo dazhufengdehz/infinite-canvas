@@ -34,10 +34,7 @@ export function buildCanvasToolRequest(name: ToolName, input: Record<string, unk
         return applyOps([configNodeOp(configId, input, x, y), ...(input.autoRun ? [runGenerationOp(configId, mode, prompt)] : [])]);
     }
     if (name === "canvas_create_generation_flow") return applyOps(generationFlowOps(input, state));
-    if (name === "canvas_generate_audio") {
-        throw new Error("当前项目尚未支持 ComfyUI 音频生成");
-    }
-    if (name === "canvas_generate_text" || name === "canvas_generate_image" || name === "canvas_generate_video") {
+    if (name === "canvas_generate_text" || name === "canvas_generate_image" || name === "canvas_generate_video" || name === "canvas_generate_audio") {
         return applyOps(generationFlowOps({ ...input, mode: name.replace("canvas_generate_", ""), autoRun: true }, state));
     }
     if (name === "canvas_update_node") {
@@ -106,7 +103,8 @@ function configNodeOp(id: string, input: Record<string, unknown>, x: number, y: 
             composerContent: prompt,
             prompt,
             status: "idle",
-            model: input.model,
+            channelId: input.channelId,
+            workflowId: input.workflowId,
             size: input.size,
             quality: input.quality,
             count: input.count,
@@ -172,5 +170,5 @@ function findNode(state: CanvasSnapshot | null, id: string): CanvasNode | undefi
 
 /** 移除对象中未设置的生成参数。 */
 function cleanRecord(value: Record<string, unknown>) {
-    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== ""));
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== ""));
 }

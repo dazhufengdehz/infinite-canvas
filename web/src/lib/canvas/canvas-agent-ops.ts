@@ -25,6 +25,20 @@ export type CanvasAgentSnapshot = {
     viewport: ViewportTransform;
 };
 
+export function buildCanvasAgentToolResult(requestId: string, before: CanvasAgentSnapshot, snapshot: CanvasAgentSnapshot, ops: CanvasAgentOp[]) {
+    const previousNodeIds = new Set(before.nodes.map((node) => node.id));
+    const previousConnectionIds = new Set(before.connections.map((connection) => connection.id));
+    return {
+        success: true as const,
+        requestId,
+        projectId: snapshot.projectId,
+        createdNodeIds: snapshot.nodes.filter((node) => !previousNodeIds.has(node.id)).map((node) => node.id),
+        createdConnectionIds: snapshot.connections.filter((connection) => !previousConnectionIds.has(connection.id)).map((connection) => connection.id),
+        generationNodeIds: ops.filter((op) => op.type === "run_generation").map((op) => op.nodeId),
+        snapshot,
+    };
+}
+
 export function summarizeCanvasAgentOps(ops?: CanvasAgentOp[]) {
     const counts = (Array.isArray(ops) ? ops : []).reduce<Record<string, number>>((acc, op) => {
         if (!op?.type) return acc;

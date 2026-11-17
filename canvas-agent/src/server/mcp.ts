@@ -6,6 +6,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
 import { toolDescriptions, toolInputSchemas, toolNames, type ToolName } from "../canvas/schemas.js";
+import { parseToolInput } from "../canvas/tools.js";
 import { AGENT_PROMPT, loadConfig, type CanvasAgentConfig, VERSION } from "../config.js";
 import { openCanvas } from "../utils/browser.js";
 
@@ -23,7 +24,7 @@ export async function startMcpServer() {
 function registerCanvasTool(server: McpServer, config: CanvasAgentConfig, name: ToolName) {
     const schema = toolInputSchemas[name];
     server.registerTool(name, { description: toolDescriptions[name], inputSchema: schema.shape }, async (input: unknown) => {
-        const result = await postCanvasAgentTool(config, name, schema.parse(input));
+        const result = await postCanvasAgentTool(config, name, parseToolInput(name, input));
         return { content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }] };
     });
 }

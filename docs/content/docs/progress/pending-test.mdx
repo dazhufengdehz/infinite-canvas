@@ -7,6 +7,13 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- 内部 Agent 结构化画布操作与真实工作流生成：
+  - 请求 `GET /api/tools/openai`，确认返回 OpenAI `type: "function"` 工具清单；封闭生成工具使用 `strict: true`、全部字段进入 `required` 且可选字段允许 `null`，包含开放 metadata 的底层工具保持 `strict: false`。通过 `POST /api/tools` 传入带 `null` 可选参数的调用，确认与 MCP 使用相同校验且正常执行。
+  - 让 Agent 分别创建默认文生图、指定名称或 Profile ID 的生图流程，确认配置节点的 `channelId`、`workflowId`、`modelId` 与当前真实工作流一致；连接参考图后创建图片流程应自动选择 I2I，资源数量、尺寸和时长沿用现有工作流校验。
+  - 删除目标分类的全部工作流后，再让 Agent 生成对应内容，确认明确提示暂无可用工作流且不会通过旧模型字段静默生成；恢复工作流后重试成功。
+  - 让 Agent 生成一段音频，确认创建音频提示词与配置节点、自动连线并立即提交本地 ComfyUI 音频工作流，成功后画布音频节点可播放。
+  - 执行创建节点、附件节点和生成流程后检查工具回执，确认包含 `requestId`、新建节点与连线 ID、触发生成的节点 ID 和最新快照；回执中的生成 ID 只表示已触发，最终结果仍以节点状态为准。
+
 - ComfyUI built-in workflow replacement, deletion, and node selection:
   - With both fresh and existing configurations, confirm Workflow Management contains only the current seven categories and nine unique API workflows (`QRw_D` appears in both T2I and I2I). Old Flux, Inpaint, frame-video, and quantized-video built-ins must be gone. Verify the guide's category counts, individual/ZIP downloads, six core plugins, and model dependencies match the shipped files.
   - In an image node, confirm the QRw_D-backed “Qwen Image 全能生图” profile appears only once per channel and supports both text-to-image and 0–9 reference images. QRw_4×4 must require one reference image, while Moss Image and Z-Image-Turbo must not expose reference-image inputs.
