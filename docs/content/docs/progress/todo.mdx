@@ -5,6 +5,10 @@ description: Planned follow-up work
 
 # TODO
 
+- 建立项目共享资产记录与稳定 `assetId` 引用，同项目跨画布复用媒体，全局素材进入项目或项目节点保存到全局素材时复制独立媒体副本。
+- 将项目导入导出改为项目、画布、节点和资产字段级 ID 映射，并严格校验 Agent 延迟请求与协同消息的画布归属。
+- 隔离画布高频视口和拖拽状态，优化节点索引、连线查找及媒体懒加载与资源释放。
+
 - Replace the Claude Code CLI adapter with a Claude Agent SDK adapter and improve the tool queue, following the [Local Agent Integration Plan](/docs/progress/local-agent-integration-plan).
 - Add Skill installation from web search, Skill resource-file management, and controlled local-memory persistence.
 - 生成进度当前由前端按节点数加权估算（ComfyUI 本地 8188 不提供整体百分比）。等自建 ComfyUI 升到 v0.6.0+ 后改用 `/api/jobs/{id}/cancel` 按 id 精准取消，消除现有「查队列 + /interrupt」之间的竞态窗口。

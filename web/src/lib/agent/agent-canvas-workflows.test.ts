@@ -21,6 +21,7 @@ import { bindAgentCanvasWorkflows } from "./agent-canvas-workflows";
 
 const emptySnapshot: CanvasAgentSnapshot = {
     projectId: "project-1",
+    canvasId: "canvas-1",
     title: "测试画布",
     nodes: [],
     connections: [],

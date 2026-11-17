@@ -7,11 +7,13 @@ import { useCollabStore } from "@/stores/use-collab-store";
 
 export function CanvasCollabModal({
     projectId,
+    canvasId,
     projectTitle,
     onStartCollab,
     onStopCollab,
 }: {
     projectId: string;
+    canvasId: string;
     projectTitle: string;
     onStartCollab: (roomId: string) => void;
     onStopCollab: () => void;
@@ -35,7 +37,7 @@ export function CanvasCollabModal({
     const port = window.location.port ? `:${window.location.port}` : "";
     const hostDomain = isLocalhost && lanIp && lanIp !== "127.0.0.1" ? `${lanIp}${port}` : window.location.host;
     const shareUrl = activeRoomId
-        ? `${window.location.protocol}//${hostDomain}/canvas/${projectId}?room=${activeRoomId}`
+        ? `${window.location.protocol}//${hostDomain}/canvas/${projectId}/${canvasId}?room=${activeRoomId}`
         : "";
 
     const handleCopy = () => {

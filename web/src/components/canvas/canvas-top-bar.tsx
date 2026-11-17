@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from "react";
-import { BookOpen, Bot, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Share2, Trash2, Undo2, Upload, Users } from "lucide-react";
-import { Button, Dropdown, Modal, Tooltip } from "antd";
+import { BookOpen, Bot, ChevronsUpDown, Copy, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Share2, Trash2, Undo2, Upload, Users } from "lucide-react";
+import { App, Button, Dropdown, Input, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { UserStatusActions } from "@/components/layout/user-status-actions";
 import { CanvasComfyuiMonitor } from "./canvas-comfyui-monitor";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
 import { useCollabStore } from "@/stores/use-collab-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { DOCS_URL } from "@/constant/env";
 
@@ -145,6 +147,7 @@ export function CanvasTopBar({
                             </button>
                         )}
                     </div>
+                    <CanvasDocumentSwitcher />
                     <CompactAgentStatus status={compactAgentStatus} onClick={onToggleAgent} />
                 </div>
 
@@ -219,6 +222,77 @@ export function CanvasTopBar({
                 </div>
             </Modal>
         </>
+    );
+}
+
+function CanvasDocumentSwitcher() {
+    const { t } = useTranslation();
+    const { message, modal } = App.useApp();
+    const navigate = useNavigate();
+    const params = useParams<{ id: string }>();
+    const projectId = params.id || "";
+    const canvases = useCanvasStore((state) => state.canvases);
+    const activeCanvas = useCanvasStore((state) => state.activeCanvas);
+    const createCanvas = useCanvasStore((state) => state.createCanvas);
+    const duplicateCanvas = useCanvasStore((state) => state.duplicateCanvas);
+    const renameCanvas = useCanvasStore((state) => state.renameCanvas);
+    const deleteCanvas = useCanvasStore((state) => state.deleteCanvas);
+    const colorTheme = useThemeStore((state) => state.theme);
+    const theme = canvasThemes[colorTheme];
+
+    const openCanvas = (canvasId: string) => {
+        if (!canvasId || canvasId === activeCanvas?.id) return;
+        useCollabStore.getState().disconnect();
+        navigate(`/canvas/${projectId}/${canvasId}`);
+    };
+    const run = (action: () => Promise<void>) => void action().catch((error) => message.error(error instanceof Error ? error.message : t("canvas.projectPage.notFound")));
+    const rename = () => {
+        if (!activeCanvas) return;
+        let title = activeCanvas.title;
+        modal.confirm({
+            title: t("canvas.documents.rename"),
+            content: <Input autoFocus defaultValue={title} onChange={(event) => (title = event.target.value)} />,
+            onOk: async () => {
+                if (title.trim()) await renameCanvas(projectId, activeCanvas.id, title.trim());
+            },
+        });
+    };
+    const remove = () => {
+        if (!activeCanvas || canvases.length <= 1) return;
+        modal.confirm({
+            title: t("canvas.documents.deleteTitle"),
+            content: t("canvas.documents.deleteDescription", { title: activeCanvas.title }),
+            okButtonProps: { danger: true },
+            onOk: async () => {
+                const nextId = await deleteCanvas(projectId, activeCanvas.id);
+                if (nextId) openCanvas(nextId);
+            },
+        });
+    };
+
+    return (
+        <Dropdown
+            trigger={["click"]}
+            menu={{
+                items: [
+                    ...canvases.map((canvas) => ({
+                        key: canvas.id,
+                        label: canvas.title,
+                        onClick: () => openCanvas(canvas.id),
+                    })),
+                    { type: "divider" as const },
+                    { key: "create", icon: <Plus className="size-4" />, label: t("canvas.documents.create"), onClick: () => run(async () => openCanvas((await createCanvas(projectId)).id)) },
+                    { key: "duplicate", disabled: !activeCanvas, icon: <Copy className="size-4" />, label: t("canvas.documents.duplicate"), onClick: () => run(async () => activeCanvas && openCanvas((await duplicateCanvas(projectId, activeCanvas.id)).id)) },
+                    { key: "rename", disabled: !activeCanvas, icon: <Pencil className="size-4" />, label: t("canvas.documents.rename"), onClick: rename },
+                    { key: "delete", disabled: !activeCanvas || canvases.length <= 1, danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.documents.delete"), onClick: remove },
+                ],
+            }}
+        >
+            <button type="button" className="flex h-8 max-w-44 items-center gap-1.5 px-2 text-sm transition hover:bg-black/5 dark:hover:bg-white/10" style={{ color: theme.node.text }}>
+                <span className="truncate">{activeCanvas?.title || t("canvas.documents.defaultTitle")}</span>
+                <ChevronsUpDown className="size-3.5 shrink-0 opacity-50" />
+            </button>
+        </Dropdown>
     );
 }
 

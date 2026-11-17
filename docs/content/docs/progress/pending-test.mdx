@@ -7,6 +7,12 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- 项目内多画布与独立持久化：
+  - 在项目顶栏新建、复制、重命名和删除画布，确认列表统计与活动画布状态即时更新，最后一张画布不可删除；分别通过 `/canvas/:id` 和 `/canvas/:id/:canvasId` 打开项目，确认均能恢复正确画布。
+  - 在不同画布分别编辑节点、连线、视口、背景和 Agent 会话，快速切换并刷新页面，确认内容不会串写；保存过程中继续编辑也不会触发旧 revision 覆盖新内容。
+  - 分别在浏览器存储和桌面 Sidecar 中验证上述操作，确认单画布保存具有独立防抖与 revision 冲突检查，项目重命名不会清零其他项目的画布、节点和连线统计。
+  - 导出项目后确认包含全部画布；让 Agent 读取和修改当前画布，确认快照及工具回执包含正确的 `projectId` 和 `canvasId`，协同分享链接指向当前画布。
+
 - OpenAI Agent 提供方：
   - 在 Agent 设置选择 OpenAI，确认 Base URL 默认为 `https://api.openai.com/v1`，可配置模型和 API Key；密钥只保存到本机 Agent 配置，界面与接口均不回显密钥，刷新后仍显示已配置。
   - 发送连续两轮文本任务，确认第二轮能继承第一轮上下文；发送图片附件或画布参考图后，确认模型能读取图片，最终回复标题显示 OpenAI，等待状态和用量统计正常结束。

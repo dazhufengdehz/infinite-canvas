@@ -1,4 +1,59 @@
 import type { ModelSupportedTools } from "@/services/api/models/types";
+import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+
+export type CanvasProject = {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    revision: number;
+    activeCanvasId: string | null;
+};
+
+export type CanvasDocument = {
+    id: string;
+    projectId: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    revision: number;
+    nodes: CanvasNodeData[];
+    connections: CanvasConnection[];
+    chatSessions: CanvasAssistantSession[];
+    activeChatId: string | null;
+    backgroundMode: CanvasBackgroundMode;
+    showImageInfo: boolean;
+    viewport: ViewportTransform;
+};
+
+export type CanvasDocumentPatch = Partial<Pick<CanvasDocument, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>;
+
+export type CanvasDocumentSummary = {
+    id: string;
+    projectId: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    revision: number;
+    nodeCount: number;
+    connectionCount: number;
+};
+
+export type CanvasProjectSummary = {
+    id: string;
+    title: string;
+    createdAt: string;
+    updatedAt: string;
+    revision: number;
+    canvasCount: number;
+    nodeCount: number;
+    connectionCount: number;
+    assetCount: number;
+};
+
+export type CanvasProjectBundle = CanvasProject & {
+    canvases: CanvasDocument[];
+};
 
 export type Position = {
     x: number;

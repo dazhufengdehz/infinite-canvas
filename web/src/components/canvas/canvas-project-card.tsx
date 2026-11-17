@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { useCanvasStore, type CanvasProjectSummary } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
-import { readProject } from "@/services/project-storage";
+import { readProjectBundle } from "@/services/project-storage";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
 
@@ -39,7 +39,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProjectSummary }
     };
     const exportProject = async () => {
         try {
-            const stored = await readProject(project.id);
+            const stored = await readProjectBundle(project.id);
             if (stored) await exportCanvasProjects([stored], project.title || t("canvas.title"));
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("canvas.project.export"));
@@ -70,7 +70,7 @@ export function CanvasProjectCard({ project }: { project: CanvasProjectSummary }
                     >
                         <h2 className="truncate text-xl font-semibold">{project.title}</h2>
                         <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">
-                            {t("canvas.project.stats", { nodes: project.nodeCount, connections: project.connectionCount })}
+                            {t("canvas.project.stats", { canvases: project.canvasCount, nodes: project.nodeCount, connections: project.connectionCount })}
                         </p>
                     </button>
                 )}

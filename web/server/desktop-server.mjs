@@ -176,7 +176,43 @@ export function createDesktopServer(options = {}) {
             }
             if (req.method === "POST") {
                 const body = await readJson(req);
-                sendJson(req, res, 201, await storage.createProject(body.project));
+                sendJson(req, res, 201, await storage.createProject(body.project, body.canvases));
+                return;
+            }
+        }
+        const canvasesMatch = /^\/api\/storage\/projects\/([^/]+)\/canvases$/.exec(pathname);
+        if (canvasesMatch) {
+            const projectId = decodeSegment(canvasesMatch[1]);
+            if (req.method === "GET") {
+                sendJson(req, res, 200, await storage.listCanvases(projectId));
+                return;
+            }
+            if (req.method === "POST") {
+                const body = await readJson(req);
+                sendJson(req, res, 201, await storage.createCanvas(projectId, body.canvas));
+                return;
+            }
+        }
+        const canvasMatch = /^\/api\/storage\/projects\/([^/]+)\/canvases\/([^/]+)$/.exec(pathname);
+        if (canvasMatch) {
+            const projectId = decodeSegment(canvasMatch[1]);
+            const canvasId = decodeSegment(canvasMatch[2]);
+            if (req.method === "GET") {
+                sendJson(req, res, 200, await storage.readCanvas(projectId, canvasId));
+                return;
+            }
+            if (req.method === "PUT") {
+                const body = await readJson(req);
+                sendJson(req, res, 200, await storage.saveCanvas(projectId, canvasId, body.canvas, body.baseRevision));
+                return;
+            }
+            if (req.method === "PATCH") {
+                const body = await readJson(req);
+                sendJson(req, res, 200, await storage.renameCanvas(projectId, canvasId, body.title));
+                return;
+            }
+            if (req.method === "DELETE") {
+                sendJson(req, res, 200, await storage.deleteCanvas(projectId, canvasId));
                 return;
             }
         }
@@ -187,14 +223,9 @@ export function createDesktopServer(options = {}) {
                 sendJson(req, res, 200, await storage.readProject(id));
                 return;
             }
-            if (req.method === "PUT") {
-                const body = await readJson(req);
-                sendJson(req, res, 200, await storage.saveProject(id, body.project, body.baseRevision));
-                return;
-            }
             if (req.method === "PATCH") {
                 const body = await readJson(req);
-                sendJson(req, res, 200, await storage.renameProject(id, body.title));
+                sendJson(req, res, 200, await storage.updateProject(id, body));
                 return;
             }
             if (req.method === "DELETE") {

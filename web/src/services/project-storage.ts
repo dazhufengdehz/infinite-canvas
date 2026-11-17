@@ -1,93 +1,209 @@
 import { nanoid } from "nanoid";
-
 import { localForageStorage } from "@/lib/localforage-storage";
 import { hasStorageServer, storageRequest } from "@/services/api/storage";
 import type { Asset } from "@/stores/use-asset-store";
-import type { CanvasProject, CanvasProjectSummary } from "@/stores/canvas/use-canvas-store";
+import type { CanvasDocument, CanvasDocumentSummary, CanvasProject, CanvasProjectBundle, CanvasProjectSummary } from "@/types/canvas";
 
-const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
+const PROJECT_INDEX_KEY = "infinite-canvas:canvas_project_index";
 const ASSET_STORE_KEY = "infinite-canvas:asset_store";
+const projectKey = (id: string) => `infinite-canvas:canvas_project:${id}`;
+const canvasIndexKey = (id: string) => `infinite-canvas:canvas_index:${id}`;
+const canvasKey = (projectId: string, canvasId: string) => `infinite-canvas:canvas_document:${projectId}:${canvasId}`;
 
-type LocalCanvasState = { state?: { projects?: CanvasProject[] } };
 type LocalAssetState = { state?: { assets?: Asset[] } };
 
-async function readLocalProjects() {
-    const raw = await localForageStorage.getItem(CANVAS_STORE_KEY);
-    if (!raw) return [];
-    return (JSON.parse(raw) as LocalCanvasState).state?.projects || [];
+async function readLocal<T>(key: string, fallback: T): Promise<T> {
+    const raw = await localForageStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
 }
 
-async function writeLocalProjects(projects: CanvasProject[]) {
-    await localForageStorage.setItem(CANVAS_STORE_KEY, JSON.stringify({ state: { projects }, version: 0 }));
+async function writeLocal(key: string, value: unknown) {
+    await localForageStorage.setItem(key, JSON.stringify(value));
 }
 
-export function projectSummary(project: CanvasProject): CanvasProjectSummary {
+export function canvasSummary(canvas: CanvasDocument): CanvasDocumentSummary {
+    return {
+        id: canvas.id,
+        projectId: canvas.projectId,
+        title: canvas.title,
+        createdAt: canvas.createdAt,
+        updatedAt: canvas.updatedAt,
+        revision: canvas.revision,
+        nodeCount: canvas.nodes.length,
+        connectionCount: canvas.connections.length,
+    };
+}
+
+export function projectSummary(project: CanvasProject, canvases: CanvasDocumentSummary[], assetCount = 0): CanvasProjectSummary {
     return {
         id: project.id,
         title: project.title,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
-        revision: project.revision || 1,
-        nodeCount: project.nodes.length,
-        connectionCount: project.connections.length,
+        revision: project.revision,
+        canvasCount: canvases.length,
+        nodeCount: canvases.reduce((total, canvas) => total + canvas.nodeCount, 0),
+        connectionCount: canvases.reduce((total, canvas) => total + canvas.connectionCount, 0),
+        assetCount,
     };
 }
 
 export async function listProjects() {
     if (await hasStorageServer()) return storageRequest<CanvasProjectSummary[]>("/projects");
-    return (await readLocalProjects()).map(projectSummary);
+    return readLocal<CanvasProjectSummary[]>(PROJECT_INDEX_KEY, []);
 }
 
 export async function readProject(id: string) {
     if (await hasStorageServer()) return storageRequest<CanvasProject>(`/projects/${encodeURIComponent(id)}`);
-    return (await readLocalProjects()).find((project) => project.id === id) || null;
+    return readLocal<CanvasProject | null>(projectKey(id), null);
+}
+
+export async function listStoredCanvases(projectId: string) {
+    if (await hasStorageServer()) return storageRequest<CanvasDocumentSummary[]>(`/projects/${encodeURIComponent(projectId)}/canvases`);
+    return readLocal<CanvasDocumentSummary[]>(canvasIndexKey(projectId), []);
+}
+
+export async function readStoredCanvas(projectId: string, canvasId: string) {
+    if (await hasStorageServer()) return storageRequest<CanvasDocument>(`/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`);
+    return readLocal<CanvasDocument | null>(canvasKey(projectId, canvasId), null);
+}
+
+export async function readProjectBundle(id: string): Promise<CanvasProjectBundle | null> {
+    const project = await readProject(id);
+    if (!project) return null;
+    const summaries = await listStoredCanvases(id);
+    const canvases: CanvasDocument[] = [];
+    for (const summary of summaries) {
+        const canvas = await readStoredCanvas(id, summary.id);
+        if (canvas) canvases.push(canvas);
+    }
+    return { ...project, canvases };
 }
 
 export async function readProjects(ids?: string[]) {
-    if (await hasStorageServer()) {
-        const summaries = await listProjects();
-        const selected = ids ? summaries.filter((item) => ids.includes(item.id)) : summaries;
-        const projects: CanvasProject[] = [];
-        for (const item of selected) {
-            const project = await readProject(item.id);
-            if (project) projects.push(project);
-        }
-        return projects;
+    const summaries = await listProjects();
+    const selected = ids ? summaries.filter((item) => ids.includes(item.id)) : summaries;
+    const projects: CanvasProjectBundle[] = [];
+    for (const item of selected) {
+        const project = await readProjectBundle(item.id);
+        if (project) projects.push(project);
     }
-    const projects = await readLocalProjects();
-    return ids ? projects.filter((project) => ids.includes(project.id)) : projects;
+    return projects;
 }
 
-export async function createStoredProject(project: CanvasProject) {
-    if (await hasStorageServer()) return storageRequest<CanvasProject>("/projects", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ project }) });
-    const projects = await readLocalProjects();
-    const stored = { ...project, revision: 1 };
-    await writeLocalProjects([stored, ...projects.filter((item) => item.id !== stored.id)]);
-    return stored;
-}
-
-export async function saveStoredProject(project: CanvasProject, baseRevision: number) {
+export async function createStoredProject(project: CanvasProject, canvases: CanvasDocument[]) {
     if (await hasStorageServer()) {
-        return storageRequest<CanvasProject>(`/projects/${encodeURIComponent(project.id)}`, {
-            method: "PUT",
+        return storageRequest<{ project: CanvasProject; canvases: CanvasDocument[] }>("/projects", {
+            method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project, baseRevision }),
+            body: JSON.stringify({ project, canvases }),
         });
     }
-    const projects = await readLocalProjects();
-    const stored = { ...project, revision: baseRevision + 1 };
-    await writeLocalProjects(projects.some((item) => item.id === project.id) ? projects.map((item) => (item.id === project.id ? stored : item)) : [stored, ...projects]);
+    const storedProject = { ...project, revision: 1 };
+    const storedCanvases = canvases.map((canvas) => ({ ...canvas, revision: 1 }));
+    await writeLocal(projectKey(project.id), storedProject);
+    await writeLocal(canvasIndexKey(project.id), storedCanvases.map(canvasSummary));
+    for (const canvas of storedCanvases) await writeLocal(canvasKey(project.id, canvas.id), canvas);
+    const projects = await listProjects();
+    const summary = projectSummary(storedProject, storedCanvases.map(canvasSummary));
+    await writeLocal(PROJECT_INDEX_KEY, [summary, ...projects.filter((item) => item.id !== project.id)]);
+    return { project: storedProject, canvases: storedCanvases };
+}
+
+export async function updateStoredProject(id: string, patch: Partial<Pick<CanvasProject, "title" | "activeCanvasId">>) {
+    if (await hasStorageServer()) {
+        return storageRequest<CanvasProject>(`/projects/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
+    }
+    const current = await readProject(id);
+    if (!current) throw new Error("项目不存在");
+    const stored = { ...current, ...patch, updatedAt: new Date().toISOString(), revision: current.revision + 1 };
+    await writeLocal(projectKey(id), stored);
+    const projects = await listProjects();
+    await writeLocal(PROJECT_INDEX_KEY, projects.map((item) => (item.id === id ? { ...item, title: stored.title, updatedAt: stored.updatedAt, revision: stored.revision } : item)));
     return stored;
 }
 
 export async function renameStoredProject(id: string, title: string) {
-    if (await hasStorageServer()) return storageRequest<CanvasProjectSummary>(`/projects/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title }) });
-    const projects = await readLocalProjects();
-    const next = projects.map((project) => (project.id === id ? { ...project, title, updatedAt: new Date().toISOString(), revision: (project.revision || 1) + 1 } : project));
-    await writeLocalProjects(next);
-    const project = next.find((item) => item.id === id);
-    if (!project) throw new Error("项目不存在");
-    return projectSummary(project);
+    return updateStoredProject(id, { title });
+}
+
+export async function setActiveStoredCanvas(projectId: string, canvasId: string) {
+    return updateStoredProject(projectId, { activeCanvasId: canvasId });
+}
+
+export async function createStoredCanvas(canvas: CanvasDocument) {
+    if (await hasStorageServer()) {
+        return storageRequest<CanvasDocument>(`/projects/${encodeURIComponent(canvas.projectId)}/canvases`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ canvas }),
+        });
+    }
+    const stored = { ...canvas, revision: 1 };
+    const canvases = await listStoredCanvases(canvas.projectId);
+    const next = [...canvases.filter((item) => item.id !== stored.id), canvasSummary(stored)];
+    await writeLocal(canvasKey(stored.projectId, stored.id), stored);
+    await writeLocal(canvasIndexKey(stored.projectId), next);
+    await touchLocalProject(stored.projectId, next);
+    return stored;
+}
+
+export async function saveStoredCanvas(canvas: CanvasDocument, baseRevision: number) {
+    if (await hasStorageServer()) {
+        return storageRequest<CanvasDocument>(`/projects/${encodeURIComponent(canvas.projectId)}/canvases/${encodeURIComponent(canvas.id)}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ canvas, baseRevision }),
+        });
+    }
+    const stored = { ...canvas, revision: baseRevision + 1 };
+    await writeLocal(canvasKey(stored.projectId, stored.id), stored);
+    const canvases = await listStoredCanvases(stored.projectId);
+    const next = canvases.map((item) => (item.id === stored.id ? canvasSummary(stored) : item));
+    await writeLocal(canvasIndexKey(stored.projectId), next);
+    await touchLocalProject(stored.projectId, next);
+    return stored;
+}
+
+export async function renameStoredCanvas(projectId: string, canvasId: string, title: string) {
+    if (await hasStorageServer()) {
+        return storageRequest<CanvasDocument>(`/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ title }),
+        });
+    }
+    const current = await readStoredCanvas(projectId, canvasId);
+    if (!current) throw new Error("画布不存在");
+    const stored = { ...current, title: title.trim(), updatedAt: new Date().toISOString(), revision: current.revision + 1 };
+    await writeLocal(canvasKey(projectId, canvasId), stored);
+    const canvases = await listStoredCanvases(projectId);
+    const next = canvases.map((item) => (item.id === canvasId ? canvasSummary(stored) : item));
+    await writeLocal(canvasIndexKey(projectId), next);
+    await touchLocalProject(projectId, next);
+    return stored;
+}
+
+export async function deleteStoredCanvas(projectId: string, canvasId: string) {
+    if (await hasStorageServer()) {
+        return storageRequest<CanvasDocumentSummary[]>(`/projects/${encodeURIComponent(projectId)}/canvases/${encodeURIComponent(canvasId)}`, { method: "DELETE" });
+    }
+    const canvases = await listStoredCanvases(projectId);
+    if (canvases.length <= 1) throw new Error("项目至少需要保留一张画布");
+    const next = canvases.filter((item) => item.id !== canvasId);
+    await localForageStorage.removeItem(canvasKey(projectId, canvasId));
+    await writeLocal(canvasIndexKey(projectId), next);
+    await touchLocalProject(projectId, next);
+    return next;
+}
+
+async function touchLocalProject(projectId: string, canvases: CanvasDocumentSummary[]) {
+    const project = await readProject(projectId);
+    if (!project) return;
+    const updatedAt = new Date().toISOString();
+    await writeLocal(projectKey(projectId), { ...project, updatedAt });
+    const projects = await listProjects();
+    await writeLocal(PROJECT_INDEX_KEY, projects.map((item) => (item.id === projectId ? projectSummary({ ...project, updatedAt }, canvases, item.assetCount) : item)));
 }
 
 export async function deleteStoredProjects(ids: string[]) {
@@ -95,18 +211,22 @@ export async function deleteStoredProjects(ids: string[]) {
         for (const id of ids) await storageRequest(`/projects/${encodeURIComponent(id)}`, { method: "DELETE" });
         return;
     }
-    await writeLocalProjects((await readLocalProjects()).filter((project) => !ids.includes(project.id)));
+    for (const id of ids) {
+        const canvases = await listStoredCanvases(id);
+        for (const canvas of canvases) await localForageStorage.removeItem(canvasKey(id, canvas.id));
+        await localForageStorage.removeItem(canvasIndexKey(id));
+        await localForageStorage.removeItem(projectKey(id));
+    }
+    await writeLocal(PROJECT_INDEX_KEY, (await listProjects()).filter((project) => !ids.includes(project.id)));
 }
 
-export async function replaceStoredProjects(projects: CanvasProject[]) {
+export async function replaceStoredProjects(projects: CanvasProjectBundle[]) {
     const existing = await listProjects();
-    const existingById = new Map(existing.map((item) => [item.id, item]));
-    await deleteStoredProjects(existing.filter((item) => !projects.some((project) => project.id === item.id)).map((item) => item.id));
+    await deleteStoredProjects(existing.map((item) => item.id));
     for (const project of projects) {
         const id = project.id || nanoid();
-        const current = existingById.get(id);
-        if (current) await saveStoredProject({ ...project, id }, current.revision);
-        else await createStoredProject({ ...project, id });
+        const { canvases, ...metadata } = project;
+        await createStoredProject({ ...metadata, id }, canvases.map((canvas) => ({ ...canvas, projectId: id })));
     }
 }
 

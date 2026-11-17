@@ -18,6 +18,7 @@ export type CanvasAgentOp =
 
 export type CanvasAgentSnapshot = {
     projectId: string;
+    canvasId: string;
     title: string;
     nodes: CanvasNodeData[];
     connections: CanvasConnection[];
@@ -32,6 +33,7 @@ export function buildCanvasAgentToolResult(requestId: string, before: CanvasAgen
         success: true as const,
         requestId,
         projectId: snapshot.projectId,
+        canvasId: snapshot.canvasId,
         createdNodeIds: snapshot.nodes.filter((node) => !previousNodeIds.has(node.id)).map((node) => node.id),
         createdConnectionIds: snapshot.connections.filter((connection) => !previousConnectionIds.has(connection.id)).map((connection) => connection.id),
         generationNodeIds: ops.filter((op) => op.type === "run_generation").map((op) => op.nodeId),

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [新增] 项目升级为多画布容器，支持画布独立持久化、切换、新建、复制、重命名和删除，并按 `projectId + canvasId` 隔离页面、Agent 快照与协同入口。
 + [新增] 本地 Agent 新增 OpenAI Responses API 提供方，支持本机密钥配置、连续对话、图片附件、任务中止及 Function Calling 画布工具闭环，媒体生成仍统一使用本地 ComfyUI。
 + [新增] 内部 Agent 提供 OpenAI Function Calling 严格结构化工具定义与统一参数解析，画布写入工具返回新建节点、连线及生成任务的结构化执行结果。
 + [修复] Agent 高层生成流程按当前渠道的真实工作流完成三元绑定并复用资源参数校验，恢复音频流程创建与生成，缺少工作流时明确拦截。

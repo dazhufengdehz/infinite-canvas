@@ -13,7 +13,7 @@ import { getModelProfile } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
-import { readProject } from "@/services/project-storage";
+import { readProjectBundle } from "@/services/project-storage";
 import { nanoid } from "nanoid";
 import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
@@ -223,10 +223,11 @@ function InfiniteCanvasPage() {
     const { t } = useTranslation();
     // Subscribe to the registry version so plugin registration changes rerender the canvas.
     const nodeRegistryVersion = useNodeRegistryVersion((state) => state.version);
-    const params = useParams<{ id: string }>();
+    const params = useParams<{ id: string; canvasId?: string }>();
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
     const projectId = params.id || "";
+    const canvasId = params.canvasId || "";
     const localAgentConnected = useAgentStore((state) => state.connected);
     const localAgentActivity = useAgentStore((state) => state.activity);
     const localAgentEnabled = useAgentStore((state) => state.enabled);
@@ -277,12 +278,13 @@ function InfiniteCanvasPage() {
     const hydrated = useCanvasStore((state) => state.hydrated);
     const createProject = useCanvasStore((state) => state.createProject);
     const openProject = useCanvasStore((state) => state.openProject);
-    const updateProject = useCanvasStore((state) => state.updateProject);
+    const updateCanvas = useCanvasStore((state) => state.updateCanvas);
     const renameProject = useCanvasStore((state) => state.renameProject);
     const deleteProjects = useCanvasStore((state) => state.deleteProjects);
     const flushProject = useCanvasStore((state) => state.flushProject);
     const storageError = useCanvasStore((state) => state.storageError);
     const currentProject = useCanvasStore((state) => (state.activeProject?.id === projectId ? state.activeProject : null));
+    const currentCanvas = useCanvasStore((state) => (state.activeProject?.id === projectId && (!canvasId || state.activeCanvas?.id === canvasId) ? state.activeCanvas : null));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
@@ -576,15 +578,16 @@ function InfiniteCanvasPage() {
         setProjectLoaded(false);
         const restore = async () => {
             try {
-                let project = await openProject(projectId);
-                if (!project && roomParam) {
+                let workspace = await openProject(projectId, canvasId || undefined);
+                if (!workspace && roomParam) {
                     await createProject(t("canvas.projectPage.collabCanvas", "协同画布"), projectId);
-                    project = await openProject(projectId);
+                    workspace = await openProject(projectId, canvasId || undefined);
                 }
-                if (!project) {
+                if (!workspace) {
                     if (!cancelled) navigate("/canvas", { replace: true });
                     return;
                 }
+                const project = workspace.canvas;
                 const restoredNodes = await hydrateCanvasImages(resetInterruptedGeneration(project.nodes), projectId);
                 const restoredSessions = await hydrateAssistantImages(project.chatSessions || [], projectId);
                 if (cancelled) return;
@@ -624,7 +627,7 @@ function InfiniteCanvasPage() {
             cancelled = true;
             void flushProject();
         };
-    }, [createProject, flushProject, hydrated, message, navigate, openProject, projectId, roomParam, t]);
+    }, [canvasId, createProject, flushProject, hydrated, message, navigate, openProject, projectId, roomParam, t]);
 
     useEffect(() => {
         if (storageError) message.error(storageError);
@@ -671,11 +674,11 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         if (!projectLoaded || historyPausedRef.current) return;
-        updateProject(projectId, { nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo });
+        updateCanvas(projectId, currentCanvas?.id || canvasId, { nodes, connections, chatSessions, activeChatId, backgroundMode, showImageInfo });
         if (activeRoomId && collabRole === "host") {
             broadcastCanvasSync(nodes, connections, currentProject?.title);
         }
-    }, [activeChatId, activeRoomId, backgroundMode, broadcastCanvasSync, chatSessions, collabRole, connections, currentProject?.title, nodes, projectId, projectLoaded, showImageInfo, updateProject]);
+    }, [activeChatId, activeRoomId, backgroundMode, broadcastCanvasSync, canvasId, chatSessions, collabRole, connections, currentCanvas?.id, currentProject?.title, nodes, projectId, projectLoaded, showImageInfo, updateCanvas]);
 
     useEffect(() => {
         if (!dialogNodeId) setNodeImageSettingsOpen(false);
@@ -685,13 +688,13 @@ function InfiniteCanvasPage() {
         if (!projectLoaded) return;
         if (viewportSaveTimerRef.current) clearTimeout(viewportSaveTimerRef.current);
         viewportSaveTimerRef.current = setTimeout(() => {
-            updateProject(projectId, { viewport: viewportRef.current });
+            updateCanvas(projectId, currentCanvas?.id || canvasId, { viewport: viewportRef.current });
             viewportSaveTimerRef.current = null;
         }, 500);
         return () => {
             if (viewportSaveTimerRef.current) clearTimeout(viewportSaveTimerRef.current);
         };
-    }, [projectId, projectLoaded, updateProject, viewport]);
+    }, [canvasId, currentCanvas?.id, projectId, projectLoaded, updateCanvas, viewport]);
 
     useLayoutEffect(() => {
         nodesRef.current = nodes;
@@ -1034,6 +1037,7 @@ function InfiniteCanvasPage() {
     const referenceConnectedNodeIds = useMemo(() => new Set([referencePickerNodeId, ...(referencePickerNodeId ? connectedNodesByNodeId.get(referencePickerNodeId)?.flatMap((node) => node.type === CanvasNodeType.Group ? [node.id, ...getGroupResourceNodes(node.id, nodes).map((child) => child.id)] : [node.id]) || [] : [])].filter((id): id is string => Boolean(id))), [connectedNodesByNodeId, nodes, referencePickerNodeId]);
     const { applyAgentOps } = useAgentBridge({
         projectId,
+        canvasId: currentCanvas?.id || canvasId,
         title: currentProject?.title,
         nodes,
         connections,
@@ -1681,7 +1685,7 @@ function InfiniteCanvasPage() {
         const hide = message.loading(t("canvas.projectPage.exporting"), 0);
         try {
             await flushProject();
-            const project = await readProject(projectId);
+            const project = await readProjectBundle(projectId);
             if (!project) return message.error(t("canvas.projectPage.notFound"));
             await exportCanvasProjects([project], project.title || t("canvas.title"));
             message.success(t("canvas.projectPage.exported"));
@@ -5262,6 +5266,7 @@ function InfiniteCanvasPage() {
                 <AssetPickerModal open={assetPickerOpen} onInsert={handleAssetInsert} onClose={() => setAssetPickerOpen(false)} />
                 <CanvasCollabModal
                     projectId={projectId}
+                    canvasId={currentCanvas?.id || canvasId}
                     projectTitle={currentProject?.title || ""}
                     onStartCollab={handleStartCollab}
                     onStopCollab={handleStopCollab}

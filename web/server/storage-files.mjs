@@ -28,21 +28,43 @@ function normalizeMimeType(value) {
 function assertProject(project) {
     if (!project || typeof project !== "object" || Array.isArray(project)) throw new StorageError(400, "项目数据不合法");
     assertId(project.id, "项目ID");
-    if (typeof project.title !== "string" || typeof project.createdAt !== "string" || typeof project.updatedAt !== "string" || !Array.isArray(project.nodes) || !Array.isArray(project.connections)) {
-        throw new StorageError(400, "项目数据不完整");
-    }
+    if (typeof project.title !== "string" || typeof project.createdAt !== "string" || typeof project.updatedAt !== "string") throw new StorageError(400, "项目数据不完整");
     return project;
 }
 
-function summary(project) {
+function assertCanvas(canvas, projectId) {
+    if (!canvas || typeof canvas !== "object" || Array.isArray(canvas)) throw new StorageError(400, "画布数据不合法");
+    assertId(canvas.id, "画布ID");
+    if (canvas.projectId !== projectId || typeof canvas.title !== "string" || typeof canvas.createdAt !== "string" || typeof canvas.updatedAt !== "string" || !Array.isArray(canvas.nodes) || !Array.isArray(canvas.connections)) {
+        throw new StorageError(400, "画布数据不完整");
+    }
+    return canvas;
+}
+
+function projectSummary(project, previous, canvases) {
     return {
         id: project.id,
         title: project.title,
         createdAt: project.createdAt,
         updatedAt: project.updatedAt,
         revision: Number.isInteger(project.revision) ? project.revision : 1,
-        nodeCount: project.nodes.length,
-        connectionCount: project.connections.length,
+        canvasCount: canvases.length,
+        nodeCount: canvases.reduce((total, canvas) => total + canvas.nodeCount, 0),
+        connectionCount: canvases.reduce((total, canvas) => total + canvas.connectionCount, 0),
+        assetCount: previous?.assetCount || 0,
+    };
+}
+
+function canvasSummary(canvas) {
+    return {
+        id: canvas.id,
+        projectId: canvas.projectId,
+        title: canvas.title,
+        createdAt: canvas.createdAt,
+        updatedAt: canvas.updatedAt,
+        revision: Number.isInteger(canvas.revision) ? canvas.revision : 1,
+        nodeCount: canvas.nodes.length,
+        connectionCount: canvas.connections.length,
     };
 }
 
@@ -110,6 +132,31 @@ export function createStorage(dataDir) {
     }
 
     const projectFile = (id) => join(root, "projects", assertId(id, "项目ID"), "project.json");
+    const canvasIndexFile = (id) => join(root, "projects", assertId(id, "项目ID"), "canvases", "index.json");
+    const canvasFile = (projectId, canvasId) => join(root, "projects", assertId(projectId, "项目ID"), "canvases", `${assertId(canvasId, "画布ID")}.json`);
+
+    async function readCanvasIndex(projectId) {
+        const index = await readJson(canvasIndexFile(projectId), []);
+        if (!Array.isArray(index)) throw new Error("画布索引格式错误");
+        return index;
+    }
+
+    function updateCanvasIndex(projectId, update) {
+        const file = canvasIndexFile(projectId);
+        return serial(file, async () => {
+            const next = update(await readCanvasIndex(projectId));
+            await atomicWrite(file, JSON.stringify(next, null, 2));
+            return next;
+        });
+    }
+
+    async function touchProject(projectId, canvases) {
+        const file = projectFile(projectId);
+        const current = await readJson(file);
+        const stored = { ...current, updatedAt: new Date().toISOString() };
+        await serial(file, () => atomicWrite(file, JSON.stringify(stored, null, 2)));
+        await updateIndex((index) => index.map((item) => item.id === projectId ? projectSummary(stored, item, canvases) : item));
+    }
 
     async function parseMediaKey(key) {
         const match = typeof key === "string" ? KEY_PATTERN.exec(key) : null;
@@ -177,46 +224,122 @@ export function createStorage(dataDir) {
             return readJson(projectFile(id));
         },
 
-        async createProject(project) {
+        async createProject(project, canvases) {
             assertProject(project);
+            if (!Array.isArray(canvases) || !canvases.length) throw new StorageError(400, "项目至少需要一张画布");
+            canvases.forEach((canvas) => assertCanvas(canvas, project.id));
             const file = projectFile(project.id);
             return serial(file, async () => {
                 if (await stat(file).then(() => true, (error) => error.code === "ENOENT" ? false : Promise.reject(error))) {
                     throw new StorageError(409, "项目已存在");
                 }
-                const stored = { ...project, revision: 1 };
+                const storedProject = { ...project, revision: 1 };
+                const storedCanvases = canvases.map((canvas) => ({ ...canvas, revision: 1 }));
+                await atomicWrite(file, JSON.stringify(storedProject, null, 2));
+                for (const canvas of storedCanvases) await atomicWrite(canvasFile(project.id, canvas.id), JSON.stringify(canvas, null, 2));
+                const summaries = storedCanvases.map(canvasSummary);
+                await atomicWrite(canvasIndexFile(project.id), JSON.stringify(summaries, null, 2));
+                await updateIndex((index) => [projectSummary(storedProject, null, summaries), ...index.filter((item) => item.id !== project.id)]);
+                return { project: storedProject, canvases: storedCanvases };
+            });
+        },
+
+        async updateProject(id, patch) {
+            if (!patch || typeof patch !== "object") throw new StorageError(400, "项目更新参数不合法");
+            const file = projectFile(id);
+            return serial(file, async () => {
+                const current = await readJson(file);
+                if (patch.title !== undefined && (typeof patch.title !== "string" || !patch.title.trim())) throw new StorageError(400, "项目标题不合法");
+                if (patch.activeCanvasId) {
+                    const canvases = await readCanvasIndex(id);
+                    if (!canvases.some((canvas) => canvas.id === patch.activeCanvasId)) throw new StorageError(400, "活动画布不存在");
+                }
+                const stored = {
+                    ...current,
+                    ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
+                    ...(patch.activeCanvasId !== undefined ? { activeCanvasId: patch.activeCanvasId } : {}),
+                    updatedAt: new Date().toISOString(),
+                    revision: (Number.isInteger(current.revision) ? current.revision : 1) + 1,
+                };
                 await atomicWrite(file, JSON.stringify(stored, null, 2));
-                await updateIndex((index) => [summary(stored), ...index.filter((item) => item.id !== stored.id)]);
+                await updateIndex((index) => index.map((item) => item.id === id ? { ...item, title: stored.title, updatedAt: stored.updatedAt, revision: stored.revision } : item));
                 return stored;
             });
         },
 
-        async saveProject(id, project, baseRevision) {
-            assertId(id, "项目ID");
-            assertProject(project);
-            if (project.id !== id || !Number.isInteger(baseRevision)) throw new StorageError(400, "项目保存参数不合法");
-            const file = projectFile(id);
-            return serial(file, async () => {
+        async listCanvases(projectId) {
+            await readJson(projectFile(projectId));
+            return readCanvasIndex(projectId);
+        },
+
+        async readCanvas(projectId, canvasId) {
+            return readJson(canvasFile(projectId, canvasId));
+        },
+
+        async createCanvas(projectId, canvas) {
+            await readJson(projectFile(projectId));
+            assertCanvas(canvas, projectId);
+            const file = canvasFile(projectId, canvas.id);
+            const stored = { ...canvas, revision: 1 };
+            await serial(file, async () => {
+                if (await stat(file).then(() => true, (error) => error.code === "ENOENT" ? false : Promise.reject(error))) throw new StorageError(409, "画布已存在");
+                await atomicWrite(file, JSON.stringify(stored, null, 2));
+            });
+            const canvases = await updateCanvasIndex(projectId, (index) => [...index.filter((item) => item.id !== stored.id), canvasSummary(stored)]);
+            await touchProject(projectId, canvases);
+            return stored;
+        },
+
+        async saveCanvas(projectId, canvasId, canvas, baseRevision) {
+            assertCanvas(canvas, projectId);
+            if (canvas.id !== canvasId || !Number.isInteger(baseRevision)) throw new StorageError(400, "画布保存参数不合法");
+            const file = canvasFile(projectId, canvasId);
+            const stored = await serial(file, async () => {
                 const current = await readJson(file);
                 const revision = Number.isInteger(current.revision) ? current.revision : 1;
-                if (baseRevision !== revision) throw new StorageError(409, "项目版本冲突");
-                const stored = { ...project, id, revision: revision + 1 };
-                await atomicWrite(file, JSON.stringify(stored, null, 2));
-                await updateIndex((index) => index.map((item) => item.id === id ? summary(stored) : item));
-                return stored;
+                if (baseRevision !== revision) throw new StorageError(409, "画布版本冲突");
+                const next = { ...canvas, projectId, id: canvasId, revision: revision + 1 };
+                await atomicWrite(file, JSON.stringify(next, null, 2));
+                return next;
             });
+            const canvases = await updateCanvasIndex(projectId, (index) => index.map((item) => item.id === canvasId ? canvasSummary(stored) : item));
+            await touchProject(projectId, canvases);
+            return stored;
         },
 
-        async renameProject(id, title) {
-            if (typeof title !== "string" || !title.trim()) throw new StorageError(400, "项目标题不合法");
-            const file = projectFile(id);
-            return serial(file, async () => {
+        async renameCanvas(projectId, canvasId, title) {
+            if (typeof title !== "string" || !title.trim()) throw new StorageError(400, "画布标题不合法");
+            const file = canvasFile(projectId, canvasId);
+            const stored = await serial(file, async () => {
                 const current = await readJson(file);
-                const stored = { ...current, title: title.trim(), updatedAt: new Date().toISOString(), revision: (Number.isInteger(current.revision) ? current.revision : 1) + 1 };
-                await atomicWrite(file, JSON.stringify(stored, null, 2));
-                await updateIndex((index) => index.map((item) => item.id === id ? summary(stored) : item));
-                return summary(stored);
+                const next = { ...current, title: title.trim(), updatedAt: new Date().toISOString(), revision: (Number.isInteger(current.revision) ? current.revision : 1) + 1 };
+                await atomicWrite(file, JSON.stringify(next, null, 2));
+                return next;
             });
+            const canvases = await updateCanvasIndex(projectId, (index) => index.map((item) => item.id === canvasId ? canvasSummary(stored) : item));
+            await touchProject(projectId, canvases);
+            return stored;
+        },
+
+        async deleteCanvas(projectId, canvasId) {
+            const currentIndex = await readCanvasIndex(projectId);
+            if (currentIndex.length <= 1) throw new StorageError(400, "项目至少需要保留一张画布");
+            const file = canvasFile(projectId, canvasId);
+            await serial(file, async () => {
+                await readJson(file);
+                await unlink(file);
+            });
+            const canvases = await updateCanvasIndex(projectId, (index) => index.filter((item) => item.id !== canvasId));
+            const fileProject = projectFile(projectId);
+            const current = await readJson(fileProject);
+            const stored = {
+                ...current,
+                activeCanvasId: current.activeCanvasId === canvasId ? canvases[0]?.id || null : current.activeCanvasId,
+                updatedAt: new Date().toISOString(),
+            };
+            await serial(fileProject, () => atomicWrite(fileProject, JSON.stringify(stored, null, 2)));
+            await updateIndex((index) => index.map((item) => item.id === projectId ? projectSummary(stored, item, canvases) : item));
+            return canvases;
         },
 
         async deleteProject(id) {

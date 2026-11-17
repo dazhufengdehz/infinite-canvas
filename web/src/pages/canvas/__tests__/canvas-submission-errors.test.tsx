@@ -7,10 +7,11 @@ import CanvasPage from "../project";
 import { ComfyuiApiError, ComfyuiNetworkError } from "@/services/api/comfyui";
 import { defaultConfig } from "@/stores/use-config-store";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "@/types/canvas";
-import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
+import type { CanvasDocument, CanvasProject } from "@/stores/canvas/use-canvas-store";
 
 const harness = vi.hoisted(() => ({
     project: null as unknown as CanvasProject,
+    canvas: null as unknown as CanvasDocument,
     config: null as unknown as typeof defaultConfig,
     generateRef: null as unknown as { current: (id: string, mode: string, prompt: string, intent?: "repeat") => Promise<void> },
     faceRefineProps: null as unknown as import("@/components/canvas/canvas-face-refine-modal").CanvasFaceRefineModalProps,
@@ -42,8 +43,8 @@ vi.mock("@/stores/use-config-store", async (original) => ({
     useEffectiveConfig: () => harness.config,
 }));
 vi.mock("@/stores/canvas/use-canvas-store", () => {
-    const openProject = async () => harness.project;
-    return { useCanvasStore: (selector: (state: unknown) => unknown) => selector({ hydrated: true, activeProject: harness.project, projects: [harness.project], storageError: null, openProject, flushProject: async () => {}, updateProject: harness.noop }) };
+    const openProject = async () => ({ project: harness.project, canvases: [harness.canvas], canvas: harness.canvas });
+    return { useCanvasStore: (selector: (state: unknown) => unknown) => selector({ hydrated: true, activeProject: harness.project, activeCanvas: harness.canvas, canvases: [harness.canvas], projects: [harness.project], storageError: null, openProject, flushProject: async () => {}, updateCanvas: harness.noop }) };
 });
 vi.mock("@/stores/use-agent-store", () => ({ useAgentStore: (selector: (state: unknown) => unknown) => selector({}) }));
 vi.mock("@/stores/use-asset-store", () => ({ useAssetStore: (selector: (state: unknown) => unknown) => selector({ addAsset: harness.noop, cleanupImages: harness.noop }) }));
@@ -118,7 +119,7 @@ function makeNode(type: CanvasNodeData["type"], metadata: CanvasNodeData["metada
 }
 
 async function mount(node: CanvasNodeData, otherNodes: CanvasNodeData[] = []) {
-    harness.project.nodes = [node, ...otherNodes];
+    harness.canvas.nodes = [node, ...otherNodes];
     await act(async () => root.render(React.createElement(CanvasPage)));
 }
 
@@ -141,7 +142,8 @@ beforeEach(() => {
     harness.nodeProps.clear();
     harness.storedImages.clear();
     harness.config = { ...defaultConfig, count: "1", canvasImageCount: "1" };
-    harness.project = { id: "test-project", title: "测试画布", nodes: [], connections: [], chatSessions: [], activeChatId: null, backgroundMode: "lines", showImageInfo: false, viewport: { x: 0, y: 0, k: 1 }, createdAt: "", updatedAt: "" };
+    harness.project = { id: "test-project", title: "测试项目", activeCanvasId: "test-canvas", revision: 1, createdAt: "", updatedAt: "" };
+    harness.canvas = { id: "test-canvas", projectId: "test-project", title: "测试画布", nodes: [], connections: [], chatSessions: [], activeChatId: null, backgroundMode: "lines", showImageInfo: false, viewport: { x: 0, y: 0, k: 1 }, revision: 1, createdAt: "", updatedAt: "" };
     root = createRoot(document.createElement("div"));
     rejectRequests(failure());
     harness.uploadImage.mockImplementation(async (dataUrl: string) => {
@@ -176,7 +178,7 @@ describe("canvas dimensions after project restoration", () => {
 
     it("preserves the restored viewport while measuring and resizing the canvas", async () => {
         const savedViewport = { x: 123, y: 456, k: 0.4 };
-        harness.project.viewport = savedViewport;
+        harness.canvas.viewport = savedViewport;
         await mount(makeNode(CanvasNodeType.Image));
         expect(harness.inspectorProps.viewport).toEqual(savedViewport);
         const observer = harness.resizeObservers.find((item) => item.observe.mock.calls.some(([element]) => element === harness.canvasRef.current))!;
@@ -383,7 +385,7 @@ async function mountToolSource(metadata: CanvasNodeData["metadata"] = {}, connec
     harness.requestVideo.mockResolvedValue({});
     harness.storeVideo.mockResolvedValue({ url: "http://127.0.0.1:8188/view?filename=refined.mp4", width: 640, height: 360, bytes: 1, mimeType: "video/mp4" });
     const imageNode = { ...makeNode(CanvasNodeType.Image, { content: referenceImage, status: "success" }), id: "reference-image" };
-    if (connectedImage) harness.project.connections = [{ id: "image-source", fromNodeId: imageNode.id, toNodeId: "source", kind: "input" }];
+    if (connectedImage) harness.canvas.connections = [{ id: "image-source", fromNodeId: imageNode.id, toNodeId: "source", kind: "input" }];
     await mount(makeNode(CanvasNodeType.Video, {
         status: "success", content: originalVideo, references: connectedImage ? [] : [referenceImage],
         generationReferences: [{ nodeId: "original-generation-text", kind: "text", text: "原生成过程的文本" }],

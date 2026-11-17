@@ -30,6 +30,7 @@ function makeNode(id: string, type: CanvasNodeTypeId): CanvasNodeData {
 function makeSnapshot(nodes: CanvasNodeData[], connections: CanvasConnection[] = []): CanvasAgentSnapshot {
     return {
         projectId: "p1",
+        canvasId: "c1",
         title: "t",
         nodes,
         connections,
