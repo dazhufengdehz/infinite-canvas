@@ -5,7 +5,7 @@ import { Bot, Copy, KeyRound, Link2, PlugZap, RefreshCw, Terminal } from "lucide
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { fetchTraeStatus, fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveWorkbuddyConfig, type TraeStatusResponse } from "@/services/api/canvas-agent";
+import { fetchOpenAiConfig, fetchTraeStatus, fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveOpenAiConfig, saveWorkbuddyConfig, type OpenAiConfigResponse, type TraeStatusResponse } from "@/services/api/canvas-agent";
 import type { AgentProvider } from "@/stores/use-agent-store";
 
 const LOCAL_AGENT_COMMAND = "npx -y @zhuyichuan/canvas-agent";
@@ -49,6 +49,12 @@ export function AgentConnectView({
     const [wbSaving, setWbSaving] = useState(false);
     const [traeStatus, setTraeStatus] = useState<TraeStatusResponse | null>(null);
     const [traeChecking, setTraeChecking] = useState(false);
+    const [openAiConfig, setOpenAiConfig] = useState<OpenAiConfigResponse | null>(null);
+    const [openAiApiKey, setOpenAiApiKey] = useState("");
+    const [openAiBaseUrl, setOpenAiBaseUrl] = useState("");
+    const [openAiModel, setOpenAiModel] = useState("");
+    const [openAiChecking, setOpenAiChecking] = useState(false);
+    const [openAiSaving, setOpenAiSaving] = useState(false);
 
     const handleCheckTraeStatus = useCallback(async () => {
         if (!connected) return;
@@ -69,6 +75,52 @@ export function AgentConnectView({
         }
         void handleCheckTraeStatus();
     }, [connected, handleCheckTraeStatus, provider]);
+
+    const handleLoadOpenAiConfig = useCallback(async () => {
+        if (!connected) return;
+        setOpenAiChecking(true);
+        try {
+            const config = await fetchOpenAiConfig(url, token);
+            setOpenAiConfig(config);
+            setOpenAiBaseUrl(config.baseUrl || "");
+            setOpenAiModel(config.model || "");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("agent.connect.openaiLoadFailed"));
+        } finally {
+            setOpenAiChecking(false);
+        }
+    }, [connected, message, t, token, url]);
+
+    useEffect(() => {
+        if (provider !== "openai" || !connected) {
+            setOpenAiConfig(null);
+            return;
+        }
+        void handleLoadOpenAiConfig();
+    }, [connected, handleLoadOpenAiConfig, provider]);
+
+    const handleSaveOpenAiConfig = async () => {
+        if (!connected) {
+            message.warning(t("agent.connect.openaiConnectRequired"));
+            return;
+        }
+        setOpenAiSaving(true);
+        const apiKey = openAiApiKey.trim();
+        try {
+            await saveOpenAiConfig(url, token, {
+                baseUrl: openAiBaseUrl.trim(),
+                model: openAiModel.trim(),
+                ...(!apiKey && openAiConfig?.hasApiKey ? {} : { apiKey }),
+            });
+            setOpenAiApiKey("");
+            message.success(t("agent.connect.openaiSaved"));
+            await handleLoadOpenAiConfig();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("agent.connect.openaiSaveFailed"));
+        } finally {
+            setOpenAiSaving(false);
+        }
+    };
 
     useEffect(() => {
         if (!connected || !url || !token) return;
@@ -145,10 +197,67 @@ export function AgentConnectView({
                             { label: "WorkBuddy", value: "workbuddy" },
                             { label: "Codex", value: "codex" },
                             { label: "Trae", value: "trae" },
+                            { label: "OpenAI", value: "openai" },
                         ]}
                         onChange={(value) => onProviderChange(value as AgentProvider)}
                     />
                 </div>
+
+                {provider === "openai" ? (
+                    <div className="rounded-lg border p-3.5" style={{ borderColor: theme.node.stroke }}>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                    <Bot className="size-4 shrink-0" />
+                                    <span className="text-sm font-medium leading-5">OpenAI</span>
+                                    <span className="text-[11px]" style={{ color: openAiConfig?.hasApiKey ? "#16a34a" : openAiConfig ? "#d97706" : theme.node.muted }}>
+                                        {openAiChecking ? t("agent.connect.openaiChecking") : openAiConfig ? t(openAiConfig.hasApiKey ? "agent.connect.openaiConfigured" : "agent.connect.openaiNotConfigured") : t("agent.connect.openaiWaiting")}
+                                    </span>
+                                </div>
+                                <div className="mt-1 text-xs leading-5" style={{ color: theme.node.muted }}>
+                                    {t("agent.connect.openaiDescription")}
+                                </div>
+                            </div>
+                            <Button className="!h-8 !px-3" icon={<RefreshCw className={`size-3.5 ${openAiChecking ? "animate-spin" : ""}`} />} onClick={() => void handleLoadOpenAiConfig()} disabled={!connected || openAiChecking}>
+                                {t("agent.connect.refreshStatus")}
+                            </Button>
+                        </div>
+                        <div className="mt-3 grid gap-2.5">
+                            <label className="grid gap-1.5">
+                                <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: theme.node.muted }}>
+                                    <Link2 className="size-3.5" />
+                                    Base URL
+                                </span>
+                                <Input size="large" prefix={<Link2 className="mr-1 size-4" style={{ color: theme.node.faint }} />} value={openAiBaseUrl} onChange={(event) => setOpenAiBaseUrl(event.target.value)} placeholder={t("agent.connect.openaiBaseUrlPlaceholder")} />
+                            </label>
+                            <label className="grid gap-1.5">
+                                <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: theme.node.muted }}>
+                                    <Bot className="size-3.5" />
+                                    Model
+                                </span>
+                                <Input size="large" prefix={<Bot className="mr-1 size-4" style={{ color: theme.node.faint }} />} value={openAiModel} onChange={(event) => setOpenAiModel(event.target.value)} placeholder={t("agent.connect.openaiModelPlaceholder")} />
+                            </label>
+                            <label className="grid gap-1.5">
+                                <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: theme.node.muted }}>
+                                    <KeyRound className="size-3.5" />
+                                    OpenAI API Key
+                                </span>
+                                <Input.Password
+                                    size="large"
+                                    prefix={<KeyRound className="mr-1 size-4" style={{ color: theme.node.faint }} />}
+                                    value={openAiApiKey}
+                                    onChange={(event) => setOpenAiApiKey(event.target.value)}
+                                    placeholder={t(openAiConfig?.hasApiKey ? "agent.connect.openaiKeepApiKey" : "agent.connect.openaiApiKeyPlaceholder")}
+                                />
+                            </label>
+                            <div className="flex justify-end pt-1">
+                                <Button type="primary" className="!h-8 !px-3" loading={openAiSaving} onClick={() => void handleSaveOpenAiConfig()} disabled={!connected || openAiChecking}>
+                                    {t("agent.connect.openaiSave")}
+                                </Button>
+                            </div>
+                        </div>
+                    </div>
+                ) : null}
 
                 {provider === "trae" ? (
                     <div className="rounded-lg border p-3.5" style={{ borderColor: theme.node.stroke }}>

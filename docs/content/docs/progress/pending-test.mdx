@@ -7,6 +7,12 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- OpenAI Agent 提供方：
+  - 在 Agent 设置选择 OpenAI，确认 Base URL 默认为 `https://api.openai.com/v1`，可配置模型和 API Key；密钥只保存到本机 Agent 配置，界面与接口均不回显密钥，刷新后仍显示已配置。
+  - 发送连续两轮文本任务，确认第二轮能继承第一轮上下文；发送图片附件或画布参考图后，确认模型能读取图片，最终回复标题显示 OpenAI，等待状态和用量统计正常结束。
+  - 要求 Agent 读取并修改当前画布、创建节点及生成图片或音频，确认 OpenAI Function Calling 经现有画布工具执行，生成任务仍进入本地 ComfyUI；工具参数或执行失败时界面显示失败原因，模型能收到结构化错误并继续回复。
+  - 在请求等待期间停止任务，确认请求中止、等待状态结束且可继续发送新任务；运行中切换提供方仍被阻止，切换到其他提供方后不会混入 OpenAI 消息。
+
 - 内部 Agent 结构化画布操作与真实工作流生成：
   - 请求 `GET /api/tools/openai`，确认返回 OpenAI `type: "function"` 工具清单；封闭生成工具使用 `strict: true`、全部字段进入 `required` 且可选字段允许 `null`，包含开放 metadata 的底层工具保持 `strict: false`。通过 `POST /api/tools` 传入带 `null` 可选参数的调用，确认与 MCP 使用相同校验且正常执行。
   - 让 Agent 分别创建默认文生图、指定名称或 Profile ID 的生图流程，确认配置节点的 `channelId`、`workflowId`、`modelId` 与当前真实工作流一致；连接参考图后创建图片流程应自动选择 I2I，资源数量、尺寸和时长沿用现有工作流校验。

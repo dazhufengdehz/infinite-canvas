@@ -65,9 +65,16 @@ export function agentAttachmentToChatAttachment(item: AgentMessageAttachment, en
     return { id: item.id, name: item.name, url: resolveAgentMessageAssetUrl(endpoint, token, item.dataUrl || item.url) };
 }
 
+export function agentProviderName(agent?: string) {
+    if (agent === "openai") return "OpenAI";
+    if (agent === "trae") return "Trae";
+    if (agent === "codex") return "Codex";
+    return "WorkBuddy";
+}
+
 export function formatAgentEvent(event: AgentEventPayload): Omit<AgentChatItem, "id"> | null {
     const item = event.item;
-    if (event.type === "item.completed" && item?.type === "agent_message") return { role: "assistant", title: "WorkBuddy", text: stringText(item.text) };
+    if (event.type === "item.completed" && item?.type === "agent_message") return { role: "assistant", title: agentProviderName(event.agent), text: stringText(item.text) };
     return null;
 }
 

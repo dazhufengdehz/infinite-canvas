@@ -6,6 +6,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { runClaudeTurn } from "../agent/claude.js";
 import { checkWorkbuddyStatus, replyWorkbuddyPermission, runWorkbuddyTurn, updateWorkbuddyConfig } from "../agent/workbuddy.js";
 import { checkTraeStatus, interruptTraeTurn, startTraeTurn, TRAE_THREAD_ID, TraeTurnError } from "../agent/trae.js";
+import { getOpenAiStatus, interruptOpenAiTurn, OpenAiTurnError, startOpenAiTurn, updateOpenAiConfig } from "../agent/openai.js";
 import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -174,6 +175,46 @@ export function startHttpServer() {
     }));
     app.get("/api/tools/openai", (_req, res) => res.json({ ok: true, data: getOpenAiToolDefinitions() }));
     app.post("/api/tools", route(async (req, res) => res.json({ ok: true, result: await session.callTool(req.body?.name, req.body?.input || {}) })));
+    app.get("/agent/openai/config", (_req, res) => res.json(getOpenAiStatus(config)));
+    app.post("/agent/openai/config", route(async (req, res) => {
+        updateOpenAiConfig(config, {
+            apiKey: req.body?.apiKey !== undefined ? String(req.body.apiKey).trim() : undefined,
+            baseUrl: req.body?.baseUrl !== undefined ? String(req.body.baseUrl).trim() : undefined,
+            model: req.body?.model !== undefined ? String(req.body.model).trim() : undefined,
+        });
+        res.json(getOpenAiStatus(config));
+    }));
+    app.post("/agent/openai/turn", route(async (req, res) => {
+        const prompt = String(req.body?.prompt || "");
+        if (!prompt.trim()) return res.status(400).json({ ok: false, error: "请输入任务内容" });
+        const clientId = String(req.body?.clientId || "");
+        if (!clientId || !session.hasClient(clientId)) return res.status(409).json({ ok: false, error: "发起任务的网页已断开，请重新连接后再试" });
+        const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments as AgentAttachment[] : [];
+        const cleanup = () => {
+            session.clearTurnAttachments(clientId);
+            session.releaseClient(clientId);
+        };
+        try {
+            session.bindClient(clientId);
+            const attachmentRefs = session.setTurnAttachments(clientId, attachments);
+            const result = startOpenAiTurn({
+                prompt: withAttachmentContext(prompt, attachmentRefs),
+                sourceClientId: clientId,
+                attachments,
+                config,
+                callTool: (name, args) => session.callTool(name, args),
+                onFinish: cleanup,
+            }, emit);
+            res.json({ ok: true, ...result });
+        } catch (error) {
+            cleanup();
+            throw error;
+        }
+    }));
+    app.post("/agent/openai/interrupt", route(async (req, res) => {
+        const ok = interruptOpenAiTurn(String(req.body?.threadId || ""));
+        res.status(ok ? 200 : 409).json({ ok, ...(ok ? {} : { error: "当前没有可停止的 OpenAI 任务" }) });
+    }));
     app.get("/agent/codex/workspace", (_req, res) => {
         const workspace = ensureSiteWorkspace(config);
         res.json({ ok: true, workspace, conversation: session.conversationStateSnapshot });
@@ -493,7 +534,7 @@ export function startHttpServer() {
     app.use((_req, res) => res.status(404).json({ ok: false, error: "not found" }));
     app.use((error: Error, req: Request, res: Response, _next: NextFunction) => {
         logger.error("HTTP request failed", { method: req.method, path: req.path, error });
-        if (error instanceof SkillStoreError || error instanceof CodexSkillLookupError || error instanceof TraeTurnError) return void res.status(error.statusCode).json({ ok: false, error: error.message });
+        if (error instanceof SkillStoreError || error instanceof CodexSkillLookupError || error instanceof TraeTurnError || error instanceof OpenAiTurnError) return void res.status(error.statusCode).json({ ok: false, error: error.message });
         res.status(500).json({ ok: false, error: error.message });
     });
 

@@ -38,12 +38,12 @@ export type AgentConversationState = {
     error?: string;
 };
 export type AgentPanelTab = "chat" | "setup" | "history" | "skills" | "log";
-export type AgentProvider = "workbuddy" | "codex" | "trae";
+export type AgentProvider = "workbuddy" | "codex" | "trae" | "openai";
 
 function readAgentProvider(): AgentProvider {
     if (typeof window === "undefined") return "workbuddy";
     const provider = localStorage.getItem("canvas-agent-provider");
-    return provider === "codex" || provider === "trae" ? provider : "workbuddy";
+    return provider === "codex" || provider === "trae" || provider === "openai" ? provider : "workbuddy";
 }
 
 const CONNECT_TIMEOUT_MS = 6000;

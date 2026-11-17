@@ -148,6 +148,24 @@ export function interruptTraeTurn(endpoint: string, token: string, threadId?: st
     return fetchAgentJson<{ ok?: boolean }>(endpoint, token, "/agent/trae/interrupt", jsonPost({ threadId }));
 }
 
+export type OpenAiConfigResponse = { ok?: boolean; hasApiKey?: boolean; baseUrl?: string; model?: string; busy?: boolean; threadId?: string; turnId?: string };
+
+export function fetchOpenAiConfig(endpoint: string, token: string) {
+    return fetchAgentJson<OpenAiConfigResponse>(endpoint, token, "/agent/openai/config");
+}
+
+export function saveOpenAiConfig(endpoint: string, token: string, config: { apiKey?: string; baseUrl?: string; model?: string }) {
+    return fetchAgentJson<OpenAiConfigResponse>(endpoint, token, "/agent/openai/config", jsonPost(config));
+}
+
+export function runOpenAiTurn(endpoint: string, token: string, body: { prompt: string; clientId: string; attachments?: Array<{ id?: string; name?: string; type?: string; size?: number; width?: number; height?: number; dataUrl?: string }> }) {
+    return fetchAgentJson<{ ok?: boolean; threadId?: string; turnId?: string }>(endpoint, token, "/agent/openai/turn", jsonPost(body));
+}
+
+export function interruptOpenAiTurn(endpoint: string, token: string, threadId?: string) {
+    return fetchAgentJson<{ ok?: boolean }>(endpoint, token, "/agent/openai/interrupt", jsonPost({ threadId }));
+}
+
 export type WorkbuddyConfigResponse = { ok?: boolean; hasToken?: boolean; baseUrl?: string };
 export type WorkbuddyStatusResponse = { ok?: boolean; online?: boolean; error?: string };
 

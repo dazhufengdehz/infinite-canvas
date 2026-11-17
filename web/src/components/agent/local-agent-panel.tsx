@@ -23,7 +23,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useAgentStore, type AgentAttachment, type AgentBootstrapStatus, type AgentCanvasContext, type AgentCanvasReference, type AgentChatItem, type AgentConversationState, type AgentModel, type AgentPendingApproval, type AgentPendingToolCall, type AgentPermissionMode, type AgentProvider, type AgentReasoningEffort, type AgentThreadSummary } from "@/stores/use-agent-store";
 import { buildCanvasAgentToolResult, type CanvasAgentOp } from "@/lib/canvas/canvas-agent-ops";
 import { isSiteTool, runSiteTool } from "@/lib/agent/agent-site-tools";
-import { acknowledgeCodexHistory, activateAgentClient, AgentApiError, discoverAgentConfig, fetchAgentJson, fetchTraeStatus, interruptCodexTurn, interruptTraeTurn, postCodexApproval, postState, postToolResult, runTraeTurn, runWorkbuddyTurn } from "@/services/api/canvas-agent";
+import { acknowledgeCodexHistory, activateAgentClient, AgentApiError, discoverAgentConfig, fetchAgentJson, fetchOpenAiConfig, fetchTraeStatus, interruptCodexTurn, interruptOpenAiTurn, interruptTraeTurn, postCodexApproval, postState, postToolResult, runOpenAiTurn, runTraeTurn, runWorkbuddyTurn } from "@/services/api/canvas-agent";
 import { AgentChatTimeline, AgentTaskProgress, AgentUsageBar } from "./agent-chat";
 import { AgentChatComposer } from "./agent-chat-composer";
 import { AgentConnectView } from "./agent-connect-view";
@@ -34,6 +34,7 @@ import {
     activityPlaceholder,
     agentAttachmentToChatAttachment,
     agentErrorView,
+    agentProviderName,
     attachmentPayloadBytes,
     compactText,
     eventUsage,
@@ -78,6 +79,7 @@ const AGENT_PROTOCOL_VERSION = 6;
 const HISTORY_RETRY_DELAYS_MS = [0, 150, 350, 700, 1200];
 const AGENT_REASONING_EFFORTS = new Set<AgentReasoningEffort>(["minimal", "low", "medium", "high", "xhigh", "max", "ultra"]);
 const TRAE_THREAD_ID = "trae-session";
+const OPENAI_THREAD_ID = "openai-session";
 const rt = (key: string, options?: Record<string, unknown>) => i18n.t(`agent.runtime.${key}`, options);
 
 function localConversation(threadId: string): AgentConversationState {
@@ -384,9 +386,11 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             const busy = Boolean(codex?.busy);
             const nextThreadId = provider === "trae"
                 ? TRAE_THREAD_ID
-                : provider === "workbuddy"
-                    ? "workbuddy-session"
-                    : hello?.conversation?.threadId ?? hello?.workspace?.activeThreadId ?? useAgentStore.getState().activeThreadId;
+                : provider === "openai"
+                    ? OPENAI_THREAD_ID
+                    : provider === "workbuddy"
+                        ? "workbuddy-session"
+                        : hello?.conversation?.threadId ?? hello?.workspace?.activeThreadId ?? useAgentStore.getState().activeThreadId;
             if (provider === "codex") {
                 if (hello?.conversation) applyConversationState(hello.conversation, true);
                 else applyWorkspaceChange({ activeThreadId: nextThreadId });
@@ -445,6 +449,24 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                     });
                 }).catch((error) => {
                     if (isCurrentConnection() && useAgentStore.getState().agentProvider === "trae") addEventLog(rt("traeStatusFailed"), error);
+                });
+            }
+            if (provider === "openai") {
+                void fetchOpenAiConfig(endpoint, token).then((openai) => {
+                    if (!isCurrentConnection() || useAgentStore.getState().agentProvider !== "openai") return;
+                    const running = Boolean(openai.busy);
+                    const turnId = running ? openai.turnId || "" : "";
+                    const latest = useAgentStore.getState();
+                    if (turnId) liveTurnKeysRef.current.add(`${OPENAI_THREAD_ID}\0${turnId}`);
+                    setAgentState({
+                        waiting: running,
+                        sending: false,
+                        activeTurnId: turnId,
+                        activity: running ? rt("openaiRunning") : rt("connected"),
+                        messages: turnId ? bindPendingTurnMessages(latest.messages, OPENAI_THREAD_ID, turnId) : latest.messages,
+                    });
+                }).catch((error) => {
+                    if (isCurrentConnection() && useAgentStore.getState().agentProvider === "openai") addEventLog(rt("openaiStatusFailed"), error);
                 });
             }
         });
@@ -726,7 +748,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             };
             const modelName = models.find((item) => item.model === model)?.displayName || model || rt("defaultModel");
             const effortName = reasoningEffort ? i18n.t(`agent.composer.effort.${reasoningEffort}`) : rt("defaultEffort");
-            const taskTarget = currentState.agentProvider === "codex" ? `${modelName} · ${effortName}` : currentState.agentProvider === "trae" ? "Trae" : "WorkBuddy";
+            const taskTarget = currentState.agentProvider === "codex" ? `${modelName} · ${effortName}` : agentProviderName(currentState.agentProvider);
             addEventLog(rt("sendTask"), `${taskTarget}${messageSkill ? ` · Skill ${messageSkill.name}` : ""}${files.length ? ` · ${rt("attachmentCount", { count: files.length })}` : ""}${canvasReferences.length ? ` · ${rt("canvasReferenceCount", { count: canvasReferences.length })}` : ""} · ${compactText(text) || rt(canvasReferences.length ? "canvasReferencesOnly" : "attachmentsOnly")}`);
             if (currentBeforeSend.agentProvider === "workbuddy") {
                 await runWorkbuddyTurn(endpoint, token, {
@@ -735,6 +757,20 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                     clientId: clientIdRef.current,
                 });
                 setAgentState({ sending: false, waiting: true, activity: rt("workbuddyRunning") });
+                files.forEach((item) => {
+                    URL.revokeObjectURL(item.url);
+                    attachmentUrlsRef.current.delete(item.url);
+                });
+                return;
+            }
+            if (currentBeforeSend.agentProvider === "openai") {
+                const accepted = await runOpenAiTurn(endpoint, token, {
+                    prompt: requestPrompt,
+                    clientId: clientIdRef.current,
+                    attachments: requestFiles.map(({ id, name, type, size, width, height, dataUrl }) => ({ id, name, type, size, width, height, dataUrl })),
+                });
+                threadId = accepted.threadId || OPENAI_THREAD_ID;
+                setAgentState({ sending: false, waiting: true, activeThreadId: threadId, activeTurnId: accepted.turnId || "", activity: rt("openaiRunning") });
                 files.forEach((item) => {
                     URL.revokeObjectURL(item.url);
                     attachmentUrlsRef.current.delete(item.url);
@@ -817,7 +853,8 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         setAgentState({ activity: rt("stopping") });
         try {
             const threadId = useAgentStore.getState().activeThreadId || undefined;
-            if (provider === "trae") await interruptTraeTurn(endpoint, token, threadId);
+            if (provider === "openai") await interruptOpenAiTurn(endpoint, token, threadId);
+            else if (provider === "trae") await interruptTraeTurn(endpoint, token, threadId);
             else await interruptCodexTurn(endpoint, token, threadId);
             addEventLog(rt("stopTask"), rt("taskStopped"));
         } catch (error) {
@@ -1328,7 +1365,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             return;
         }
         if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.id) {
-            const scoped = scopeEventChatItem(event, { id: event.item.id, role: "assistant", title: event.agent === "trae" ? "Trae" : "WorkBuddy", text: stringText(event.item.text) }, event.item.id);
+            const scoped = scopeEventChatItem(event, { id: event.item.id, role: "assistant", title: agentProviderName(event.agent), text: stringText(event.item.text) }, event.item.id);
             const currentMessages = useAgentStore.getState().messages;
             const index = currentMessages.findIndex((message) => message.id === scoped.id);
             if (index >= 0) {
@@ -1400,7 +1437,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         if (!text) return;
         const itemId = event.item?.id;
         if (!itemId) return;
-        const scoped = scopeEventChatItem(event, { id: itemId, role: "assistant", title: event.agent === "trae" ? "Trae" : "WorkBuddy", text, streamId: itemId }, itemId);
+        const scoped = scopeEventChatItem(event, { id: itemId, role: "assistant", title: agentProviderName(event.agent), text, streamId: itemId }, itemId);
         const currentMessages = useAgentStore.getState().messages;
         const index = currentMessages.findIndex((message) => message.id === scoped.id);
         if (index < 0) {
@@ -1423,7 +1460,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                             <Bot className="size-4" />
                         </span>
                         <div className="hidden text-base font-semibold leading-5 @min-[560px]:block">
-                            {agentProvider === "workbuddy" ? "WorkBuddy" : agentProvider === "codex" ? "Codex" : "Trae"}
+                            {agentProviderName(agentProvider)}
                         </div>
                         <Tooltip title={t("agent.panel.connectionSettings", { status: connectionStatus })} placement="bottom">
                             <Button size="small" type="text" className="!h-8 !w-8 !min-w-8 !px-0 @min-[560px]:!w-auto @min-[560px]:!min-w-0 @min-[560px]:!px-[7px]" aria-label={t("agent.panel.connectionSettingsLabel", { status: connectionStatus })} icon={<PlugZap className="size-3.5" style={{ color: connectionStatusColor }} />} onClick={() => setAgentState({ activeTab: "setup" })}>
