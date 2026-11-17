@@ -570,10 +570,18 @@ export function areCanvasNodePropsEqual(prev: CanvasNodeProps, next: CanvasNodeP
 function NodeContent(props: NodeContentRendererProps) {
     const { node } = props;
     const slots = (node.type === CanvasNodeType.Image ? node.metadata?.images : node.type === CanvasNodeType.Text ? node.metadata?.texts : undefined) || [];
-    const hasError = node.metadata?.status === "error" || Boolean(node.metadata?.errorDetails) || slots.some((slot) => slot.status === "error");
-    const hasContent = Boolean(node.metadata?.content || slots.some((slot) => slot.content));
+    let slotsHaveError = false;
+    let slotsHaveContent = false;
+    let allSlotsFailed = slots.length > 0;
+    for (const slot of slots) {
+        if (slot.status === "error") slotsHaveError = true;
+        else allSlotsFailed = false;
+        if (slot.content) slotsHaveContent = true;
+    }
+    const hasError = node.metadata?.status === "error" || Boolean(node.metadata?.errorDetails) || slotsHaveError;
+    const hasContent = Boolean(node.metadata?.content || slotsHaveContent);
     const isConfig = node.type === CanvasNodeType.Config && Boolean(props.renderNodeContent);
-    const failedWithoutContent = !hasContent && (node.metadata?.status === "error" || slots.length > 0 && slots.every((slot) => slot.status === "error"));
+    const failedWithoutContent = !hasContent && (node.metadata?.status === "error" || allSlotsFailed);
     if (!isConfig && failedWithoutContent && !props.isBatchRoot) return <CanvasGenerationError node={node} onRetry={props.onRetry} />;
     const rendersSlots = node.type === CanvasNodeType.Image && props.isBatchRoot || node.type === CanvasNodeType.Text && slots.length > 0;
     if (!isConfig && node.metadata?.status === "loading" && !rendersSlots) return <LoadingContent theme={props.theme} node={node} />;

@@ -233,7 +233,7 @@ export function ActiveConnectionPath({
     target?: CanvasNodeData;
 }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const activeNodes = (nodes && nodes.length > 0 ? nodes : node ? [node] : []).filter(Boolean);
+    const activeNodes = nodes && nodes.length > 0 ? nodes : node ? [node] : [];
     if (activeNodes.length === 0) return null;
 
     return (

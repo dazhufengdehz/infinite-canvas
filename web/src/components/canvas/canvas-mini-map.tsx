@@ -5,7 +5,7 @@ import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { type CanvasNodeData, type ViewportTransform } from "@/types/canvas";
 
-export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { nodes: CanvasNodeData[]; viewport: ViewportTransform; viewportSize: { width: number; height: number }; onViewportChange: (viewport: ViewportTransform) => void }) {
+export function Minimap({ nodes, viewport, viewportSize, onViewportChange, onViewportCommit }: { nodes: CanvasNodeData[]; viewport: ViewportTransform; viewportSize: { width: number; height: number }; onViewportChange: (viewport: ViewportTransform) => void; onViewportCommit?: (viewport: ViewportTransform) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
@@ -95,6 +95,11 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { n
         });
     };
 
+    const finishDragging = () => {
+        if (isDragging) onViewportCommit?.(viewport);
+        setIsDragging(false);
+    };
+
     return (
         <div className="absolute bottom-24 left-6 z-50 overflow-hidden rounded-lg border shadow-2xl backdrop-blur-sm" style={{ width, height, background: theme.toolbar.panel, borderColor: theme.toolbar.border }}>
             <div
@@ -109,8 +114,8 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange }: { n
                 onPointerMove={(event) => {
                     if (isDragging) updateViewportFromEvent(event);
                 }}
-                onPointerUp={() => setIsDragging(false)}
-                onPointerLeave={() => setIsDragging(false)}
+                onPointerUp={finishDragging}
+                onPointerLeave={finishDragging}
             >
                 {nodes.map((node) => {
                     const pos = toMinimap(node.position.x, node.position.y);

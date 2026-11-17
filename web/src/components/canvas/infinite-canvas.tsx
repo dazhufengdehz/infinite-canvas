@@ -4,21 +4,23 @@ import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ViewportTransform } from "@/types/canvas";
 
-type InfiniteCanvasProps = {
+export type InfiniteCanvasProps = {
     containerRef: React.RefObject<HTMLDivElement | null>;
     viewport: ViewportTransform;
     tool: "select" | "pan";
     backgroundMode?: CanvasBackgroundMode;
     onViewportChange: (viewport: ViewportTransform) => void;
+    onViewportPreview?: (viewport: ViewportTransform) => void;
     onCanvasMouseDown?: (event: React.PointerEvent<HTMLDivElement>) => void;
     onCanvasDeselect?: () => void;
     onCanvasDoubleClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
     onContextMenu?: (event: React.MouseEvent) => void;
     onDrop?: (event: React.DragEvent<HTMLDivElement>) => void;
     children: React.ReactNode;
+    overlay?: React.ReactNode;
 };
 
-export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onCanvasMouseDown, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children }: InfiniteCanvasProps) {
+export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = "lines", onViewportChange, onViewportPreview, onCanvasMouseDown, onCanvasDeselect, onCanvasDoubleClick, onContextMenu, onDrop, children, overlay }: InfiniteCanvasProps) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const panState = useRef({
         isPanning: false,
@@ -34,7 +36,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     latestViewportRef.current = viewport;
     const containerRectRef = useRef<DOMRect | null>(null);
     const frameRef = useRef<number | null>(null);
-    const nextViewportRef = useRef<ViewportTransform | null>(null);
+    const wheelCommitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [isControlPressed, setIsControlPressed] = useState(false);
     const [isPanning, setIsPanning] = useState(false);
@@ -62,6 +64,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     useEffect(
         () => () => {
             if (frameRef.current) cancelAnimationFrame(frameRef.current);
+            if (wheelCommitTimerRef.current) clearTimeout(wheelCommitTimerRef.current);
         },
         [],
     );
@@ -88,6 +91,11 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
         const handleBlur = () => {
             setIsSpacePressed(false);
             setIsControlPressed(false);
+            if (panState.current.isPanning && panState.current.hasMoved && onViewportPreview) {
+                if (frameRef.current) cancelAnimationFrame(frameRef.current);
+                frameRef.current = null;
+                onViewportChange(latestViewportRef.current);
+            }
             panState.current.isPanning = false;
             setIsPanning(false);
             document.body.style.cursor = "";
@@ -101,7 +109,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             window.removeEventListener("keyup", handleKeyUp);
             window.removeEventListener("blur", handleBlur);
         };
-    }, []);
+    }, [onViewportChange, onViewportPreview]);
 
     const handleWheel = (event: React.WheelEvent<HTMLDivElement>) => {
         const target = event.target instanceof Element ? event.target : null;
@@ -127,7 +135,16 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
 
         latestViewportRef.current = nextVp;
         scaleRef.current = newScale;
-        onViewportChange(nextVp);
+        if (!onViewportPreview) {
+            onViewportChange(nextVp);
+            return;
+        }
+        onViewportPreview(nextVp);
+        if (wheelCommitTimerRef.current) clearTimeout(wheelCommitTimerRef.current);
+        wheelCommitTimerRef.current = setTimeout(() => {
+            onViewportChange(latestViewportRef.current);
+            wheelCommitTimerRef.current = null;
+        }, 80);
     };
 
     const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
@@ -190,13 +207,19 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             if (frameRef.current) return;
             frameRef.current = requestAnimationFrame(() => {
                 frameRef.current = null;
-                onViewportChange(nextVp);
+                (onViewportPreview || onViewportChange)(latestViewportRef.current);
             });
         };
 
         const handlePointerUp = () => {
             if (!panState.current.isPanning) return;
 
+            if (onViewportPreview && panState.current.hasMoved) {
+                if (frameRef.current) cancelAnimationFrame(frameRef.current);
+                frameRef.current = null;
+                onViewportPreview(latestViewportRef.current);
+                onViewportChange(latestViewportRef.current);
+            }
             if (!panState.current.hasMoved && panState.current.startedOnBackground) {
                 onCanvasDeselect?.();
             }
@@ -214,7 +237,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             window.removeEventListener("pointercancel", handlePointerUp);
             document.body.style.cursor = "";
         };
-    }, [onCanvasDeselect, onViewportChange]);
+    }, [onCanvasDeselect, onViewportChange, onViewportPreview]);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -257,6 +280,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
             >
                 {children}
             </div>
+            {overlay}
         </div>
     );
 }
