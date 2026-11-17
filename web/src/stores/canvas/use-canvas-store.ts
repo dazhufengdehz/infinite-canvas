@@ -47,6 +47,7 @@ type CanvasStore = {
     renameCanvas: (projectId: string, canvasId: string, title: string) => Promise<void>;
     deleteCanvas: (projectId: string, canvasId: string) => Promise<string | null>;
     updateCanvas: (projectId: string, canvasId: string, patch: CanvasDocumentPatch) => void;
+    setProjectAssetCount: (projectId: string, count: number) => void;
     flushProject: () => Promise<void>;
 };
 
@@ -63,9 +64,9 @@ function canvasKey(projectId: string, canvasId: string) {
     return `${projectId}/${canvasId}`;
 }
 
-function upsertSummary(projects: CanvasProjectSummary[], project: CanvasProject, canvases: CanvasDocumentSummary[]) {
+function upsertSummary(projects: CanvasProjectSummary[], project: CanvasProject, canvases: CanvasDocumentSummary[], assetCount?: number) {
     const current = projects.find((item) => item.id === project.id);
-    const summary = projectSummary(project, canvases, current?.assetCount || 0);
+    const summary = projectSummary(project, canvases, assetCount ?? current?.assetCount ?? 0);
     return projects.some((item) => item.id === project.id) ? projects.map((item) => (item.id === project.id ? summary : item)) : [summary, ...projects];
 }
 
@@ -183,8 +184,9 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
                 makeCanvas(project.id, canvas.title || i18n.t("canvas.documents.defaultTitleWithIndex", { index: index + 1 }), canvas.id, canvas),
             );
             project.activeCanvasId = canvases.some((canvas) => canvas.id === source.activeCanvasId) ? source.activeCanvasId! : canvases[0].id;
-            const stored = await createStoredProject(project, canvases);
-            set((state) => ({ projects: upsertSummary(state.projects, stored.project, stored.canvases.map(canvasSummary)), storageError: null }));
+            const assets = (source.assets || []).map((asset) => ({ ...asset, scope: { type: "project" as const, projectId: project.id } }));
+            const stored = await createStoredProject(project, canvases, assets);
+            set((state) => ({ projects: upsertSummary(state.projects, stored.project, stored.canvases.map(canvasSummary), assets.length), storageError: null }));
             return stored.project.id;
         },
         openProject: async (id, canvasId) => {
@@ -288,6 +290,9 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
             }));
             return nextId;
         },
+        setProjectAssetCount: (projectId, count) => set((state) => ({
+            projects: state.projects.map((project) => (project.id === projectId ? { ...project, assetCount: count } : project)),
+        })),
         updateCanvas: (projectId, canvasId, patch) => {
             if (get().activeProject?.id !== projectId || get().activeCanvas?.id !== canvasId) return;
             set((state) => {

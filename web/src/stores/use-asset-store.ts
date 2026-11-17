@@ -8,6 +8,8 @@ import { hasStorageServer } from "@/services/api/storage";
 import { readAssets, readProjects, saveAssets } from "@/services/project-storage";
 
 export type AssetKind = "text" | "image" | "video" | "audio";
+export type AssetScope = { type: "global" } | { type: "project"; projectId: string };
+export type AssetOrigin = { projectId?: string; canvasId?: string; nodeId?: string };
 export type TextAsset = AssetBase<"text"> & { data: { content: string } };
 export type ImageAsset = AssetBase<"image"> & { data: { dataUrl: string; storageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
 export type VideoAsset = AssetBase<"video"> & { data: { url: string; storageKey?: string; posterUrl?: string; posterStorageKey?: string; width: number; height: number; bytes: number; mimeType: string } };
@@ -24,13 +26,17 @@ type AssetBase<T extends AssetKind> = {
     note?: string;
     createdAt: string;
     updatedAt: string;
+    scope: AssetScope;
+    origin?: AssetOrigin;
     metadata?: Record<string, unknown>;
 };
+
+type AssetDraft = Omit<Asset, "id" | "createdAt" | "updatedAt" | "scope"> & { scope?: AssetScope };
 
 type AssetStore = {
     hydrated: boolean;
     assets: Asset[];
-    addAsset: (asset: Omit<Asset, "id" | "createdAt" | "updatedAt">) => string;
+    addAsset: (asset: AssetDraft) => string;
     updateAsset: (id: string, patch: Partial<Omit<Asset, "id" | "createdAt">>) => void;
     removeAsset: (id: string) => void;
     replaceAssets: (assets: Asset[]) => void;
@@ -44,9 +50,11 @@ const assetStorage: PersistStorage<AssetStore> = {
     getItem: async () => {
         const assets = await Promise.all(
             (await readAssets()).map(async (asset) => {
-                if (asset.kind === "video" && asset.data.posterStorageKey) {
+                if (asset.kind === "video" || asset.kind === "audio") {
+                    const url = await resolveMediaUrl(asset.data.storageKey, asset.data.url);
+                    if (asset.kind === "audio") return { ...asset, data: { ...asset.data, url } };
                     const posterUrl = await resolveMediaUrl(asset.data.posterStorageKey, asset.data.posterUrl || asset.coverUrl);
-                    return { ...asset, coverUrl: posterUrl || asset.coverUrl, data: { ...asset.data, posterUrl } };
+                    return { ...asset, coverUrl: posterUrl || asset.coverUrl, data: { ...asset.data, url, posterUrl } };
                 }
                 if (asset.kind !== "image") return asset;
                 if (asset.data.storageKey) {
@@ -78,7 +86,7 @@ export const useAssetStore = create<AssetStore>()(
             addAsset: (asset) => {
                 const now = new Date().toISOString();
                 const id = nanoid();
-                set((state) => ({ assets: [{ ...asset, id, createdAt: now, updatedAt: now } as Asset, ...state.assets] }));
+                set((state) => ({ assets: [{ ...asset, scope: asset.scope || { type: "global" }, id, createdAt: now, updatedAt: now } as Asset, ...state.assets] }));
                 return id;
             },
             updateAsset: (id, patch) =>

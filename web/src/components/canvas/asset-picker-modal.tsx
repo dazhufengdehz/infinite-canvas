@@ -8,27 +8,31 @@ import type { SystemPresetCategory } from "@/lib/assets/system-presets";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset } from "@/stores/use-asset-store";
 
-export type InsertAssetPayload =
+export type InsertAssetPayload = (
     | { kind: "text"; content: string; title: string }
     | { kind: "image"; dataUrl: string; title: string; storageKey?: string; promptText?: string; mimeType?: string }
     | { kind: "video"; url: string; title: string; storageKey?: string; posterUrl?: string; posterStorageKey?: string; width?: number; height?: number; mimeType?: string }
-    | { kind: "audio"; url: string; title: string; storageKey?: string; durationMs?: number; mimeType?: string };
+    | { kind: "audio"; url: string; title: string; storageKey?: string; durationMs?: number; mimeType?: string }
+) & { asset?: Asset };
 
 type Props = {
     open: boolean;
     defaultTab?: string;
+    projectAssets?: Asset[];
     onInsert: (payload: InsertAssetPayload) => void;
     onClose: () => void;
 };
 
-export function AssetPickerModal({ open, defaultTab = "my-assets", onInsert, onClose }: Props) {
+export function AssetPickerModal({ open, defaultTab, projectAssets, onInsert, onClose }: Props) {
     const { t } = useTranslation();
-    const [activeTab, setActiveTab] = useState(defaultTab);
+    const globalAssets = useAssetStore((state) => state.assets);
+    const initialTab = defaultTab || (projectAssets ? "project-assets" : "my-assets");
+    const [activeTab, setActiveTab] = useState(initialTab);
     const [presetCategory, setPresetCategory] = useState<SystemPresetCategory>("pose");
 
     useEffect(() => {
-        if (open) setActiveTab(defaultTab || "my-assets");
-    }, [defaultTab, open]);
+        if (open) setActiveTab(initialTab);
+    }, [initialTab, open]);
 
     return (
         <Modal
@@ -44,10 +48,15 @@ export function AssetPickerModal({ open, defaultTab = "my-assets", onInsert, onC
                 activeKey={activeTab}
                 onChange={setActiveTab}
                 items={[
+                    ...(projectAssets ? [{
+                        key: "project-assets",
+                        label: t("canvas.assetPicker.tabProjectAssets"),
+                        children: <AssetListTab assets={projectAssets} onInsert={onInsert} />,
+                    }] : []),
                     {
                         key: "my-assets",
                         label: t("canvas.assetPicker.tabMyAssets"),
-                        children: <MyAssetsTab onInsert={onInsert} />,
+                        children: <AssetListTab assets={globalAssets} onInsert={onInsert} />,
                     },
                     {
                         key: "system-presets",
@@ -130,9 +139,8 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
     );
 }
 
-function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => void }) {
+function AssetListTab({ assets, onInsert }: { assets: Asset[]; onInsert: (payload: InsertAssetPayload) => void }) {
     const { t } = useTranslation();
-    const assets = useAssetStore((state) => state.assets);
     const [keyword, setKeyword] = useState("");
     const [kindFilter, setKindFilter] = useState("all");
     const [page, setPage] = useState(1);
@@ -153,13 +161,13 @@ function MyAssetsTab({ onInsert }: { onInsert: (payload: InsertAssetPayload) => 
 
     const handleInsert = (asset: Asset) => {
         if (asset.kind === "text") {
-            onInsert({ kind: "text", content: asset.data.content, title: asset.title });
+            onInsert({ kind: "text", content: asset.data.content, title: asset.title, asset });
         } else if (asset.kind === "video") {
-            onInsert({ kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, posterUrl: asset.data.posterUrl, posterStorageKey: asset.data.posterStorageKey, title: asset.title, width: asset.data.width, height: asset.data.height, mimeType: asset.data.mimeType });
+            onInsert({ kind: "video", url: asset.data.url, storageKey: asset.data.storageKey, posterUrl: asset.data.posterUrl, posterStorageKey: asset.data.posterStorageKey, title: asset.title, width: asset.data.width, height: asset.data.height, mimeType: asset.data.mimeType, asset });
         } else if (asset.kind === "audio") {
-            onInsert({ kind: "audio", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, durationMs: asset.data.durationMs, mimeType: asset.data.mimeType });
+            onInsert({ kind: "audio", url: asset.data.url, storageKey: asset.data.storageKey, title: asset.title, durationMs: asset.data.durationMs, mimeType: asset.data.mimeType, asset });
         } else {
-            onInsert({ kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title, mimeType: asset.data.mimeType });
+            onInsert({ kind: "image", dataUrl: asset.data.dataUrl, storageKey: asset.data.storageKey, title: asset.title, mimeType: asset.data.mimeType, asset });
         }
     };
 

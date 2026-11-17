@@ -9,6 +9,8 @@ const ASSET_STORE_KEY = "infinite-canvas:asset_store";
 const projectKey = (id: string) => `infinite-canvas:canvas_project:${id}`;
 const canvasIndexKey = (id: string) => `infinite-canvas:canvas_index:${id}`;
 const canvasKey = (projectId: string, canvasId: string) => `infinite-canvas:canvas_document:${projectId}:${canvasId}`;
+const projectAssetsKey = (id: string) => `infinite-canvas:project_assets:${id}`;
+const projectAssetQueues = new Map<string, Promise<unknown>>();
 
 type LocalAssetState = { state?: { assets?: Asset[] } };
 
@@ -77,7 +79,7 @@ export async function readProjectBundle(id: string): Promise<CanvasProjectBundle
         const canvas = await readStoredCanvas(id, summary.id);
         if (canvas) canvases.push(canvas);
     }
-    return { ...project, canvases };
+    return { ...project, canvases, assets: await readProjectAssets(id) };
 }
 
 export async function readProjects(ids?: string[]) {
@@ -91,12 +93,12 @@ export async function readProjects(ids?: string[]) {
     return projects;
 }
 
-export async function createStoredProject(project: CanvasProject, canvases: CanvasDocument[]) {
+export async function createStoredProject(project: CanvasProject, canvases: CanvasDocument[], assets: Asset[] = []) {
     if (await hasStorageServer()) {
         return storageRequest<{ project: CanvasProject; canvases: CanvasDocument[] }>("/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ project, canvases }),
+            body: JSON.stringify({ project, canvases, assets }),
         });
     }
     const storedProject = { ...project, revision: 1 };
@@ -104,8 +106,9 @@ export async function createStoredProject(project: CanvasProject, canvases: Canv
     await writeLocal(projectKey(project.id), storedProject);
     await writeLocal(canvasIndexKey(project.id), storedCanvases.map(canvasSummary));
     for (const canvas of storedCanvases) await writeLocal(canvasKey(project.id, canvas.id), canvas);
+    await writeLocal(projectAssetsKey(project.id), assets);
     const projects = await listProjects();
-    const summary = projectSummary(storedProject, storedCanvases.map(canvasSummary));
+    const summary = projectSummary(storedProject, storedCanvases.map(canvasSummary), assets.length);
     await writeLocal(PROJECT_INDEX_KEY, [summary, ...projects.filter((item) => item.id !== project.id)]);
     return { project: storedProject, canvases: storedCanvases };
 }
@@ -215,6 +218,7 @@ export async function deleteStoredProjects(ids: string[]) {
         const canvases = await listStoredCanvases(id);
         for (const canvas of canvases) await localForageStorage.removeItem(canvasKey(id, canvas.id));
         await localForageStorage.removeItem(canvasIndexKey(id));
+        await localForageStorage.removeItem(projectAssetsKey(id));
         await localForageStorage.removeItem(projectKey(id));
     }
     await writeLocal(PROJECT_INDEX_KEY, (await listProjects()).filter((project) => !ids.includes(project.id)));
@@ -225,9 +229,54 @@ export async function replaceStoredProjects(projects: CanvasProjectBundle[]) {
     await deleteStoredProjects(existing.map((item) => item.id));
     for (const project of projects) {
         const id = project.id || nanoid();
-        const { canvases, ...metadata } = project;
-        await createStoredProject({ ...metadata, id }, canvases.map((canvas) => ({ ...canvas, projectId: id })));
+        const { canvases, assets, ...metadata } = project;
+        await createStoredProject({ ...metadata, id }, canvases.map((canvas) => ({ ...canvas, projectId: id })), assets.map((asset) => ({ ...asset, scope: { type: "project", projectId: id } })));
     }
+}
+
+export async function readProjectAssets(projectId: string) {
+    if (await hasStorageServer()) return (await storageRequest<{ assets: Asset[] }>(`/projects/${encodeURIComponent(projectId)}/assets`)).assets;
+    return readLocal<Asset[]>(projectAssetsKey(projectId), []);
+}
+
+async function saveLocalProjectAssets(projectId: string, assets: Asset[]) {
+    await writeLocal(projectAssetsKey(projectId), assets);
+    const project = await readProject(projectId);
+    if (!project) return;
+    const updatedAt = new Date().toISOString();
+    await writeLocal(projectKey(projectId), { ...project, updatedAt });
+    const canvases = await listStoredCanvases(projectId);
+    const projects = await listProjects();
+    await writeLocal(PROJECT_INDEX_KEY, projects.map((item) => (item.id === projectId ? projectSummary({ ...project, updatedAt }, canvases, assets.length) : item)));
+}
+
+export async function saveStoredProjectAssets(projectId: string, assets: Asset[]) {
+    if (await hasStorageServer()) {
+        await storageRequest(`/projects/${encodeURIComponent(projectId)}/assets`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ assets }) });
+        return assets;
+    }
+    await saveLocalProjectAssets(projectId, assets);
+    return assets;
+}
+
+export async function addStoredProjectAsset(projectId: string, asset: Asset) {
+    if (await hasStorageServer()) {
+        return (await storageRequest<{ assets: Asset[] }>(`/projects/${encodeURIComponent(projectId)}/assets`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ asset }),
+        })).assets;
+    }
+    const previous = projectAssetQueues.get(projectId) || Promise.resolve();
+    const next = previous.catch(() => {}).then(async () => {
+        const assets = [...(await readProjectAssets(projectId)).filter((item) => item.id !== asset.id), asset];
+        await saveLocalProjectAssets(projectId, assets);
+        return assets;
+    });
+    projectAssetQueues.set(projectId, next);
+    return next.finally(() => {
+        if (projectAssetQueues.get(projectId) === next) projectAssetQueues.delete(projectId);
+    });
 }
 
 export async function readAssets() {

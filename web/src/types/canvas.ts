@@ -1,5 +1,6 @@
 import type { ModelSupportedTools } from "@/services/api/models/types";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
+import type { Asset } from "@/stores/use-asset-store";
 
 export type CanvasProject = {
     id: string;
@@ -53,6 +54,7 @@ export type CanvasProjectSummary = {
 
 export type CanvasProjectBundle = CanvasProject & {
     canvases: CanvasDocument[];
+    assets: Asset[];
 };
 
 export type Position = {
@@ -176,6 +178,7 @@ export type CanvasNodeMetadata = {
     freeResize?: boolean;
     images?: CanvasNodeImage[];
     primaryImageId?: string;
+    assetId?: string;
     storageKey?: string;
     posterUrl?: string;
     posterStorageKey?: string;

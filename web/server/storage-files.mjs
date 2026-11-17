@@ -134,6 +134,7 @@ export function createStorage(dataDir) {
     const projectFile = (id) => join(root, "projects", assertId(id, "项目ID"), "project.json");
     const canvasIndexFile = (id) => join(root, "projects", assertId(id, "项目ID"), "canvases", "index.json");
     const canvasFile = (projectId, canvasId) => join(root, "projects", assertId(projectId, "项目ID"), "canvases", `${assertId(canvasId, "画布ID")}.json`);
+    const projectAssetsFile = (id) => join(root, "projects", assertId(id, "项目ID"), "assets.json");
 
     async function readCanvasIndex(projectId) {
         const index = await readJson(canvasIndexFile(projectId), []);
@@ -156,6 +157,15 @@ export function createStorage(dataDir) {
         const stored = { ...current, updatedAt: new Date().toISOString() };
         await serial(file, () => atomicWrite(file, JSON.stringify(stored, null, 2)));
         await updateIndex((index) => index.map((item) => item.id === projectId ? projectSummary(stored, item, canvases) : item));
+    }
+
+    async function updateProjectAssetsSummary(projectId, assets) {
+        const file = projectFile(projectId);
+        const current = await readJson(file);
+        const stored = { ...current, updatedAt: new Date().toISOString() };
+        await serial(file, () => atomicWrite(file, JSON.stringify(stored, null, 2)));
+        const canvases = await readCanvasIndex(projectId);
+        await updateIndex((index) => index.map((item) => item.id === projectId ? projectSummary(stored, { assetCount: assets.length }, canvases) : item));
     }
 
     async function parseMediaKey(key) {
@@ -224,9 +234,10 @@ export function createStorage(dataDir) {
             return readJson(projectFile(id));
         },
 
-        async createProject(project, canvases) {
+        async createProject(project, canvases, assets = []) {
             assertProject(project);
             if (!Array.isArray(canvases) || !canvases.length) throw new StorageError(400, "项目至少需要一张画布");
+            if (!Array.isArray(assets)) throw new StorageError(400, "项目资产数据不合法");
             canvases.forEach((canvas) => assertCanvas(canvas, project.id));
             const file = projectFile(project.id);
             return serial(file, async () => {
@@ -239,7 +250,8 @@ export function createStorage(dataDir) {
                 for (const canvas of storedCanvases) await atomicWrite(canvasFile(project.id, canvas.id), JSON.stringify(canvas, null, 2));
                 const summaries = storedCanvases.map(canvasSummary);
                 await atomicWrite(canvasIndexFile(project.id), JSON.stringify(summaries, null, 2));
-                await updateIndex((index) => [projectSummary(storedProject, null, summaries), ...index.filter((item) => item.id !== project.id)]);
+                await atomicWrite(projectAssetsFile(project.id), JSON.stringify({ assets }, null, 2));
+                await updateIndex((index) => [projectSummary(storedProject, { assetCount: assets.length }, summaries), ...index.filter((item) => item.id !== project.id)]);
                 return { project: storedProject, canvases: storedCanvases };
             });
         },
@@ -349,6 +361,37 @@ export function createStorage(dataDir) {
                 await updateIndex((index) => index.filter((item) => item.id !== id));
                 await rm(join(root, "projects", id), { recursive: true, force: true });
             });
+        },
+
+        async readProjectAssets(projectId) {
+            await readJson(projectFile(projectId));
+            const data = await readJson(projectAssetsFile(projectId), { assets: [] });
+            return { assets: Array.isArray(data.assets) ? data.assets : [] };
+        },
+
+        async saveProjectAssets(projectId, assets) {
+            if (!Array.isArray(assets)) throw new StorageError(400, "项目资产数据不合法");
+            await readJson(projectFile(projectId));
+            const file = projectAssetsFile(projectId);
+            await serial(file, () => atomicWrite(file, JSON.stringify({ assets }, null, 2)));
+            await updateProjectAssetsSummary(projectId, assets);
+            return { assets };
+        },
+
+        async addProjectAsset(projectId, asset) {
+            if (!asset || typeof asset !== "object" || Array.isArray(asset)) throw new StorageError(400, "项目资产数据不合法");
+            assertId(asset.id, "资产ID");
+            await readJson(projectFile(projectId));
+            const file = projectAssetsFile(projectId);
+            const assets = await serial(file, async () => {
+                const data = await readJson(file, { assets: [] });
+                const current = Array.isArray(data.assets) ? data.assets : [];
+                const next = [...current.filter((item) => item.id !== asset.id), asset];
+                await atomicWrite(file, JSON.stringify({ assets: next }, null, 2));
+                return next;
+            });
+            await updateProjectAssetsSummary(projectId, assets);
+            return { assets };
         },
 
         async readAssets() {

@@ -478,7 +478,7 @@ export default {
             "untitled": "Untitled project",
             "imported": "Imported project",
             "select": "Select {{name}}",
-            "stats": "{{canvases}} canvases · {{nodes}} nodes · {{connections}} connections",
+            "stats": "{{canvases}} canvases · {{assets}} assets · {{nodes}} nodes · {{connections}} connections",
             "updated": "Updated {{date}}",
             "saveName": "Save name",
             "cancelRename": "Cancel rename",
@@ -664,6 +664,7 @@ export default {
             "search": "Search assets",
             "empty": "No assets",
             "tabMyAssets": "My Assets",
+            "tabProjectAssets": "Project Assets",
             "tabSystemPresets": "System presets"
         },
         "imageTools": {

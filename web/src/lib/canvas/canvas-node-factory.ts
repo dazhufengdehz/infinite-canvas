@@ -217,6 +217,8 @@ export function cloneNodeMetadata(metadata?: CanvasNodeMetadata, nodeType?: Canv
             (Array.isArray(cloned.texts) && cloned.texts.length > 0)
         );
 
+    if (isAiGenerativeImage || isAiGenerativeVideo || isAiGenerativeAudio || isAiGenerativeText) delete cloned.assetId;
+
     if (isAiGenerativeImage) {
         // AI 生图节点：清空媒体产物，保留提示词、模型、尺寸、参考图等生成配置，就绪重置为 idle
         cloned.content = "";

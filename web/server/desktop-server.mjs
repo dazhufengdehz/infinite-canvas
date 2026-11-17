@@ -176,7 +176,25 @@ export function createDesktopServer(options = {}) {
             }
             if (req.method === "POST") {
                 const body = await readJson(req);
-                sendJson(req, res, 201, await storage.createProject(body.project, body.canvases));
+                sendJson(req, res, 201, await storage.createProject(body.project, body.canvases, body.assets));
+                return;
+            }
+        }
+        const projectAssetsMatch = /^\/api\/storage\/projects\/([^/]+)\/assets$/.exec(pathname);
+        if (projectAssetsMatch) {
+            const projectId = decodeSegment(projectAssetsMatch[1]);
+            if (req.method === "GET") {
+                sendJson(req, res, 200, await storage.readProjectAssets(projectId));
+                return;
+            }
+            if (req.method === "PUT") {
+                const body = await readJson(req);
+                sendJson(req, res, 200, await storage.saveProjectAssets(projectId, body.assets));
+                return;
+            }
+            if (req.method === "POST") {
+                const body = await readJson(req);
+                sendJson(req, res, 201, await storage.addProjectAsset(projectId, body.asset));
                 return;
             }
         }

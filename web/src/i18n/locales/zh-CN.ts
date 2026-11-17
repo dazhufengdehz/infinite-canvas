@@ -478,7 +478,7 @@ export default {
             "untitled": "未命名项目",
             "imported": "导入项目",
             "select": "选择 {{name}}",
-            "stats": "{{canvases}} 张画布 · {{nodes}} 个节点 · {{connections}} 条连线",
+            "stats": "{{canvases}} 张画布 · {{assets}} 个资产 · {{nodes}} 个节点 · {{connections}} 条连线",
             "updated": "更新于 {{date}}",
             "saveName": "保存名称",
             "cancelRename": "取消重命名",
@@ -664,6 +664,7 @@ export default {
             "search": "搜索资产",
             "empty": "没有资产",
             "tabMyAssets": "我的素材",
+            "tabProjectAssets": "本项目资产",
             "tabSystemPresets": "系统预设"
         },
         "imageTools": {
