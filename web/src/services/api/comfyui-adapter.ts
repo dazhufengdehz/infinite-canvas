@@ -163,7 +163,7 @@ function tracePositivePromptNode(adapted: Record<string, NodeRecord>, samplerNod
 
     while (currentId && adapted[currentId] && !visited.has(currentId)) {
         visited.add(currentId);
-        const currentNode = adapted[currentId];
+        const currentNode: NodeRecord = adapted[currentId];
         const cls = (currentNode.class_type || "").toLowerCase();
 
         if (cls.includes("cliptextencode") || cls.includes("textencode") || cls.includes("primitivestring")) {

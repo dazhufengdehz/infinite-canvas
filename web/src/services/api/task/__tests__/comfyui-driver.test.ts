@@ -159,7 +159,7 @@ describe("ComfyuiTaskDriver", () => {
         });
 
         it("maps ComfyuiJobError to execution_failed category", () => {
-            const err = new ComfyuiJobError("Syntax error in node", { details: "bad node" });
+            const err = new ComfyuiJobError("Syntax error in node", "error");
             const mapped = mapComfyErrorToTaskError(err, "job_123");
             expect(mapped.category).toBe("execution_failed");
             expect(mapped.isRetryable).toBe(false);
@@ -203,8 +203,10 @@ describe("ComfyuiTaskDriver", () => {
             expect(snapshot.phase).toBe("success");
             expect(snapshot.jobId).toBe("job_done");
             expect(snapshot.artifacts).toHaveLength(1);
-            expect(snapshot.artifacts?.[0].type).toBe("image");
-            expect(snapshot.artifacts?.[0].url).toContain("filename=done.png");
+            expect(snapshot.artifacts?.[0]).toMatchObject({
+                type: "image",
+                url: expect.stringContaining("filename=done.png"),
+            });
 
             vi.restoreAllMocks();
         });

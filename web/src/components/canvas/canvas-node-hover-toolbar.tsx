@@ -36,8 +36,6 @@ type CanvasNodeHoverToolbarProps = {
     onCrop: (node: CanvasNodeData) => void;
     onSplit: (node: CanvasNodeData) => void;
     onUpscale: (node: CanvasNodeData) => void;
-    onSuperResolve: (node: CanvasNodeData) => void;
-    onAngle: (node: CanvasNodeData) => void;
     onViewImage: (node: CanvasNodeData) => void;
     onReversePrompt: (node: CanvasNodeData) => void;
     onFaceRefine?: (node: CanvasNodeData) => void;
@@ -81,8 +79,6 @@ export function CanvasNodeHoverToolbar({
     onCrop,
     onSplit,
     onUpscale,
-    onSuperResolve,
-    onAngle,
     onViewImage,
     onReversePrompt,
     onFaceRefine,
@@ -170,7 +166,7 @@ export function CanvasNodeHoverToolbar({
     const canFaceRefine = hasVideo && Boolean(supportedTools?.faceRefine);
     const canDepthVideo = hasVideo && Boolean(supportedTools?.depthVideo ?? true);
 
-    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onSuperResolve, onAngle, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt }, supportedTools);
+    const imageTools = buildImageToolbarTools(node, { onUpload, onToggleFreeResize, onMaskEdit, onCrop, onSplit, onUpscale, onViewImage, onCopyPrompt: copyImagePrompt, onReversePrompt }, supportedTools);
 
     function openImageToolSettings() {
         onKeep(activeNode.id);

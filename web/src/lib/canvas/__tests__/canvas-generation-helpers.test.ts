@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TaskExecutionError } from "@/services/api/task";
 
 import {
@@ -404,8 +404,8 @@ describe("hasInterruptedGeneration and countInterruptedTasks", () => {
         const batchNode = makeNode(CanvasNodeType.Image, {
             status: "error",
             images: [
-                { id: "img-1", status: "success", content: "data:1" },
-                { id: "img-2", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。" },
+                { id: "img-1", status: "success", content: "data:1", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
+                { id: "img-2", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。", content: "", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
             ],
         });
         expect(hasInterruptedGeneration(batchNode)).toBe(true);
@@ -419,9 +419,9 @@ describe("hasInterruptedGeneration and countInterruptedTasks", () => {
         const node2 = makeNode(CanvasNodeType.Image, {
             status: "error",
             images: [
-                { id: "img-1", status: "success", content: "data:1" },
-                { id: "img-2", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。" },
-                { id: "img-3", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。" },
+                { id: "img-1", status: "success", content: "data:1", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
+                { id: "img-2", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。", content: "", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
+                { id: "img-3", status: "error", errorDetails: "页面刷新后生成已中断，请重新生成。", content: "", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
             ],
         });
         const node3 = makeNode(CanvasNodeType.Video, {
@@ -437,8 +437,8 @@ describe("hasInterruptedGeneration and countInterruptedTasks", () => {
         const loadingNode = makeNode(CanvasNodeType.Image, {
             status: "loading",
             images: [
-                { id: "img-1", status: "loading" },
-                { id: "img-2", status: "success", content: "data:2" },
+                { id: "img-1", status: "loading", content: "", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
+                { id: "img-2", status: "success", content: "data:2", storageKey: "", naturalWidth: 100, naturalHeight: 100, bytes: 0, mimeType: "image/png" },
             ],
         });
         const [reset] = resetInterruptedGeneration([loadingNode]);

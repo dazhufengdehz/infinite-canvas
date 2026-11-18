@@ -7,9 +7,9 @@ import {
     getDefaultWorkflow,
     useConfigStore,
     useEffectiveConfig,
+    type ComfyWorkflowItem,
     type WorkflowCategory,
 } from "@/stores/use-config-store";
-import type { ComfyWorkflowItem } from "@/services/api/comfyui-default-workflows";
 
 const CATEGORY_LABELS: Record<WorkflowCategory, string> = {
     omniVideo: "全能参考视频",

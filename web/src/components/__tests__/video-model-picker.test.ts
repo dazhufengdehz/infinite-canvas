@@ -6,7 +6,7 @@ import {
     videoMinimaxH3OmniProfile,
 } from "@/services/api/models";
 import { isModelSupportedByHost } from "@/stores/use-config-store";
-import type { ModelChannel } from "@/types/config";
+import type { ModelChannel } from "@/stores/use-config-store";
 
 describe("VideoModelPicker Data Contract", () => {
     it("registers the MS_V10 omni video profile", () => {

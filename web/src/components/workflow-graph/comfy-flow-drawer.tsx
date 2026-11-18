@@ -142,7 +142,7 @@ export function ComfyFlowDrawer({
     const slotOptions = useMemo(() => {
         if (!node.slotTitle) return COMMON_SLOT_OPTIONS;
         const exists = COMMON_SLOT_OPTIONS.some((group) =>
-            "options" in group ? group.options.some((opt) => opt.value === node.slotTitle) : group.value === node.slotTitle,
+            "options" in group ? group.options?.some((opt) => opt.value === node.slotTitle) : group.value === node.slotTitle,
         );
         if (!exists) {
             return [

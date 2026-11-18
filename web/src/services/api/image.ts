@@ -23,7 +23,12 @@ type RequestOptions = {
 
 export async function requestGeneration(config: AiConfig, prompt: string, options?: RequestOptions) {
     const rawModel = config.imageModel || config.model;
-    const requestConfig = resolveModelRequestConfig(config, rawModel);
+    const resolvedRequestConfig = resolveModelRequestConfig(config, rawModel);
+    const requestConfig: AiConfig = {
+        ...resolvedRequestConfig,
+        baseUrl: resolvedRequestConfig.baseUrl || "",
+        apiKey: resolvedRequestConfig.apiKey || "",
+    };
     const n = Math.max(1, Math.min(15, Math.floor(Math.abs(Number(config.count)) || 1)));
     if (n > 1) {
         const results = await Promise.all(

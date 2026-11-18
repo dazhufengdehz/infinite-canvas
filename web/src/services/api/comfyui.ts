@@ -1053,17 +1053,17 @@ export function adaptWorkflowModelPaths(
     const cloned: ComfyuiWorkflowJson = JSON.parse(JSON.stringify(workflow));
 
     for (const node of Object.values(cloned)) {
-        if (!node || typeof node !== "object" || !node.inputs || typeof node.inputs !== "object") {
-            continue;
-        }
-        for (const [key, val] of Object.entries(node.inputs)) {
+        if (!node || typeof node !== "object") continue;
+        const record = node as ComfyuiNodeRecord;
+        if (!record.inputs || typeof record.inputs !== "object") continue;
+        for (const [key, val] of Object.entries(record.inputs)) {
             if (typeof val === "string") {
                 // 匹配形如 segm/...、bbox/... 等检测器模型路径
                 const isPathWithBboxOrSegm = /(?:^|[\\/])(bbox|segm)[\\/]/i.test(val);
                 if (isPathWithBboxOrSegm) {
                     const nextVal = targetOs === "windows" ? val.replace(/\//g, "\\") : val.replace(/\\/g, "/");
                     if (nextVal !== val) {
-                        node.inputs[key] = nextVal;
+                        record.inputs[key] = nextVal;
                         modified = true;
                     }
                 }
@@ -1195,8 +1195,10 @@ async function submitJobInternal(workflow: ComfyuiWorkflowJson, baseUrl: string,
 
 function workflowHasYoloPaths(workflow: ComfyuiWorkflowJson): boolean {
     for (const node of Object.values(workflow)) {
-        if (!node || typeof node !== "object" || !node.inputs || typeof node.inputs !== "object") continue;
-        for (const val of Object.values(node.inputs)) {
+        if (!node || typeof node !== "object") continue;
+        const record = node as ComfyuiNodeRecord;
+        if (!record.inputs || typeof record.inputs !== "object") continue;
+        for (const val of Object.values(record.inputs)) {
             if (typeof val === "string" && /(?:^|[\\/])(bbox|segm)[\\/]/i.test(val)) {
                 return true;
             }
@@ -2416,7 +2418,7 @@ export async function requestComfyuiImage(req: ComfyuiImageRequest): Promise<Com
                       width,
                       height,
                       seed,
-                      step: req.step ?? req.config.step,
+                      step: req.step,
                       assetIds: uploadedImages,
                   })
                 : applyBindings(workflow.json, { prompt: req.prompt, width, height, seed, refImages, refMask, strictSlots: Boolean(customExecution) });
@@ -2534,6 +2536,7 @@ export interface ComfyuiInpaintRequest {
     channelId?: string;
     workflowId?: string;
     seed?: number;
+    step?: number;
     jobId?: string;
     signal?: AbortSignal;
     onProgress?: (status: string, detail?: { jobId?: string }) => void;
@@ -2591,7 +2594,7 @@ export async function requestComfyuiInpaint(req: ComfyuiInpaintRequest): Promise
                 ? dispatchComfyuiModelWorkflow(modelProfile, inpaintWorkflow.json, {
                       prompt: req.prompt,
                       seed,
-                      step: req.step ?? req.config.step,
+                      step: req.step,
                       assetIds: [refAssetId],
                       maskAssetId,
                   })
@@ -3651,7 +3654,10 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
         throw addComfyuiChannelContext(new ComfyuiApiError(`所选工作流「${workflowId}」不存在，请重新选择工作流后执行`), channel.name);
     }
     const customExecution = resolveCustomWorkflowExecution(channel, targetWorkflowItem, [...CUSTOM_WORKFLOW_CATEGORIES.video, "faceRefine", "depthVideo"]);
-    const isVideoTool = targetWorkflowItem?.category === "faceRefine" || targetWorkflowItem?.category === "depthVideo";
+    const videoToolCategory = targetWorkflowItem?.category === "faceRefine" || targetWorkflowItem?.category === "depthVideo"
+        ? targetWorkflowItem.category
+        : undefined;
+    const isVideoTool = videoToolCategory !== undefined;
     const modelProfile = customExecution || isVideoTool
         ? undefined
         : getModelProfile(targetWorkflowItem?.id || targetWorkflowItem?.name || req.model || rawModel || initialVideoMode);
@@ -3703,8 +3709,8 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
 
     try {
         let toolSourceUrl: string | undefined;
-        if (isVideoTool) {
-            validateVideoToolInputs(targetWorkflowItem.category, { prompt: req.prompt, referenceImages: req.references, referenceVideos: req.referenceVideos, referenceAudios: req.referenceAudios });
+        if (videoToolCategory) {
+            validateVideoToolInputs(videoToolCategory, { prompt: req.prompt, referenceImages: req.references, referenceVideos: req.referenceVideos, referenceAudios: req.referenceAudios });
             const { resolveMediaUrl } = await import("@/services/file-storage");
             const source = req.referenceVideos![0];
             toolSourceUrl = await resolveMediaUrl(source.storageKey, source.url);
@@ -3804,7 +3810,7 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
                   height,
                   duration,
                   seed,
-                  step: req.step ?? req.config.step,
+                  step: req.step,
                   firstFrameAssetId,
                   lastFrameAssetId,
                   assetIds,
@@ -3856,7 +3862,7 @@ export async function requestComfyuiVideo(req: ComfyuiVideoRequest): Promise<{ u
     const baseUrl = (channel.comfyuiProxyUrl || "").trim();
     const token = channel.comfyuiProxyToken;
 
-    let jobId = req.jobId;
+    let jobId = req.jobId || "";
     try {
         if (!jobId) {
             const submitted = await submitComfyuiVideoJob({ ...req, model: rawModel });

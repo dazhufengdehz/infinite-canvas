@@ -8,8 +8,9 @@ import {
     getDefaultWorkflow,
     useConfigStore,
     useEffectiveConfig,
+    type ComfyWorkflowItem,
 } from "@/stores/use-config-store";
-import { getDefaultComfyWorkflowItems, type ComfyWorkflowItem } from "@/services/api/comfyui-default-workflows";
+import { getDefaultComfyWorkflowItems } from "@/services/api/comfyui-default-workflows";
 import type { CanvasNodeData } from "@/types/canvas";
 
 export type CanvasDepthVideoModalProps = {
@@ -33,7 +34,7 @@ export function CanvasDepthVideoModal({
 
     const initialChannelId = useMemo(() => {
         if (!channels.length) return "";
-        if (node?.metadata?.channelId && channels.some((c) => c.id === node.metadata.channelId)) {
+        if (node?.metadata?.channelId && channels.some((c) => c.id === node?.metadata?.channelId)) {
             return node.metadata.channelId;
         }
         return config.channelId && channels.some((c) => c.id === config.channelId)

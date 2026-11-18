@@ -51,6 +51,12 @@ describe("CanvasNode connection handle placement", () => {
     };
 
     const defaultHandlers = {
+        scale: 1,
+        isRelated: false,
+        isFocusRelated: false,
+        isConnectionTarget: false,
+        isConnecting: false,
+        showImageInfo: false,
         onMouseDown: vi.fn(),
         onHoverStart: vi.fn(),
         onHoverEnd: vi.fn(),

@@ -136,7 +136,7 @@ beforeEach(() => {
         constructor(public callback: ResizeObserverCallback) { harness.resizeObservers.push(this); }
     });
     const elementRect = HTMLElement.prototype.getBoundingClientRect;
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
         return this.dataset.testid === "canvas-surface" ? new DOMRect(0, 0, harness.canvasRect.width, harness.canvasRect.height) : elementRect.call(this);
     });
     harness.nodeProps.clear();

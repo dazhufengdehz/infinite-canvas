@@ -110,7 +110,7 @@ function requiredImportedId(map: Map<string, string>, id: string, label: string)
 
 function remapImportedMediaValue<T extends string | undefined>(value: T, storageKeyMap: Map<string, string>): T {
     if (!value || value.startsWith("data:") || value.startsWith("blob:")) return value;
-    let next = value;
+    let next: string = value;
     storageKeyMap.forEach((replacement, storageKey) => {
         next = next.split(storageKey).join(replacement).split(encodeURIComponent(storageKey)).join(encodeURIComponent(replacement));
     });
@@ -249,7 +249,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
         },
         importProject: async (source, id, storageKeyMap = new Map()) => {
             const project = makeProject(source.title || i18n.t("canvas.project.imported"), id, source);
-            const sourceCanvases = source.canvases?.length ? source.canvases : [{}];
+            const sourceCanvases: Array<Partial<CanvasDocument>> = source.canvases?.length ? source.canvases : [{}];
             const newCanvasIds = sourceCanvases.map(() => nanoid());
             const canvasIdMap = new Map<string, string>();
             const canvasNodeMaps = new Map<string, Map<string, string>>();

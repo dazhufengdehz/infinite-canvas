@@ -938,8 +938,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             return;
         }
         try {
-            const context = canvasContextRef.current;
-            assertCanvasToolTarget(payload, context);
+            const context = assertCanvasToolTarget(payload, canvasContextRef.current);
             const input: { ops?: CanvasAgentOp[]; path?: string } = payload.input || {};
             addEventLog(toolName(payload.name), payload, payload);
             let result: unknown;

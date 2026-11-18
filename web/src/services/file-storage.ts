@@ -17,7 +17,7 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", own
     const meta = blob.type.startsWith("video/") ? await readVideoMeta(url) : blob.type.startsWith("audio/") ? await readAudioMeta(url) : {};
     let posterUrl: string | undefined;
     let posterStorageKey: string | undefined;
-    if ("poster" in meta && meta.poster) {
+    if ("poster" in meta && meta.poster instanceof Blob) {
         posterStorageKey = storageKey.replace(/^[^:]+:/, "poster:");
         posterUrl = await setMediaBlob(posterStorageKey, meta.poster);
     }
@@ -35,7 +35,7 @@ export async function importMediaFile(file: { path: string; type: string }, pref
     const meta = prefix === "video" ? await readVideoMeta(url) : await readAudioMeta(url);
     let posterUrl: string | undefined;
     let posterStorageKey: string | undefined;
-    if ("poster" in meta && meta.poster) {
+    if ("poster" in meta && meta.poster instanceof Blob) {
         posterStorageKey = storageKey.replace(/^[^:]+:/, "poster:");
         posterUrl = await setMediaBlob(posterStorageKey, meta.poster);
     }
@@ -54,7 +54,7 @@ export async function adoptMediaFile(source: { url: string; token?: string; mime
     const meta = prefix === "video" ? await readVideoMeta(url) : await readAudioMeta(url);
     let posterUrl: string | undefined;
     let posterStorageKey: string | undefined;
-    if ("poster" in meta && meta.poster) {
+    if ("poster" in meta && meta.poster instanceof Blob) {
         posterStorageKey = storageKey.replace(/^[^:]+:/, "poster:");
         posterUrl = await setMediaBlob(posterStorageKey, meta.poster);
     }

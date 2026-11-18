@@ -1,4 +1,4 @@
-import type { ModelChannel } from "@/types/config";
+import type { ModelChannel } from "@/stores/use-config-store";
 import type { WorkflowModelProfile } from "./types";
 import { isModelSupportedByHost } from "@/stores/use-config-store";
 

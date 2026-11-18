@@ -618,7 +618,7 @@ export function ComfyFlowGraph({
                 width="100vw"
                 style={{ top: 0, padding: 0, maxWidth: "100vw", margin: 0 }}
                 styles={{
-                    content: {
+                    container: {
                         height: "100vh",
                         padding: 0,
                         borderRadius: 0,

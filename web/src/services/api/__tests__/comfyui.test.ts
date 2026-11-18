@@ -1160,7 +1160,7 @@ describe("custom ComfyUI workflow execution", () => {
     it("rejects an unknown image or text workflow ID without falling back or fetching", async () => {
         const config = buildComfyuiConfig();
         config.channels[0].workflows = [{ id: "custom-image", name: "自定义图片", category: "t2i", createdAt: 0, json: FULL_FLOW_WORKFLOW }];
-        await expect(requestComfyuiImage({ config, channelId: "comfy", workflowId: "missing", prompt: "测试", skipLog: true })).rejects.toThrow("不存在");
+        await expect(requestComfyuiImage({ config, model: config.imageModel, channelId: "comfy", workflowId: "missing", prompt: "测试", skipLog: true })).rejects.toThrow("不存在");
         await expect(requestComfyuiText({ config, channelId: "comfy", workflowId: "missing", prompt: "测试" })).rejects.toThrow("不存在");
         expect(fetchMock).not.toHaveBeenCalled();
     });
@@ -1411,8 +1411,8 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
                 {
                     ...defaultConfig.channels[0],
                     workflows: [
-                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: false },
-                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: true },
+                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, createdAt: 0, isDefault: false },
+                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, createdAt: 0, isDefault: true },
                     ],
                 },
             ],
@@ -1428,8 +1428,8 @@ describe("validateComfyuiWorkflow & findWorkflow", () => {
                 {
                     ...defaultConfig.channels[0],
                     workflows: [
-                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: false },
-                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, isDefault: true },
+                        { id: "wf-1", name: "WF 1", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, createdAt: 0, isDefault: false },
+                        { id: "wf-2", name: "WF 2 (Default)", category: "t2i", json: DEFAULT_BUILTIN_COMFYUI_QRW_D_WORKFLOW.json, createdAt: 0, isDefault: true },
                     ],
                 },
             ],
@@ -1451,11 +1451,11 @@ describe("QRw_D and submitJob validation", () => {
 
         expect(Object.keys(bound).length).toBe(14);
         expect(bound["534"]).toBeDefined();
-        expect((bound["508"]?.inputs as Record<string, unknown>)?.value).toBe("ancient chinese portrait");
-        expect((bound["481"]?.inputs as Record<string, unknown>)?.seed).toBe(42);
-        expect((bound["533"]?.inputs as Record<string, unknown>)?.Number).toBe("1024");
-        expect((bound["532"]?.inputs as Record<string, unknown>)?.Number).toBe("1024");
-        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toBeUndefined();
+        expect((bound["508"] as TestWorkflowNode).inputs.value).toBe("ancient chinese portrait");
+        expect((bound["481"] as TestWorkflowNode).inputs.seed).toBe(42);
+        expect((bound["533"] as TestWorkflowNode).inputs.Number).toBe("1024");
+        expect((bound["532"] as TestWorkflowNode).inputs.Number).toBe("1024");
+        expect((bound["484"] as TestWorkflowNode).inputs["images.image_1"]).toBeUndefined();
     });
 
     it("binds one QRw_D reference image and keeps the remaining slots pruned", async () => {
@@ -1470,9 +1470,9 @@ describe("QRw_D and submitJob validation", () => {
 
         expect(Object.keys(bound).length).toBe(15);
         expect(bound["534"]).toBeDefined();
-        expect((bound["529"]?.inputs as Record<string, unknown>)?.image).toBe("uploaded_asset.png");
-        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_1"]).toEqual(["529", 0]);
-        expect((bound["484"]?.inputs as Record<string, unknown>)?.["images.image_2"]).toBeUndefined();
+        expect((bound["529"] as TestWorkflowNode).inputs.image).toBe("uploaded_asset.png");
+        expect((bound["484"] as TestWorkflowNode).inputs["images.image_1"]).toEqual(["529", 0]);
+        expect((bound["484"] as TestWorkflowNode).inputs["images.image_2"]).toBeUndefined();
     });
 
     it("keeps QRw_D's original dimensions when no custom size is provided", async () => {
@@ -1484,9 +1484,9 @@ describe("QRw_D and submitJob validation", () => {
         });
 
         expect(Object.keys(bound).length).toBe(15);
-        expect((bound["533"]?.inputs as Record<string, unknown>)?.Number).toBe("1920");
-        expect((bound["532"]?.inputs as Record<string, unknown>)?.Number).toBe("1088");
-        expect((bound["482"]?.inputs as Record<string, unknown>)?.switch).toEqual(["512", 0]);
+        expect((bound["533"] as TestWorkflowNode).inputs.Number).toBe("1920");
+        expect((bound["532"] as TestWorkflowNode).inputs.Number).toBe("1088");
+        expect((bound["482"] as TestWorkflowNode).inputs.switch).toEqual(["512", 0]);
     });
 
     it("rejects empty workflow in submitJob", async () => {
@@ -1508,15 +1508,15 @@ describe("QRw_D and submitJob validation", () => {
 
         // 转为 Windows 路径
         const winWf = adaptWorkflowModelPaths(testWorkflow, "windows");
-        expect((winWf["2"]?.inputs as Record<string, unknown>)?.detector).toBe("segm\\person_yolov8m-seg.pt");
-        expect((winWf["2"]?.inputs as Record<string, unknown>)?.fallback_detector).toBe("bbox\\face_yolov8m.pt");
-        expect((winWf["2"]?.inputs as Record<string, unknown>)?.prompt).toBe("a smiling person");
+        expect((winWf["2"] as TestWorkflowNode).inputs.detector).toBe("segm\\person_yolov8m-seg.pt");
+        expect((winWf["2"] as TestWorkflowNode).inputs.fallback_detector).toBe("bbox\\face_yolov8m.pt");
+        expect((winWf["2"] as TestWorkflowNode).inputs.prompt).toBe("a smiling person");
 
         // 从 Windows 路径转回 Linux 路径
         const linuxWf = adaptWorkflowModelPaths(winWf, "linux");
-        expect((linuxWf["2"]?.inputs as Record<string, unknown>)?.detector).toBe("segm/person_yolov8m-seg.pt");
-        expect((linuxWf["2"]?.inputs as Record<string, unknown>)?.fallback_detector).toBe("bbox/face_yolov8m.pt");
-        expect((linuxWf["2"]?.inputs as Record<string, unknown>)?.prompt).toBe("a smiling person");
+        expect((linuxWf["2"] as TestWorkflowNode).inputs.detector).toBe("segm/person_yolov8m-seg.pt");
+        expect((linuxWf["2"] as TestWorkflowNode).inputs.fallback_detector).toBe("bbox/face_yolov8m.pt");
+        expect((linuxWf["2"] as TestWorkflowNode).inputs.prompt).toBe("a smiling person");
     });
 });
 

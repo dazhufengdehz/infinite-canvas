@@ -74,7 +74,7 @@ export function CanvasNodePromptPanel({
     const config = buildNodeConfig(globalConfig, node, mode);
     const activeChannel = globalConfig.channels.find((channel) => channel.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
     const nodeWorkflow = node.metadata?.workflowId ? findWorkflow(globalConfig, activeChannel?.id, node.metadata.workflowId) : undefined;
-    const workflowCategory = nodeWorkflow?.id === node.metadata?.workflowId ? nodeWorkflow.category : undefined;
+    const workflowCategory = nodeWorkflow ? nodeWorkflow.category : undefined;
     const videoTool = mode === "video" && (workflowCategory === "faceRefine" || workflowCategory === "depthVideo") ? workflowCategory : undefined;
     const channelWorkflows = getChannelWorkflows(activeChannel, CUSTOM_WORKFLOW_CATEGORIES[mode]);
     const selectedWorkflow = videoTool ? nodeWorkflow : channelWorkflows.find((workflow) => workflow.id === node.metadata?.workflowId)
@@ -614,7 +614,7 @@ export function CanvasNodePromptPanel({
                 style={isFullscreen ? { top: 0, margin: 0, maxWidth: "100vw", paddingBottom: 0 } : undefined}
                 wrapClassName={isFullscreen ? "!p-0" : undefined}
                 styles={{
-                    content: isFullscreen
+                    container: isFullscreen
                         ? { height: "100vh", borderRadius: 0, display: "flex", flexDirection: "column", padding: "16px 24px" }
                         : { display: "flex", flexDirection: "column" },
                     body: isFullscreen

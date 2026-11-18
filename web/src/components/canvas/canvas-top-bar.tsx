@@ -282,7 +282,7 @@ function CanvasDocumentSwitcher() {
                     })),
                     { type: "divider" as const },
                     { key: "create", icon: <Plus className="size-4" />, label: t("canvas.documents.create"), onClick: () => run(async () => openCanvas((await createCanvas(projectId)).id)) },
-                    { key: "duplicate", disabled: !activeCanvas, icon: <Copy className="size-4" />, label: t("canvas.documents.duplicate"), onClick: () => run(async () => activeCanvas && openCanvas((await duplicateCanvas(projectId, activeCanvas.id)).id)) },
+                    { key: "duplicate", disabled: !activeCanvas, icon: <Copy className="size-4" />, label: t("canvas.documents.duplicate"), onClick: () => run(async () => { if (activeCanvas) openCanvas((await duplicateCanvas(projectId, activeCanvas.id)).id); }) },
                     { key: "rename", disabled: !activeCanvas, icon: <Pencil className="size-4" />, label: t("canvas.documents.rename"), onClick: rename },
                     { key: "delete", disabled: !activeCanvas || canvases.length <= 1, danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.documents.delete"), onClick: remove },
                 ],

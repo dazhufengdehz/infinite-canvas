@@ -17,11 +17,7 @@ import { nanoid } from "nanoid";
 
 import { ComfyFlowGraph } from "@/components/workflow-graph/comfy-flow-graph";
 import { createZip } from "@/lib/zip";
-import {
-    ingestWorkflow,
-    type InferredWorkflowModality,
-    type WorkflowIngestionResult,
-} from "@/services/api/comfyui-adapter";
+import { ingestWorkflow, type IngestResult } from "@/services/api/comfyui-adapter";
 import { extractComfyMetadataFromImage } from "@/services/api/comfyui-image-parser";
 import { getDefaultComfyWorkflowItems } from "@/services/api/comfyui-default-workflows";
 import {
@@ -49,7 +45,7 @@ export default function CommunityStudioPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [rawInput, setRawInput] = useState<unknown | null>(null);
-    const [ingestionResult, setIngestionResult] = useState<WorkflowIngestionResult | null>(null);
+    const [ingestionResult, setIngestionResult] = useState<IngestResult | null>(null);
     const [activeWorkflowJson, setActiveWorkflowJson] = useState<ComfyuiWorkflowJson | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isParsing, setIsParsing] = useState(false);
@@ -66,16 +62,20 @@ export default function CommunityStudioPage() {
         (data: unknown, fallbackName?: string) => {
             try {
                 const res = ingestWorkflow(data);
+                if (!res.ok) {
+                    message.error(`解析工作流失败: ${res.error || "未知错误"}`);
+                    return;
+                }
                 setRawInput(data);
                 setIngestionResult(res);
-                setActiveWorkflowJson(res.adaptedWorkflow);
-                setMetaCategory(res.modality);
+                setActiveWorkflowJson(res.workflow ?? null);
+                setMetaCategory(res.detectedCategory);
                 if (fallbackName && !metaName) {
                     setMetaName(fallbackName);
                 } else if (!metaName) {
-                    setMetaName(`社区适配工作流-${res.modality}`);
+                    setMetaName(`社区适配工作流-${res.detectedCategory}`);
                 }
-                message.success(`成功识别模态: ${res.modality} (置信度 ${Math.round(res.confidence * 100)}%)`);
+                message.success(`成功识别模态: ${res.detectedCategory} (置信度 ${Math.round(res.confidence * 100)}%)`);
             } catch (err: unknown) {
                 const msg = err instanceof Error ? err.message : String(err);
                 message.error(`解析工作流失败: ${msg}`);
@@ -149,20 +149,19 @@ export default function CommunityStudioPage() {
             if (!activeWorkflowJson) return;
 
             const cloned: ComfyuiWorkflowJson = JSON.parse(JSON.stringify(activeWorkflowJson));
-            if (!cloned[nodeId]) return;
-
-            if (!cloned[nodeId]._meta) {
-                cloned[nodeId]._meta = {};
-            }
+            const node = cloned[nodeId];
+            if (!node || typeof node !== "object") return;
+            const record = node as { _meta?: { title?: unknown } };
+            if (!record._meta) record._meta = {};
 
             if (slotTitle) {
-                cloned[nodeId]._meta.title = slotTitle;
+                record._meta.title = slotTitle;
             } else {
-                delete cloned[nodeId]._meta.title;
+                delete record._meta.title;
             }
 
             // 重新运行适配器以更新槽位统计
-            const nextResult = ingestWorkflow(cloned, { preferredModality: metaCategory });
+            const nextResult = ingestWorkflow(cloned, { categoryHint: metaCategory });
             setActiveWorkflowJson(cloned);
             setIngestionResult(nextResult);
             message.success(`已更新节点 #${nodeId} 槽位标记为: ${slotTitle || "普通节点"}`);
@@ -215,7 +214,7 @@ export default function CommunityStudioPage() {
                 .split(/[,，]/)
                 .map((t) => t.trim())
                 .filter(Boolean),
-            slots: ingestionResult.slots,
+            slots: ingestionResult.detectedSlots,
         };
 
         const readme = `# ${metaName || "Community Workflow"}\n\n${metaDescription}\n\n## 适用模态\n\`${metaCategory}\`\n\n## 作者\n${metaAuthor || "Community Creator"}\n\n## 导入指引\n在 Infinite Canvas 中打开「开源社区」-「工作流适配工坊」，直接拖入 \`workflow.json\` 即可一键安装使用。\n`;
@@ -367,9 +366,9 @@ export default function CommunityStudioPage() {
                                             onChange={(val) => {
                                                 setMetaCategory(val);
                                                 if (rawInput) {
-                                                    const res = ingestWorkflow(rawInput, { preferredModality: val });
+                                                    const res = ingestWorkflow(rawInput, { categoryHint: val });
                                                     setIngestionResult(res);
-                                                    setActiveWorkflowJson(res.adaptedWorkflow);
+                                                    setActiveWorkflowJson(res.workflow ?? null);
                                                 }
                                             }}
                                         />
@@ -384,18 +383,18 @@ export default function CommunityStudioPage() {
                                     {/* 关键槽位指示 */}
                                     {ingestionResult && (
                                         <div className="flex items-center gap-1.5 text-xs">
-                                            <Tag color={ingestionResult.slots.prompt ? "blue" : "default"}>
-                                                提示词: #{ingestionResult.slots.prompt || "无"}
+                                            <Tag color={ingestionResult.detectedSlots.some((slot) => slot.slot === "prompt") ? "blue" : "default"}>
+                                                提示词: #{ingestionResult.detectedSlots.find((slot) => slot.slot === "prompt")?.nodeId || "无"}
                                             </Tag>
-                                            <Tag color={ingestionResult.slots.seed ? "purple" : "default"}>
-                                                种子: #{ingestionResult.slots.seed || "无"}
+                                            <Tag color={ingestionResult.detectedSlots.some((slot) => slot.slot === "seed") ? "purple" : "default"}>
+                                                种子: #{ingestionResult.detectedSlots.find((slot) => slot.slot === "seed")?.nodeId || "无"}
                                             </Tag>
-                                            <Tag color={ingestionResult.slots.outputs.length > 0 ? "green" : "default"}>
-                                                输出端点: {ingestionResult.slots.outputs.length} 个
+                                            <Tag color={ingestionResult.detectedSlots.some((slot) => slot.slot.startsWith("output_")) ? "green" : "default"}>
+                                                输出端点: {ingestionResult.detectedSlots.filter((slot) => slot.slot.startsWith("output_")).length} 个
                                             </Tag>
-                                            {ingestionResult.slots.models.length > 0 && (
+                                            {ingestionResult.detectedSlots.some((slot) => slot.slot.startsWith("select_models_")) && (
                                                 <Tag color="geekblue">
-                                                    模型插槽: {ingestionResult.slots.models.length} 个
+                                                    模型插槽: {ingestionResult.detectedSlots.filter((slot) => slot.slot.startsWith("select_models_")).length} 个
                                                 </Tag>
                                             )}
                                         </div>
@@ -419,11 +418,11 @@ export default function CommunityStudioPage() {
                             </div>
 
                             {/* 警告与歧义提示 */}
-                            {ingestionResult && ingestionResult.ambiguities.length > 0 && (
+                            {ingestionResult && (ingestionResult.ambiguities?.length ?? 0) > 0 && (
                                 <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-amber-50 p-2 text-xs text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                                     <Info className="size-4 shrink-0 mt-0.5" />
                                     <span>
-                                        检测到多候选插槽：{ingestionResult.ambiguities.join("；")}。可在下方流图中点击对应节点进行针对性覆盖分配。
+                                        检测到多候选插槽：{ingestionResult.ambiguities?.map((item) => item.description).join("；")}。可在下方流图中点击对应节点进行针对性覆盖分配。
                                     </span>
                                 </div>
                             )}

@@ -82,7 +82,7 @@ export const useCollabStore = create<CollabStore>((set, get) => ({
     lanIp: window.location.hostname === "localhost" ? "127.0.0.1" : window.location.hostname,
 
     startCollaboration: (roomId, role, hostToken) => {
-        let token = hostToken;
+        let token: string | null = hostToken || null;
         if (role === "host") {
             if (!token) {
                 try {

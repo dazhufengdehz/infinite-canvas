@@ -48,8 +48,8 @@ beforeEach(() => {
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     vi.stubGlobal("innerWidth", 1208);
     vi.stubGlobal("innerHeight", 877);
-    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function () { return elementRect(this); });
-    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function () { return elementHeight(this); });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) { return elementRect(this); });
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(function (this: HTMLElement) { return elementHeight(this); });
     vi.stubGlobal("ResizeObserver", class {
         constructor(private callback: ResizeObserverCallback) {}
         observe(element: Element) { this.callback([{ target: element } as ResizeObserverEntry], this as unknown as ResizeObserver); }

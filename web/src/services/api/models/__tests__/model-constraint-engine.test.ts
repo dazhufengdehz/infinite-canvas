@@ -9,7 +9,7 @@ import {
     type ConstraintContext,
 } from "../constraint-engine";
 import { imageQwen4x4Profile, imageQwenProfile, videoMinimaxH3OmniProfile } from "../index";
-import type { ModelChannel } from "@/types/config";
+import type { ModelChannel } from "@/stores/use-config-store";
 
 describe("Model Constraint Engine (Specification Pattern)", () => {
     const baseHost: ModelChannel = {

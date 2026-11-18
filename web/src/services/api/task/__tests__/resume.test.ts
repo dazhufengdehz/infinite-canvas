@@ -10,7 +10,7 @@ const mockChannel: ModelChannel = {
     name: "Mock Channel",
     baseUrl: "http://mock-service",
     apiKey: "key",
-    apiFormat: "mock_protocol",
+    apiFormat: "comfyui",
     models: [],
 };
 
@@ -49,7 +49,7 @@ describe("Task Registry and resumeTask Orchestrator", () => {
                 } as TaskSnapshot),
                 poll: vi.fn(),
             };
-            registerTaskDriver("mock_protocol", mockDriver);
+            registerTaskDriver("comfyui", mockDriver);
 
             const result = await resumeTask("job_1", mockChannel);
             expect(result.phase).toBe("success");
@@ -67,7 +67,7 @@ describe("Task Registry and resumeTask Orchestrator", () => {
                 } as TaskSnapshot),
                 poll: vi.fn(),
             };
-            registerTaskDriver("mock_protocol", mockDriver);
+            registerTaskDriver("comfyui", mockDriver);
 
             await expect(resumeTask("job_cancel", mockChannel)).rejects.toMatchObject({
                 name: "TaskExecutionError",
@@ -86,7 +86,7 @@ describe("Task Registry and resumeTask Orchestrator", () => {
                 } as TaskSnapshot),
                 poll: vi.fn(),
             };
-            registerTaskDriver("mock_protocol", mockDriver);
+            registerTaskDriver("comfyui", mockDriver);
 
             await expect(resumeTask("job_lost", mockChannel)).rejects.toMatchObject({
                 name: "TaskExecutionError",
@@ -106,7 +106,7 @@ describe("Task Registry and resumeTask Orchestrator", () => {
                 } as TaskSnapshot),
                 poll: vi.fn(),
             };
-            registerTaskDriver("mock_protocol", mockDriver);
+            registerTaskDriver("comfyui", mockDriver);
 
             await expect(resumeTask("job_err", mockChannel)).rejects.toMatchObject({
                 name: "TaskExecutionError",
@@ -132,7 +132,7 @@ describe("Task Registry and resumeTask Orchestrator", () => {
                 } as TaskSnapshot),
                 poll: vi.fn().mockResolvedValue(mockPollSnapshot),
             };
-            registerTaskDriver("mock_protocol", mockDriver);
+            registerTaskDriver("comfyui", mockDriver);
 
             const onProgress = vi.fn();
             const result = await resumeTask("job_running", mockChannel, { onProgress });

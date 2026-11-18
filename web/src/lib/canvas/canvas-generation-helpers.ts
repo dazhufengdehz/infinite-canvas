@@ -396,7 +396,7 @@ export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
                     ...node.metadata,
                     status: "error" as const,
                     errorDetails: i18n.t("canvas.generation.interrupted"),
-                    images: node.metadata.images?.map((image) =>
+                    images: node.metadata?.images?.map((image) =>
                         image.status === "loading" || isInterruptedGenerationError(image.errorDetails)
                             ? {
                                   ...image,
@@ -406,7 +406,7 @@ export function resetInterruptedGeneration(nodes: CanvasNodeData[]) {
                               }
                             : image,
                     ),
-                    texts: node.metadata.texts?.map((text) =>
+                    texts: node.metadata?.texts?.map((text) =>
                         text.status === "loading" || isInterruptedGenerationError(text.errorDetails)
                             ? { ...text, status: "error" as const, errorDetails: i18n.t("canvas.generation.interrupted") }
                             : text,

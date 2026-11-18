@@ -334,6 +334,14 @@ describe("Canvas Performance Benchmark & Regression Suite", () => {
                 showImageInfo: false,
                 groupChildCount: 0,
                 onMouseDown: () => {},
+                onHoverStart: () => {},
+                onHoverEnd: () => {},
+                onConnectStart: () => {},
+                onResizeStart: () => {},
+                onResize: () => {},
+                onResizeEnd: () => {},
+                onContentChange: () => {},
+                onTitleChange: () => {},
                 onContextMenu: () => {},
             };
 
@@ -372,6 +380,7 @@ describe("Canvas Performance Benchmark & Regression Suite", () => {
                 id: "conn-1",
                 fromNodeId: "node-1",
                 toNodeId: "node-2",
+                kind: "input",
             };
 
             const Wrapper = ({ viewport }: { viewport: ViewportTransform }) => {

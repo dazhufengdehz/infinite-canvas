@@ -5,7 +5,7 @@ import { applyVideoBindings, detectMiniMaxH3EasyGraph, validateComfyuiWorkflow }
 
 type EasyWorkflowOptions = {
     media?: "loader" | "bridge" | "none";
-    widthInput?: Record<string, unknown>;
+    widthInput?: number | [string, number];
 };
 
 function buildEasyWorkflow(options: EasyWorkflowOptions = {}): Record<string, unknown> {

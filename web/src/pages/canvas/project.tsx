@@ -1277,7 +1277,6 @@ function InfiniteCanvasPage() {
             setInfoNodeId((current) => (current && allIds.has(current) ? null : current));
             setCropNodeId((current) => (current && allIds.has(current) ? null : current));
             setMaskEditNodeId((current) => (current && allIds.has(current) ? null : current));
-            setAngleNodeId((current) => (current && allIds.has(current) ? null : current));
             setPreviewNodeId((current) => (current && allIds.has(current) ? null : current));
             setRunningNodeIds((current) => {
                 const next = new Set(current);
@@ -1435,7 +1434,6 @@ function InfiniteCanvasPage() {
         setInfoNodeId(null);
         setCropNodeId(null);
         setMaskEditNodeId(null);
-        setAngleNodeId(null);
         setPreviewNodeId(null);
         setRunningNodeIds(new Set());
         deselectCanvas();
@@ -3110,7 +3108,7 @@ function InfiniteCanvasPage() {
                 childNodes.push(childPiece);
             }
             setNodes((prev) => [...prev, ...childNodes]);
-            setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id, kind: "lineage" }))]);
+            setConnections((prev) => [...prev, ...childNodes.map((child) => ({ id: nanoid(), fromNodeId: node.id, toNodeId: child.id, kind: "lineage" as const }))]);
             setSelectedNodeIds(new Set(childNodes.map((child) => child.id)));
             setSelectedConnectionId(null);
             setDialogNodeId(null);
@@ -3422,7 +3420,7 @@ function InfiniteCanvasPage() {
                         position: { x: center.x - nextSize.width / 2, y: center.y - nextSize.height / 2 },
                         width: nextSize.width,
                         height: nextSize.height,
-                        metadata: { ...videoMetadata({ ...media, width: payload.width || media.width, height: payload.height || media.height }), assetId: asset?.id },
+                        metadata: { ...videoMetadata({ ...media, width: payload.width || ("width" in media ? media.width : undefined), height: payload.height || ("height" in media ? media.height : undefined) }), assetId: asset?.id },
                     },
                 ]);
                 setSelectedNodeIds(new Set([id]));
@@ -3447,7 +3445,7 @@ function InfiniteCanvasPage() {
                         position: { x: center.x - spec.width / 2, y: center.y - spec.height / 2 },
                         width: spec.width,
                         height: spec.height,
-                        metadata: { ...audioMetadata({ ...media, durationMs: payload.durationMs ?? media.durationMs }), assetId: asset?.id },
+                        metadata: { ...audioMetadata({ ...media, durationMs: payload.durationMs ?? ("durationMs" in media ? media.durationMs : undefined) }), assetId: asset?.id },
                     },
                 ]);
                 setSelectedNodeIds(new Set([id]));

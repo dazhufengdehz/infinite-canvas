@@ -46,6 +46,7 @@ export const WORKFLOW_CATEGORY_TO_CHANNEL_FIELD: Record<WorkflowCategory, keyof 
 export type ToolbarConfig = {
     ids: string[];
     showLabels: boolean;
+    bindings?: Record<string, string>;
 };
 
 export type ComfyWorkflowItem = {
