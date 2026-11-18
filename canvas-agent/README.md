@@ -37,6 +37,14 @@ Connect token: <自动生成的随机密钥>
 ```
 在画布网页（[https://canvas.imihoo.com](https://canvas.imihoo.com)）侧边栏填入上述地址与 Token 即可直连。
 
+可通过 `--port` 参数或 `PORT` 环境变量指定端口：
+
+```bash
+npx -y @zhuyichuan/canvas-agent --port 17372
+```
+
+若端口已被占用，服务会自动尝试后续端口，最多重试 20 次。终端输出的 `Local URL` 和保存到本地配置中的地址均为实际监听端口；连续端口均不可用或端口参数非法时会明确报错。
+
 ### 3. Debug 调试模式
 
 需要排查连接、事件或工具调用详情时可追加 `--debug` 参数：

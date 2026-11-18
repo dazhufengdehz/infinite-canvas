@@ -23,7 +23,6 @@ export function startHttpServer() {
     const config = loadConfig(true);
     const port = Number(process.env.PORT) || Number(new URL(config.url).port) || DEFAULT_PORT;
     config.url = `http://127.0.0.1:${port}`;
-    saveConfig(config);
 
     const initialWorkspace = ensureSiteWorkspace(config);
     const session = new CanvasSession(initialWorkspace.activeThreadId || "");
@@ -538,24 +537,41 @@ export function startHttpServer() {
         res.status(500).json({ ok: false, error: error.message });
     });
 
-    app.listen(port, "127.0.0.1", () => {
-        console.log("Infinite Canvas Agent");
-        checkVersions();
-        console.log(`Local URL: ${config.url}`);
-        console.log(`Connect token: ${config.token}`);
-        console.log("WorkBuddy / Trae / MCP: npx -y @zhuyichuan/canvas-agent mcp");
-        if (logger.enabled) console.log(`Debug log: ${logger.filePath}`);
-        logger.info("Canvas Agent started", { url: config.url, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
-        const activeThreadId = initialWorkspace.activeThreadId || "";
-        if (activeThreadId && session.beginCodexMutation()) {
-            void prepareExistingThread(activeThreadId).catch(async (error) => {
-                if (!isRecoverableThreadError(error)) return failPreparedConversation(error, activeThreadId);
-                session.beginConversation();
-                setActiveThread("", { emptyThread: true, draftThread: true }, true);
-                await prepareDraftThread("", "request");
-            }).finally(() => session.endCodexMutation()).catch(() => undefined);
-        }
-    });
+    const listen = (candidatePort: number, remainingRetries: number) => {
+        const server = app.listen(candidatePort, "127.0.0.1");
+        server.once("error", (error: NodeJS.ErrnoException) => {
+            if (error.code === "EADDRINUSE" && remainingRetries > 0 && candidatePort < 65535) {
+                const nextPort = candidatePort + 1;
+                console.warn(`Port ${candidatePort} is in use; trying ${nextPort}.`);
+                listen(nextPort, remainingRetries - 1);
+                return;
+            }
+            console.error(error.code === "EADDRINUSE" ? `Port ${candidatePort} is in use; no free port found after 20 retries.` : `Canvas Agent failed to listen: ${error.message}`);
+            logger.error("Canvas Agent failed to start", { port: candidatePort, error });
+            process.exitCode = 1;
+        });
+        server.once("listening", () => {
+            config.url = `http://127.0.0.1:${candidatePort}`;
+            saveConfig(config);
+            console.log("Infinite Canvas Agent");
+            checkVersions();
+            console.log(`Local URL: ${config.url}`);
+            console.log(`Connect token: ${config.token}`);
+            console.log("WorkBuddy / Trae / MCP: npx -y @zhuyichuan/canvas-agent mcp");
+            if (logger.enabled) console.log(`Debug log: ${logger.filePath}`);
+            logger.info("Canvas Agent started", { url: config.url, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
+            const activeThreadId = initialWorkspace.activeThreadId || "";
+            if (activeThreadId && session.beginCodexMutation()) {
+                void prepareExistingThread(activeThreadId).catch(async (error) => {
+                    if (!isRecoverableThreadError(error)) return failPreparedConversation(error, activeThreadId);
+                    session.beginConversation();
+                    setActiveThread("", { emptyThread: true, draftThread: true }, true);
+                    await prepareDraftThread("", "request");
+                }).finally(() => session.endCodexMutation()).catch(() => undefined);
+            }
+        });
+    };
+    listen(port, 20);
 }
 
 /** 将异步 Express 路由异常交给统一错误处理中间件。 */
