@@ -1255,28 +1255,44 @@ describe("native ComfyUI video validation", () => {
         vi.unstubAllGlobals();
     });
 
-    it("submits video job with model profile and default workflow successfully", async () => {
-        fetchMock.mockImplementation(async (url: string) => {
-            if (String(url).includes("/prompt")) {
-                return {
-                    ok: true,
-                    status: 200,
-                    json: async () => ({ prompt_id: "job_video_123" }),
-                };
-            }
+    it("submits built-in Easy workflow with prompt, duration, size, and ordered media references", async () => {
+        fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+            const url = String(input);
+            if (url.startsWith("data:")) return { blob: async () => new Blob(["image"], { type: "image/png" }) };
+            if (url.includes("/upload/image")) return { ok: true, status: 200, json: async () => ({ name: "reference.png" }) };
+            if (url.includes("/prompt")) return { ok: true, status: 200, json: async () => ({ prompt_id: "job_video_123" }) };
             return { ok: true, status: 200, json: async () => ({}) };
         });
 
+        const channel = {
+            ...defaultConfig.channels[0],
+            comfyuiProxyUrl: "http://10.7.8.12:8188",
+            comfyuiProxyToken: "tok",
+        };
         const result = await submitComfyuiVideoJob({
-            config: { ...buildVideoConfig(), size: "1280x736" },
+            config: { ...defaultConfig, channels: [channel], size: "1344x768", videoSeconds: "10" },
             prompt: "生成一段超酷动画",
             model: "omni-video-minimax-h3-ms-v10",
+            channelId: channel.id,
             videoMode: "omni",
+            references: [{ id: "ref-1", name: "reference.png", type: "image/png", dataUrl: "data:image/png;base64,aW1hZ2U=" }],
         });
 
         expect(result.jobId).toBe("job_video_123");
         expect(result.baseUrl).toBe("http://10.7.8.12:8188");
-        expect(fetchMock).toHaveBeenCalled();
+        const [, init] = fetchMock.mock.calls.find(([url]) => String(url).includes("/prompt"))!;
+        const body = JSON.parse(String((init as RequestInit).body)) as { prompt: Record<string, TestWorkflowNode> };
+        const main = Object.values(body.prompt).find((node) => node.class_type === "MiniMaxH3Easy")!;
+        const mediaLoader = Object.values(body.prompt).find((node) => node.class_type === "MiniMaxH3EasyMediaLoader")!;
+        expect(main.inputs).toMatchObject({ prompt: "生成一段超酷动画", seconds: 10, mode: "reference", resolution: "custom" });
+        const readInput = (value: unknown) => {
+            if (!Array.isArray(value)) return value;
+            const inputs = body.prompt[String(value[0])].inputs;
+            return inputs.value ?? inputs.Number;
+        };
+        expect(readInput(main.inputs.width)).toBe("1344");
+        expect(readInput(main.inputs.height)).toBe("768");
+        expect(JSON.parse(String(mediaLoader.inputs.media_state)).images).toEqual([{ filename: "reference.png" }]);
     });
 
     it("reports a completed job without video output as no-video-output rather than cancellation", async () => {

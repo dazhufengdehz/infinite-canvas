@@ -7,6 +7,11 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- MiniMax H3 Easy 内置工作流输入与引用：
+  - 使用内置全能参考视频工作流提交提示词、时长和尺寸，确认 Easy 主节点的 `prompt`、`seconds`、宽高上游数值与生成模式正确，不再落入仅识别通用 `_meta.title` 槽位的分发路径。
+  - 按画布连线顺序连接多张图片、视频和音频，确认上传后按 FIFO 写入 `media_state`；首尾帧模式确认图片顺序、`image` 模式与首尾帧角色正确。
+  - 分别回归自定义 Easy 工作流和非 Easy 的内置视频工作流，确认自定义严格槽位行为及原有模型 Profile 参数注入不受影响。
+
 - 本地 Agent 端口配置与冲突恢复：
   - 分别通过 `--port` 参数和 `PORT` 环境变量指定空闲端口，确认终端 `Local URL`、本地配置和网页自动发现均使用指定端口；传入非数字、零或超出范围的参数时应明确报错。
   - 占用目标端口后启动本地 Agent，确认自动尝试后续端口且最多重试 20 次，成功后保存实际监听地址；网页使用新地址连接后，SSE、画布读取和写入工具保持正常。

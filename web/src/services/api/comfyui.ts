@@ -3803,7 +3803,7 @@ export async function submitComfyuiVideoJob(req: ComfyuiVideoRequest): Promise<{
         const duration = shouldBindDuration ? (req.config.videoSeconds ? Number(req.config.videoSeconds) : 5) : undefined;
 
         const seed = req.seed !== undefined ? req.seed : generateRandomSeed() % 1_000_000_000;
-        const boundWorkflow = modelProfile
+        const boundWorkflow = modelProfile && !isEasyWorkflow
             ? dispatchComfyuiModelWorkflow(modelProfile, videoWorkflow.json, {
                   prompt: req.prompt,
                   width,
