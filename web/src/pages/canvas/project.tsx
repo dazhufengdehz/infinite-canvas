@@ -49,6 +49,7 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/componen
 import type { CrossCanvasAssetItem } from "@/components/canvas/canvas-resource-mention-menu";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import { CanvasStoryboardView } from "@/components/canvas/canvas-storyboard-view";
+import { CanvasScriptAssetsView } from "@/components/canvas/canvas-script-assets-view";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
@@ -304,7 +305,7 @@ function InfiniteCanvasPage() {
     const viewMode = useCanvasViewStore((state) => state.mode);
 
     useEffect(() => {
-        if (viewMode === "storyboard" && projectId) void useScriptStore.getState().load(projectId);
+        if ((viewMode === "storyboard" || viewMode === "assets") && projectId) void useScriptStore.getState().load(projectId);
     }, [viewMode, projectId]);
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
@@ -5606,6 +5607,21 @@ function InfiniteCanvasPage() {
 
                 {viewMode === "storyboard" ? (
                     <CanvasStoryboardView
+                        nodes={nodes}
+                        batch={scriptBatch}
+                        onSync={() => void syncStoredScript()}
+                        onGenerate={(keys) => void runScriptGeneration(keys)}
+                        onStop={stopScriptGeneration}
+                        onUploadAsset={replaceScriptAssetMedia}
+                        onLocate={(key) => {
+                            locateScriptNode(key);
+                            useCanvasViewStore.getState().setMode("canvas");
+                        }}
+                    />
+                ) : null}
+
+                {viewMode === "assets" ? (
+                    <CanvasScriptAssetsView
                         nodes={nodes}
                         batch={scriptBatch}
                         onSync={() => void syncStoredScript()}

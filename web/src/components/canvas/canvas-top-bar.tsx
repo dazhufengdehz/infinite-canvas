@@ -108,6 +108,7 @@ export function CanvasTopBar({
                             items: [
                                 { key: "view-canvas", icon: <MenuCheck active={viewMode === "canvas"} />, label: t("canvas.view.canvas"), onClick: () => setViewMode("canvas") },
                                 { key: "view-storyboard", icon: <MenuCheck active={viewMode === "storyboard"} />, label: t("canvas.view.storyboard"), onClick: () => setViewMode("storyboard") },
+                                { key: "view-assets", icon: <MenuCheck active={viewMode === "assets"} />, label: t("canvas.view.assets"), onClick: () => setViewMode("assets") },
                                 { type: "divider" },
                                 { key: "script", icon: <Clapperboard className="size-4" />, label: t("canvas.script.entry"), onClick: onOpenScript },
                                 { type: "divider" },

@@ -1,12 +1,13 @@
 import { create } from "zustand";
 
-export type CanvasViewMode = "canvas" | "storyboard";
+export type CanvasViewMode = "canvas" | "storyboard" | "assets";
 
 const MODE_KEY = "infinite-canvas:canvas-view-mode";
 
 function initialMode(): CanvasViewMode {
     if (typeof window === "undefined") return "canvas";
-    return localStorage.getItem(MODE_KEY) === "storyboard" ? "storyboard" : "canvas";
+    const stored = localStorage.getItem(MODE_KEY);
+    return stored === "storyboard" || stored === "assets" ? stored : "canvas";
 }
 
 type CanvasViewStore = {

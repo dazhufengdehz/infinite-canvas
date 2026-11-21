@@ -435,7 +435,8 @@ export default {
         },
         "view": {
             "canvas": "画布",
-            "storyboard": "故事板"
+            "storyboard": "故事板",
+            "assets": "资产"
         },
         "storyboard": {
             "loading": "正在读取剧本…",
@@ -487,6 +488,33 @@ export default {
             "assetHint": "编辑后会同步到对应的图片节点提示词；点「生成」直接出图。",
             "episodeHint": "编辑并保存会更新该集文本节点；「重新生成」只重写本集。",
             "shotHint": "编辑并保存会更新该镜视频节点提示词；「重新生成」只重写本镜。"
+        },
+        "assets": {
+            "add": "新增资产",
+            "newCharacter": "新人物",
+            "newScene": "新场景",
+            "newProp": "新道具",
+            "newVideo": "新参考视频",
+            "newAudio": "新参考音频",
+            "emptyKind": "暂无",
+            "copySuffix": "副本",
+            "duplicate": "复制",
+            "remove": "删除",
+            "removeTitle": "删除资产",
+            "removeUsed": "「{{name}}」被 {{count}} 个镜头引用，删除后这些镜头会提示引用失效，需要手动修正。确定删除？",
+            "removeUnused": "确定删除「{{name}}」？该资产没有被任何镜头引用。",
+            "removed": "已删除并同步到画布",
+            "usages": "被 {{count}} 个镜头引用",
+            "usageEmpty": "暂无镜头引用",
+            "selectHint": "选择左侧资产查看与编辑，或点分类右侧「+」新增",
+            "nodeLinked": "已关联画布节点",
+            "nodeMissing": "尚未写入画布",
+            "mediaEmpty": "尚未生成或上传",
+            "generateAll": "生成全部资产",
+            "generateKind": "生成该分类未完成的资产",
+            "total": "共 {{count}} 个资产",
+            "videoHint": "参考视频不在此管理，可在镜头编辑里引用。",
+            "hint": "资产为项目级数据：人物、场景、道具同步为图片节点，参考音频同步为音频节点；编辑名称与提示词会更新对应节点。"
         },
         "exportSelected": "导出选中",
         "exportAll": "导出全部",

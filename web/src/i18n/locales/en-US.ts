@@ -435,7 +435,8 @@ export default {
         },
         "view": {
             "canvas": "Canvas",
-            "storyboard": "Storyboard"
+            "storyboard": "Storyboard",
+            "assets": "Assets"
         },
         "storyboard": {
             "loading": "Loading script…",
@@ -487,6 +488,33 @@ export default {
             "assetHint": "Edits sync to the image node prompt; Generate renders it directly.",
             "episodeHint": "Saving updates this episode's text node; Regenerate rewrites only this episode.",
             "shotHint": "Saving updates this shot's video prompt; Regenerate rewrites only this shot."
+        },
+        "assets": {
+            "add": "Add asset",
+            "newCharacter": "New character",
+            "newScene": "New scene",
+            "newProp": "New prop",
+            "newVideo": "New reference video",
+            "newAudio": "New reference audio",
+            "emptyKind": "None yet",
+            "copySuffix": "copy",
+            "duplicate": "Duplicate",
+            "remove": "Delete",
+            "removeTitle": "Delete asset",
+            "removeUsed": "“{{name}}” is referenced by {{count}} shot(s). After deleting, those shots will report invalid references and need manual fixes. Delete anyway?",
+            "removeUnused": "Delete “{{name}}”? No shot references this asset.",
+            "removed": "Deleted and synced to canvas",
+            "usages": "Referenced by {{count}} shot(s)",
+            "usageEmpty": "No shot references yet",
+            "selectHint": "Select an asset on the left to view and edit, or click “+” in a group to add one",
+            "nodeLinked": "Canvas node linked",
+            "nodeMissing": "Not on canvas yet",
+            "mediaEmpty": "Not generated or uploaded yet",
+            "generateAll": "Generate all assets",
+            "generateKind": "Generate unfinished assets in this group",
+            "total": "{{count}} assets",
+            "videoHint": "Reference videos are not managed here; add them in the shot editor.",
+            "hint": "Assets are project-level data: characters, scenes, and props sync to image nodes, reference audio to audio nodes; editing the name or prompt updates the matching node."
         },
         "exportSelected": "Export selected",
         "exportAll": "Export all",
