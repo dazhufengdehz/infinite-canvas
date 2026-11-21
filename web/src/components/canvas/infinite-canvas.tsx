@@ -150,8 +150,8 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
     const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
         const target = event.target instanceof Element ? event.target : null;
         if (target?.closest("[data-canvas-no-zoom],[data-canvas-resource-mention-menu],.canvas-image-settings-popover,.ant-modal,.ant-popover,.ant-dropdown,.ant-select-dropdown,.ant-picker-dropdown,.ant-tooltip")) return;
-        if (target?.closest("[data-connection-create-menu],[data-selection-overlay],[data-connection-handle],[data-connection-scissors]")) return;
-        const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id],[data-selection-overlay],[data-connection-handle],[data-connection-scissors]");
+        if (target?.closest("[data-connection-create-menu],[data-selection-overlay],[data-connection-handle],[data-connection-scissors],[data-canvas-node-toolbar],[data-canvas-overlay]")) return;
+        const isBackgroundClick = !target?.closest("[data-node-id],[data-connection-id],[data-selection-overlay],[data-connection-handle],[data-connection-scissors],[data-canvas-node-toolbar],[data-canvas-overlay]");
         const temporaryTool = event.ctrlKey || isSpacePressed;
         const activeTool = temporaryTool ? (tool === "select" ? "pan" : "select") : tool;
         const shouldPan = event.button === 1 || (event.button === 0 && (isSpacePressed || (activeTool === "pan" && isBackgroundClick)));
@@ -183,7 +183,7 @@ export function InfiniteCanvas({ containerRef, viewport, tool, backgroundMode = 
 
     const handleDoubleClick = (event: React.MouseEvent<HTMLDivElement>) => {
         const target = event.target instanceof Element ? event.target : null;
-        if (target?.closest("[data-canvas-no-zoom],[data-node-id],[data-connection-id],[data-connection-scissors]")) return;
+        if (target?.closest("[data-canvas-no-zoom],[data-node-id],[data-connection-id],[data-connection-scissors],[data-canvas-node-toolbar],[data-canvas-overlay]")) return;
         onCanvasDoubleClick?.(event);
     };
 

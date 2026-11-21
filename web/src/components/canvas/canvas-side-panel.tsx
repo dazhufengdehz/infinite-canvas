@@ -132,11 +132,11 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                     style={{ overflow: "clip", pointerEvents: panelClosing ? "none" : undefined }}
                 >
                     <motion.aside
-                        className="relative flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl"
+                        className="pointer-events-auto relative flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl"
                         initial={{ x: -48 }}
                         animate={{ x: panelClosing ? -28 : 0 }}
                         transition={{ duration: resizing ? 0 : PANEL_MOTION_SECONDS, ease: PANEL_EASE }}
-                        style={{ width, background: theme.accent.chrome, borderColor: theme.hairline.base, color: theme.text.primary }}
+                        style={{ width, background: theme.accent.chrome, borderColor: theme.hairline.base, color: theme.text.primary, pointerEvents: panelClosing ? "none" : "auto" }}
                         data-canvas-no-zoom
                     >
                         <div className="min-h-0 flex-1 overflow-hidden pt-2">

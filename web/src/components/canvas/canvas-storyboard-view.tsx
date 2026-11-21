@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { App, Button, Empty, Input, InputNumber, Select, Tooltip } from "antd";
-import { ChevronDown, ChevronUp, Clapperboard, Image as ImageIcon, MapPin, Music, RefreshCw, Sparkles, Square, Upload, Users, Video, X } from "lucide-react";
+import { App, Button, Empty, Input, InputNumber, Modal, Select, Tooltip } from "antd";
+import { Boxes, ChevronDown, ChevronUp, Clapperboard, Copy, Image as ImageIcon, MapPin, Music, Plus, RefreshCw, Sparkles, Square, Trash2, Upload, Users, Video, X } from "lucide-react";
+import { nanoid } from "nanoid";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { assetLabel, buildScriptProjectView, replaceEpisodeBlock, SCRIPT_ASSET_KINDS, SCRIPT_ASSET_KIND_LABEL, SCRIPT_H3_SECTIONS, SCRIPT_SHOT_LIMITS, validateH3Shot, type ScriptAssetView, type ScriptEpisodeView, type ScriptShotView } from "@/lib/canvas/script-model";
+import { assetLabel, buildScriptProjectView, createScriptAsset, replaceEpisodeBlock, SCRIPT_ASSET_KINDS, SCRIPT_ASSET_KIND_LABEL, SCRIPT_H3_SECTIONS, SCRIPT_SHOT_LIMITS, validateH3Shot, type ScriptAssetView, type ScriptEpisodeView, type ScriptShotView } from "@/lib/canvas/script-model";
 import { generateEpisodeContent, generateShotContent, type ScriptCaller } from "@/lib/canvas/script-generation";
 import { generateScriptStage } from "@/services/api/canvas-agent";
 import { MINIMAX_H3_SIZES } from "@/services/api/models/video-minimax-h3-omni";
@@ -49,6 +50,8 @@ export function CanvasStoryboardView({ nodes, batch, onSync, onGenerate, onStop,
         return map;
     }, [nodes]);
 
+    const usagesOf = (id: string) => view.shots.filter((shot) => [...shot.imageAssetIds, ...shot.videoAssetIds, ...shot.audioAssetIds].includes(id));
+
     const selected = useMemo(() => {
         if (!selection) return null;
         if (selection.kind === "asset") return view.assets.find((item) => item.key === selection.key) || null;
@@ -82,6 +85,42 @@ export function CanvasStoryboardView({ nodes, batch, onSync, onGenerate, onStop,
         if (!current) return;
         update({ assets: current.assets.map((asset) => (asset.id === next.id ? next : asset)) });
         message.success(t("canvas.storyboard.saved"));
+    };
+
+    const addAsset = (kind: ScriptAssetKind) => {
+        const current = useScriptStore.getState().data;
+        if (!current) return;
+        const asset: ScriptAsset = { ...createScriptAsset(kind), name: t(`canvas.assets.new${kind.charAt(0).toUpperCase() + kind.slice(1)}`) };
+        update({ assets: [...current.assets, asset] });
+        setSelection({ kind: "asset", key: `asset:${asset.id}` });
+    };
+
+    const duplicateAsset = (asset: ScriptAsset) => {
+        const current = useScriptStore.getState().data;
+        if (!current) return;
+        const copy: ScriptAsset = { ...asset, id: nanoid(), name: `${asset.name || t("canvas.storyboard.untitled")} ${t("canvas.assets.copySuffix")}` };
+        const index = current.assets.findIndex((item) => item.id === asset.id);
+        const next = current.assets.slice();
+        next.splice(index < 0 ? next.length : index + 1, 0, copy);
+        update({ assets: next });
+        setSelection({ kind: "asset", key: `asset:${copy.id}` });
+    };
+
+    const removeAsset = (asset: ScriptAsset) => {
+        const name = asset.name || t("canvas.storyboard.untitled");
+        const count = usagesOf(asset.id).length;
+        Modal.confirm({
+            title: t("canvas.assets.removeTitle"),
+            content: count ? t("canvas.assets.removeUsed", { name, count }) : t("canvas.assets.removeUnused", { name }),
+            okButtonProps: { danger: true },
+            onOk: () => {
+                const current = useScriptStore.getState().data;
+                if (!current) return;
+                update({ assets: current.assets.filter((item) => item.id !== asset.id) });
+                if (selection?.key === `asset:${asset.id}`) setSelection(null);
+                message.success(t("canvas.assets.removed"));
+            },
+        });
     };
 
     const saveEpisodeScript = (episode: ScriptEpisodeView, content: string) => {
@@ -196,16 +235,21 @@ export function CanvasStoryboardView({ nodes, batch, onSync, onGenerate, onStop,
                     {data && !view.assets.length && !view.episodes.length && !view.shots.length ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.storyboard.empty")} /> : null}
 
                     {SCRIPT_ASSET_KINDS.map((kind) => {
-                        const list = view.assets.filter((item) => item.kind === kind);
-                        if (!list.length) return null;
                         const Icon = KIND_ICON[kind];
+                        const list = view.assets.filter((item) => item.kind === kind);
                         return (
                             <div key={kind} className="space-y-1">
                                 <div className="flex items-center gap-1 px-2 text-[11px] font-medium" style={{ color: theme.node.muted }}>
                                     <Icon className="size-3" />
-                                    {t(`canvas.storyboard.kind.${kind}`)}
+                                    <span className="min-w-0 flex-1 truncate">{t(`canvas.storyboard.kind.${kind}`)}</span>
+                                    <Tooltip title={t("canvas.assets.add")}>
+                                        <button type="button" onClick={() => addAsset(kind)} className="grid size-5 place-items-center rounded transition hover:bg-surface-hover">
+                                            <Plus className="size-3" />
+                                        </button>
+                                    </Tooltip>
                                 </div>
                                 {list.map((asset) => row(asset.key, asset.name || t("canvas.storyboard.untitled")))}
+                                {!list.length ? <p className="px-2 py-1 text-[10px] italic opacity-40">{t("canvas.assets.emptyKind")}</p> : null}
                             </div>
                         );
                     })}
@@ -234,9 +278,12 @@ export function CanvasStoryboardView({ nodes, batch, onSync, onGenerate, onStop,
                             asset={selected as ScriptAssetView}
                             node={nodeByKey.get(selected.key)}
                             disabled={busy}
+                            usages={usagesOf((selected as ScriptAssetView).id)}
                             onSave={saveAsset}
                             onRegenerate={() => onGenerate([selected.key])}
                             onUpload={() => fileRef.current?.click()}
+                            onDuplicate={() => duplicateAsset(selected as ScriptAsset)}
+                            onRemove={() => removeAsset(selected as ScriptAsset)}
                             onLocate={() => onLocate(selected.key)}
                         />
                     ) : selection?.kind === "episode" ? (
@@ -294,14 +341,61 @@ export function CanvasStoryboardView({ nodes, batch, onSync, onGenerate, onStop,
     );
 }
 
-function AssetEditor({ asset, node, disabled, onSave, onRegenerate, onUpload, onLocate }: { asset: ScriptAssetView; node?: CanvasNodeData; disabled: boolean; onSave: (asset: ScriptAsset) => void; onRegenerate: () => void; onUpload: () => void; onLocate: () => void }) {
+function AssetEditor({
+    asset,
+    node,
+    disabled,
+    usages,
+    onSave,
+    onRegenerate,
+    onUpload,
+    onDuplicate,
+    onRemove,
+    onLocate,
+}: {
+    asset: ScriptAssetView;
+    node?: CanvasNodeData;
+    disabled: boolean;
+    usages: ScriptShotView[];
+    onSave: (asset: ScriptAsset) => void;
+    onRegenerate: () => void;
+    onUpload: () => void;
+    onDuplicate: () => void;
+    onRemove: () => void;
+    onLocate: (key: string) => void;
+}) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [draft, setDraft] = useState<ScriptAsset>(asset);
     const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.prompt !== asset.prompt;
+    const content = node?.metadata?.content;
+
     return (
-        <div className="space-y-3">
-            <EditorHeader title={assetLabel(asset)} node={node} onLocate={onLocate} />
+        <div className="space-y-4">
+            <EditorHeader title={assetLabel(asset)} node={node} onLocate={() => onLocate(asset.key)} />
+
+            <div className="flex items-start gap-4">
+                <div className="flex h-[140px] w-[220px] shrink-0 items-center justify-center overflow-hidden rounded-lg border" style={{ borderColor: theme.node.stroke }}>
+                    {content && asset.kind === "audio" ? <audio className="w-full" controls src={content} /> : null}
+                    {content && asset.kind !== "audio" ? <img src={content} alt={asset.name} className="size-full object-cover" /> : null}
+                    {!content ? <span className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.assets.mediaEmpty")}</span> : null}
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <Button size="small" icon={<Upload className="size-4" />} onClick={onUpload}>
+                        {t("canvas.storyboard.upload")}
+                    </Button>
+                    <Button size="small" icon={<Sparkles className="size-4" />} disabled={disabled} onClick={onRegenerate}>
+                        {t("canvas.storyboard.generate")}
+                    </Button>
+                    <Button size="small" icon={<Copy className="size-4" />} onClick={onDuplicate}>
+                        {t("canvas.assets.duplicate")}
+                    </Button>
+                    <Button size="small" danger icon={<Trash2 className="size-4" />} onClick={onRemove}>
+                        {t("canvas.assets.remove")}
+                    </Button>
+                </div>
+            </div>
+
             <Field label={t("canvas.storyboard.assetName")}>
                 <Input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
             </Field>
@@ -311,12 +405,35 @@ function AssetEditor({ asset, node, disabled, onSave, onRegenerate, onUpload, on
             <Field label={t("canvas.storyboard.assetPrompt")}>
                 <Input.TextArea value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} autoSize={{ minRows: 6, maxRows: 16 }} />
             </Field>
-            <div className="flex gap-2">
-                <Button size="small" disabled={disabled || !dirty || !draft.name.trim()} onClick={() => onSave(draft)}>{t("canvas.storyboard.save")}</Button>
-                <Button size="small" type="text" icon={<Sparkles className="size-4" />} disabled={disabled} onClick={onRegenerate}>{t("canvas.storyboard.generate")}</Button>
-                <Button size="small" type="text" icon={<Upload className="size-4" />} onClick={onUpload}>{t("canvas.storyboard.upload")}</Button>
+            <Button size="small" disabled={disabled || !dirty || !draft.name.trim()} onClick={() => onSave(draft)}>
+                {t("canvas.storyboard.save")}
+            </Button>
+
+            <div className="space-y-1">
+                <div className="text-xs font-medium">{t("canvas.assets.usages", { count: usages.length })}</div>
+                {usages.length ? (
+                    usages.map((shot) => (
+                        <button
+                            key={shot.key}
+                            type="button"
+                            onClick={() => onLocate(shot.key)}
+                            className="flex w-full items-center gap-2 rounded-md border px-2 py-1 text-left text-xs transition hover:bg-surface-hover"
+                            style={{ borderColor: theme.node.stroke }}
+                        >
+                            <span className="min-w-0 flex-1 truncate">{shot.title || t("canvas.storyboard.untitled")}</span>
+                            <span className="shrink-0 text-[10px]" style={{ color: theme.node.muted }}>{`${shot.episodeTitle || ""} #${shot.number}`.trim()}</span>
+                        </button>
+                    ))
+                ) : (
+                    <p className="text-xs" style={{ color: theme.node.muted }}>
+                        {t("canvas.assets.usageEmpty")}
+                    </p>
+                )}
             </div>
-            <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.storyboard.assetHint")}</p>
+
+            <p className="text-xs" style={{ color: theme.node.muted }}>
+                {t("canvas.storyboard.assetHint")}
+            </p>
         </div>
     );
 }
@@ -338,13 +455,45 @@ function EpisodeEditor({ episode, node, disabled, onSave, onRegenerate, onLocate
     );
 }
 
-function ShotEditor({ shot, assets, orientation, node, disabled, isReady, onSave, onRegenerate, onGenerate, onLocate }: { shot: ScriptShotView; assets: ScriptAssetView[]; orientation?: "vertical" | "horizontal"; node?: CanvasNodeData; disabled: boolean; isReady: (id: string) => boolean; onSave: (shot: ScriptShot) => void; onRegenerate: () => void; onGenerate: () => void; onLocate: () => void }) {
+function ShotEditor({
+    shot,
+    assets,
+    orientation,
+    node,
+    disabled,
+    isReady,
+    onSave,
+    onRegenerate,
+    onGenerate,
+    onLocate,
+}: {
+    shot: ScriptShotView;
+    assets: ScriptAssetView[];
+    orientation?: CanvasScriptOptions["orientation"];
+    node?: CanvasNodeData;
+    disabled: boolean;
+    isReady: (id: string) => boolean;
+    onSave: (next: ScriptShot) => void;
+    onRegenerate: () => void;
+    onGenerate: () => void;
+    onLocate: () => void;
+}) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const [draft, setDraft] = useState<ScriptShot>(() => toShot(shot));
-    const dirty = JSON.stringify(draft) !== JSON.stringify(toShot(shot));
+    const [draft, setDraft] = useState<ScriptShot>(toShot(shot));
+    const dirty =
+        draft.title !== shot.title ||
+        draft.duration !== shot.duration ||
+        draft.size !== shot.size ||
+        draft.imageAssetIds.join(",") !== shot.imageAssetIds.join(",") ||
+        draft.videoAssetIds.join(",") !== shot.videoAssetIds.join(",") ||
+        draft.audioAssetIds.join(",") !== shot.audioAssetIds.join(",") ||
+        Object.keys(shot.h3).some((k) => draft.h3[k as keyof ScriptH3Prompt] !== shot.h3[k as keyof ScriptH3Prompt]);
+
     const errors = validateH3Shot(draft, assets, orientation);
     const missing = [...draft.imageAssetIds, ...draft.videoAssetIds, ...draft.audioAssetIds].filter((id) => !isReady(id));
+    const workflowMissing = shot.h3 && !node?.metadata?.workflowId;
+
     const sizeOptions = MINIMAX_H3_SIZES.filter((size) => {
         const [w, h] = size.split("x").map(Number);
         return orientation === "horizontal" ? w > h : h > w;
@@ -372,7 +521,7 @@ function ShotEditor({ shot, assets, orientation, node, disabled, isReady, onSave
                 ids={draft.imageAssetIds}
                 assets={assets.filter((asset) => asset.kind !== "video" && asset.kind !== "audio")}
                 onChange={(ids) => patch({ imageAssetIds: ids })}
-                labelOf={(id) => assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) })}
+                labelOf={(id) => (assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) }))}
                 isReady={isReady}
             />
             <ReferenceList
@@ -381,7 +530,7 @@ function ShotEditor({ shot, assets, orientation, node, disabled, isReady, onSave
                 ids={draft.videoAssetIds}
                 assets={assets.filter((asset) => asset.kind === "video")}
                 onChange={(ids) => patch({ videoAssetIds: ids })}
-                labelOf={(id) => assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) })}
+                labelOf={(id) => (assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) }))}
                 isReady={isReady}
             />
             <ReferenceList
@@ -390,7 +539,7 @@ function ShotEditor({ shot, assets, orientation, node, disabled, isReady, onSave
                 ids={draft.audioAssetIds}
                 assets={assets.filter((asset) => asset.kind === "audio")}
                 onChange={(ids) => patch({ audioAssetIds: ids })}
-                labelOf={(id) => assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) })}
+                labelOf={(id) => (assets.find((asset) => asset.id === id) ? assetLabel(assets.find((asset) => asset.id === id)!) : t("canvas.storyboard.unknownAsset", { id: id.slice(0, 6) }))}
                 isReady={isReady}
             />
 
@@ -402,19 +551,30 @@ function ShotEditor({ shot, assets, orientation, node, disabled, isReady, onSave
 
             {errors.length ? (
                 <ul className="space-y-0.5 rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: theme.state.danger, color: theme.state.danger }}>
-                    {errors.map((error) => <li key={error}>{error}</li>)}
+                    {errors.map((error) => (
+                        <li key={error}>{error}</li>
+                    ))}
                 </ul>
             ) : null}
             {missing.length ? <p className="text-xs" style={{ color: theme.state.warning }}>{t("canvas.storyboard.referenceMissing", { count: missing.length })}</p> : null}
+            {workflowMissing ? <p className="text-xs" style={{ color: theme.state.danger }}>{t("canvas.script.h3Missing")}</p> : null}
 
             <div className="flex gap-2">
-                <Button size="small" disabled={disabled || !dirty || errors.length > 0} onClick={() => onSave(draft)}>{t("canvas.storyboard.save")}</Button>
-                <Button size="small" type="text" icon={<RefreshCw className="size-4" />} disabled={disabled} onClick={onRegenerate}>{t("canvas.storyboard.regenerate")}</Button>
-                <Tooltip title={errors.length ? t("canvas.storyboard.generateBlocked") : missing.length ? t("canvas.storyboard.referenceMissingTooltip") : ""}>
-                    <Button size="small" type="text" icon={<Video className="size-4" />} disabled={disabled || errors.length > 0 || missing.length > 0} onClick={onGenerate}>{t("canvas.storyboard.generate")}</Button>
+                <Button size="small" disabled={disabled || !dirty || errors.length > 0} onClick={() => onSave(draft)}>
+                    {t("canvas.storyboard.save")}
+                </Button>
+                <Button size="small" type="text" icon={<RefreshCw className="size-4" />} disabled={disabled} onClick={onRegenerate}>
+                    {t("canvas.storyboard.regenerate")}
+                </Button>
+                <Tooltip title={errors.length ? t("canvas.storyboard.generateBlocked") : missing.length ? t("canvas.storyboard.referenceMissingTooltip") : workflowMissing ? t("canvas.script.h3Missing") : ""}>
+                    <Button size="small" type="text" icon={<Video className="size-4" />} disabled={disabled || errors.length > 0 || missing.length > 0 || workflowMissing} onClick={onGenerate}>
+                        {t("canvas.storyboard.generate")}
+                    </Button>
                 </Tooltip>
             </div>
-            <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.storyboard.shotHint")}</p>
+            <p className="text-xs" style={{ color: theme.node.muted }}>
+                {t("canvas.storyboard.shotHint")}
+            </p>
         </div>
     );
 }

@@ -53,6 +53,7 @@ export function CanvasNodeInspectorOverlay({
 
     return (
         <div
+            data-canvas-overlay
             className={`thin-scrollbar pointer-events-auto absolute z-[70] overflow-y-auto overscroll-contain -translate-x-1/2 transition-transform duration-150 ${
                 placement === "top" ? "-translate-y-full" : "translate-y-0"
             }`}

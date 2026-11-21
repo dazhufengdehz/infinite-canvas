@@ -1,11 +1,10 @@
 import type { CSSProperties } from "react";
 import { Tooltip } from "antd";
-import { BookOpen, Keyboard, Puzzle, Settings2, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Keyboard, Puzzle, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
-import { DOCS_URL, REPO_URL } from "@/constant/env";
+import { REPO_URL } from "@/constant/env";
 import { changeAppLocale, type AppLocale } from "@/i18n";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useConfigStore } from "@/stores/use-config-store";
@@ -13,12 +12,13 @@ import { useThemeStore } from "@/stores/use-theme-store";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
+    showCredit?: boolean;
     variant?: "default" | "canvas";
     onOpenShortcuts?: () => void;
     onOpenPlugins?: () => void;
 };
 
-export function UserStatusActions({ showConfig = true, variant = "default", onOpenShortcuts, onOpenPlugins }: UserStatusActionsProps) {
+export function UserStatusActions({ showConfig = true, showCredit = true, variant = "default", onOpenShortcuts, onOpenPlugins }: UserStatusActionsProps) {
     const { i18n, t } = useTranslation();
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
@@ -37,12 +37,6 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                     <Puzzle className="size-4" />
                 </button>
             ) : null}
-            <Link to="/guide" className={naturalIconClass} style={iconStyle} aria-label={t("topNav.guide")} title={t("topNav.guide")}>
-                <BookOpen className="size-4" />
-            </Link>
-            <Link to="/pricing" className={naturalIconClass} style={iconStyle} aria-label={t("topNav.pricing")} title={t("topNav.pricing")}>
-                <Sparkles className="size-4 text-amber-500" />
-            </Link>
             {showConfig ? (
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label={t("navigation.config")} title={t("navigation.config")}>
                     <Settings2 className="size-4" />
@@ -54,15 +48,17 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                 </button>
             </Tooltip>
             <AnimatedThemeToggler theme={theme} onThemeChange={setTheme} className={naturalIconClass} style={iconStyle} aria-label={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")} title={t(theme === "dark" ? "topNav.lightTheme" : "topNav.darkTheme")} />
-            <a
-                href={REPO_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hidden text-meta text-ink-faint transition-colors hover:text-ink md:inline"
-                style={iconStyle}
-            >
-                {t("topNav.credit")}
-            </a>
+            {showCredit ? (
+                <a
+                    href={REPO_URL}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hidden text-meta text-ink-faint transition-colors hover:text-ink md:inline"
+                    style={iconStyle}
+                >
+                    {t("topNav.credit")}
+                </a>
+            ) : null}
             {onOpenShortcuts ? (
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label={t("topNav.shortcuts")} title={t("topNav.shortcuts")}>
                     <Keyboard className="size-4" />

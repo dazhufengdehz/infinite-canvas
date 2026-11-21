@@ -49,7 +49,6 @@ import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/componen
 import type { CrossCanvasAssetItem } from "@/components/canvas/canvas-resource-mention-menu";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
 import { CanvasStoryboardView } from "@/components/canvas/canvas-storyboard-view";
-import { CanvasScriptAssetsView } from "@/components/canvas/canvas-script-assets-view";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
@@ -305,7 +304,7 @@ function InfiniteCanvasPage() {
     const viewMode = useCanvasViewStore((state) => state.mode);
 
     useEffect(() => {
-        if ((viewMode === "storyboard" || viewMode === "assets") && projectId) void useScriptStore.getState().load(projectId);
+        if (viewMode === "storyboard" && projectId) void useScriptStore.getState().load(projectId);
     }, [viewMode, projectId]);
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
@@ -1034,7 +1033,14 @@ function InfiniteCanvasPage() {
         for (const connection of layout.connections) {
             const fromNodeId = ids.get(connection.fromKey);
             const toNodeId = ids.get(connection.toKey);
-            if (fromNodeId && toNodeId) nextConnections.push({ id: nanoid(), fromNodeId, toNodeId, kind: "input" });
+            if (fromNodeId && toNodeId) {
+                nextConnections.push({
+                    id: `script-connection:${connection.fromKey}:${connection.toKey}`,
+                    fromNodeId,
+                    toNodeId,
+                    kind: "input",
+                });
+            }
         }
         nodesRef.current = next;
         connectionsRef.current = nextConnections;
@@ -5607,21 +5613,6 @@ function InfiniteCanvasPage() {
 
                 {viewMode === "storyboard" ? (
                     <CanvasStoryboardView
-                        nodes={nodes}
-                        batch={scriptBatch}
-                        onSync={() => void syncStoredScript()}
-                        onGenerate={(keys) => void runScriptGeneration(keys)}
-                        onStop={stopScriptGeneration}
-                        onUploadAsset={replaceScriptAssetMedia}
-                        onLocate={(key) => {
-                            locateScriptNode(key);
-                            useCanvasViewStore.getState().setMode("canvas");
-                        }}
-                    />
-                ) : null}
-
-                {viewMode === "assets" ? (
-                    <CanvasScriptAssetsView
                         nodes={nodes}
                         batch={scriptBatch}
                         onSync={() => void syncStoredScript()}

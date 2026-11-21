@@ -29,6 +29,7 @@ export function CanvasZoomControls({ scale, onScaleChange, onReset, isMiniMapOpe
 
     return (
         <div
+            data-canvas-overlay
             className="absolute bottom-5 z-50 flex items-center gap-1"
             style={{ right: agentPanelOpen ? agentPanelWidth + 24 : 18 }}
             onMouseDown={(event) => event.stopPropagation()}

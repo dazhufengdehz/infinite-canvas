@@ -64,6 +64,8 @@
 - 画布节点系统完整架构、数据模型、连接流图与扩展开发指南参见：`docs/content/docs/development/canvas-node-system.zh-CN.mdx`。
 - 修改、扩展或调试画布节点（图片、文本、视频、音频、配置、组节点及插件节点）时，优先参考该文档中的数据结构契约、连接调度规则与 7 步扩展清单。
 - 节点业务数据与生成参数严格保存在 `metadata` 扁平对象中，保持纯数据与渲染视图彻底分离。
+- 小说/剧本的每个资产必须在“全剧资产提取”阶段由系统分配并持久化全剧唯一 `asset.id`，在提取结果首次入库前完成发号；不得等到分镜、画布节点或视频生成时才补发，不得用名称/标题充当身份。同一资产跨集复用同一 ID，允许重名，但禁止重复 ID。
+- 后续分镜与视频参考只能通过 `asset.id` 引用资产，按 `imageAssetIds`、`videoAssetIds`、`audioAssetIds` 有序数组直接解析到对应资产节点，再由节点的 `storageKey` 读取实际媒体；禁止按资产名称猜测、匹配或重新分配 ID。缺失 ID、重复 ID 或未知引用必须显式报错并停止后续生成。
 - 组节点（Group）为虚拟容器，其自身不存子节点数组，子节点通过 `metadata.groupId` 反向关联；组节点向外连线时通过 `expandGroupResourceNodes` 动态解包为批量资源包。
 - 节点高频拖拽/连线/视口变动在 `project.tsx` 本地 React State + Ref 内部运行以保障 60fps，不要在拖拽过程中直接高频触发 Zustand 全量 store 更新。
 - 对接自建 ComfyUI 时的工作流标准、槽位词汇表（prompt, seed, width, height, ref_image_01..09, ref_mask 等）、`_meta.title` 标注约定与解析契约参见：`docs/content/docs/development/comfyui-workflow-standard.zh-CN.mdx`。

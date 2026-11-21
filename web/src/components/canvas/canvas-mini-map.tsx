@@ -104,7 +104,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange, onVie
     };
 
     return (
-        <div className="absolute bottom-[52px] z-50 overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl" style={{ width, height, right: agentPanelOpen ? agentPanelWidth + 24 : 18, background: theme.accent.chrome, borderColor: theme.hairline.base }}>
+        <div data-canvas-overlay className="absolute bottom-[52px] z-50 overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl" style={{ width, height, right: agentPanelOpen ? agentPanelWidth + 24 : 18, background: theme.accent.chrome, borderColor: theme.hairline.base }}>
             <div
                 ref={containerRef}
                 className="relative h-full w-full cursor-crosshair"

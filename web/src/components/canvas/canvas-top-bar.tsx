@@ -108,7 +108,6 @@ export function CanvasTopBar({
                             items: [
                                 { key: "view-canvas", icon: <MenuCheck active={viewMode === "canvas"} />, label: t("canvas.view.canvas"), onClick: () => setViewMode("canvas") },
                                 { key: "view-storyboard", icon: <MenuCheck active={viewMode === "storyboard"} />, label: t("canvas.view.storyboard"), onClick: () => setViewMode("storyboard") },
-                                { key: "view-assets", icon: <MenuCheck active={viewMode === "assets"} />, label: t("canvas.view.assets"), onClick: () => setViewMode("assets") },
                                 { type: "divider" },
                                 { key: "script", icon: <Clapperboard className="size-4" />, label: t("canvas.script.entry"), onClick: onOpenScript },
                                 { type: "divider" },
@@ -328,11 +327,6 @@ function MenuCheck({ active }: { active: boolean }) {
 function AccountMenu({ onOpenPlugins, onOpenShortcuts }: { onOpenPlugins: () => void; onOpenShortcuts: () => void }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const activeRoomId = useCollabStore((state) => state.activeRoomId);
-    const collabRole = useCollabStore((state) => state.role);
-    const onlineUsers = useCollabStore((state) => state.onlineUsers);
-    const setCollabModalOpen = useCollabStore((state) => state.setCollabModalOpen);
-    const collabColor = collabRole === "host" ? theme.state.warning : theme.state.success;
 
     return (
         <Dropdown
@@ -341,22 +335,7 @@ function AccountMenu({ onOpenPlugins, onOpenShortcuts }: { onOpenPlugins: () => 
             arrow={false}
             popupRender={() => (
                 <div className="flex items-center gap-1 rounded-panel border p-1.5 shadow-float" style={{ background: theme.surface.base, borderColor: theme.hairline.base }}>
-                    <button
-                        type="button"
-                        onClick={() => setCollabModalOpen(true)}
-                        className="flex h-8 items-center gap-1.5 rounded-control px-2.5 text-label font-medium transition-colors hover:bg-surface-hover"
-                        style={{ color: activeRoomId ? collabColor : theme.text.secondary }}
-                    >
-                        <span className="relative flex size-2 shrink-0">
-                            {activeRoomId ? <span className="absolute inline-flex size-full animate-ping rounded-full opacity-75" style={{ background: collabColor }} /> : null}
-                            <span className="relative inline-flex size-2 rounded-full" style={{ background: activeRoomId ? collabColor : theme.text.tertiary }} />
-                        </span>
-                        <span>
-                            {activeRoomId ? (collabRole === "host" ? t("canvas.collab.inProgress", { count: onlineUsers.length || 1 }) : t("canvas.collab.watching")) : t("canvas.collab.button")}
-                        </span>
-                    </button>
-                    <span className="h-4 w-px" style={{ background: theme.hairline.base }} />
-                    <UserStatusActions variant="canvas" onOpenShortcuts={onOpenShortcuts} onOpenPlugins={onOpenPlugins} />
+                    <UserStatusActions variant="canvas" showCredit={false} onOpenShortcuts={onOpenShortcuts} onOpenPlugins={onOpenPlugins} />
                 </div>
             )}
         >
