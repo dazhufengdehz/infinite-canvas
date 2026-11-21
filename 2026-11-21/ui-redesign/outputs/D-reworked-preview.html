@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>D · 霓虹节点实验室 — 改造后样式预览</title>
+<style>
+:root {
+    --canvas-bg: #06070a;
+    --dot: rgba(110,175,255,.16);
+    --node-fill: #12161e;
+    --node-stroke: #2b3442;
+    --accent: #38e1ff;
+    --accent-alt: #ff4fd8;
+    --accent-soft: rgba(56,225,255,.16);
+    --accent-glow: rgba(56,225,255,.45);
+    --chrome: rgba(16,19,26,.72);
+    --hairline: rgba(245,245,244,.10);
+    --hairline-strong: rgba(245,245,244,.20);
+    --text-1: #f5f5f4;
+    --text-2: #d6d3d1;
+    --text-3: #a8a29e;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --hover: rgba(255,255,255,.06);
+    --shadow-float: 0 12px 34px rgba(0,0,0,.5);
+    --shadow-panel: 0 26px 60px rgba(0,0,0,.72);
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+}
+html.light {
+    --canvas-bg: #eef3fa;
+    --dot: rgba(10,60,140,.13);
+    --node-fill: #ffffff;
+    --node-stroke: #d8e1ee;
+    --accent: #0f8fd4;
+    --accent-alt: #b62ed0;
+    --accent-soft: rgba(15,143,212,.14);
+    --accent-glow: rgba(15,143,212,.28);
+    --chrome: rgba(255,255,255,.84);
+    --hairline: rgba(68,64,60,.14);
+    --hairline-strong: rgba(68,64,60,.26);
+    --text-1: #1c1917;
+    --text-2: #57534e;
+    --text-3: #8a8479;
+    --ok: #15803d;
+    --warn: #b45309;
+    --danger: #b91c1c;
+    --hover: rgba(28,25,23,.05);
+    --shadow-float: 0 12px 30px rgba(10,30,70,.14);
+    --shadow-panel: 0 20px 50px rgba(10,30,70,.18);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+    font-family: ui-sans-serif, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", system-ui, sans-serif;
+    background: var(--canvas-bg);
+    color: var(--text-1);
+    overflow: hidden;
+}
+.stage { position: fixed; inset: 0; }
+.stage::before {
+    content: ""; position: absolute; inset: 0;
+    background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+    background-size: 26px 26px;
+}
+.wires { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* ---------- 顶栏：居中单胶囊（当前把真实功能全部塞进去，用来判断哪些不需要） ---------- */
+.top {
+    position: absolute; left: 50%; top: 14px; transform: translateX(-50%);
+    height: 46px; display: flex; align-items: center; gap: 6px; padding: 0 12px;
+    border-radius: 999px; background: var(--chrome); border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-panel); backdrop-filter: blur(18px); z-index: 40;
+    white-space: nowrap;
+}
+.top .title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; margin: 0 2px; }
+.ib { width: 30px; height: 30px; border-radius: 8px; border: 0; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.ib:hover { background: var(--hover); color: var(--text-1); }
+.tx { height: 30px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 8px; border: 0; background: transparent; color: var(--text-2); font-size: 12.5px; cursor: pointer; }
+.tx:hover { background: var(--hover); color: var(--text-1); }
+.seg { display: inline-flex; background: var(--hover); border-radius: 8px; padding: 2px; }
+.seg button { height: 26px; padding: 0 10px; font-size: 12px; border: 0; border-radius: 6px; background: transparent; color: var(--text-2); cursor: pointer; }
+.seg button.on { background: var(--node-fill); color: var(--text-1); box-shadow: 0 1px 3px rgba(0,0,0,.28); }
+.vsep { width: 1px; height: 16px; background: var(--hairline); margin: 0 3px; }
+.live { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-family: var(--mono); }
+.live .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent-glow); }
+.agent-state { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--ok); }
+.avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+
+/* ---------- 左侧竖向 rail ---------- */
+.rail {
+    position: absolute; left: 16px; top: 76px; width: 54px; padding: 12px 0;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    border-radius: 16px; background: var(--chrome); border: 1px solid var(--hairline);
+    box-shadow: var(--shadow-panel); backdrop-filter: blur(18px); z-index: 30;
+}
+.rail button { width: 38px; height: 38px; border-radius: 10px; border: 0; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.rail button:hover { background: var(--hover); }
+.rail button.on { background: var(--accent-soft); color: var(--accent); }
+.rail .spacer { flex: 1; min-height: 90px; }
+
+/* ---------- chipbar ---------- */
+.chipbar { position: absolute; left: 86px; top: 76px; display: flex; gap: 6px; z-index: 20; }
+.chip { height: 26px; padding: 0 11px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-family: var(--mono); letter-spacing: .04em; background: var(--chrome); border: 1px solid var(--hairline); color: var(--text-2); backdrop-filter: blur(14px); }
+.chip.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* ---------- 节点 ---------- */
+.node { position: absolute; }
+.nlabel { position: absolute; left: 2px; bottom: calc(100% + 8px); display: flex; gap: 6px; font-family: var(--mono); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; }
+.nlabel .t { color: var(--accent); }
+.nlabel .n { color: var(--text-2); letter-spacing: .04em; text-transform: none; }
+.card { position: relative; border-radius: 16px; background: var(--node-fill); border: 1px solid var(--node-stroke); box-shadow: var(--shadow-float); overflow: hidden; }
+.card.glow { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 34px var(--accent-glow), var(--shadow-float); }
+.node.selected .card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 0 28px var(--accent-glow); }
+.card img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.handle { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 3px; background: var(--node-fill); border: 1px solid var(--accent); box-shadow: 0 0 8px var(--accent-glow); transform: translateY(-50%); }
+.handle::after { content: ""; position: absolute; inset: -8px; }
+.handle.l { right: calc(100% + 9px); }
+.handle.r { left: calc(100% + 9px); }
+.txt { padding: 10px 12px; font-size: 12px; line-height: 1.5; color: var(--text-2); }
+.txt .cap { font-family: var(--mono); font-size: 9px; letter-spacing: .14em; color: var(--text-3); margin-bottom: 5px; }
+.cfg { padding: 8px 12px; font-size: 11.5px; }
+.cfg .r { display: flex; justify-content: space-between; color: var(--text-2); padding: 5px 0; }
+.cfg .r span:last-child { color: var(--text-1); font-family: var(--mono); font-size: 11px; }
+.cfg .bar { height: 1px; background: var(--hairline); }
+.audio { height: 92px; display: flex; align-items: center; gap: 10px; padding: 0 14px; }
+.audio .play { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.audio .m { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-top: 3px; }
+.ntools { position: absolute; left: 50%; bottom: calc(100% + 26px); transform: translateX(-50%); height: 34px; display: flex; align-items: center; gap: 1px; padding: 0 6px; border-radius: 12px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-float); backdrop-filter: blur(14px); }
+.ntools button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.ntools button:hover { background: var(--hover); color: var(--text-1); }
+.progress { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(6,7,10,.5); }
+.progress i { display: block; width: 62%; height: 100%; background: var(--accent); }
+.playbig { position: absolute; inset: 0; display: grid; place-items: center; }
+.playbig span { width: 38px; height: 38px; border-radius: 50%; background: rgba(6,7,10,.55); backdrop-filter: blur(8px); display: grid; place-items: center; color: #fff; }
+
+/* ---------- 提示词面板 ---------- */
+.prompt { position: absolute; width: 340px; border-radius: 16px; padding: 10px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-panel); backdrop-filter: blur(18px); }
+.prompt .r1 { display: flex; align-items: center; gap: 6px; }
+.prompt .model { height: 26px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--hairline); background: transparent; color: var(--text-2); font-size: 11.5px; }
+.prompt .refs { display: flex; align-items: center; gap: 6px; margin: 8px 0; }
+.prompt .ref { width: 32px; height: 32px; border-radius: 8px; overflow: hidden; border: 1px solid var(--hairline); }
+.prompt .ref img { width: 100%; height: 100%; object-fit: cover; }
+.prompt .add { width: 32px; height: 32px; border-radius: 8px; border: 1px dashed var(--hairline-strong); background: transparent; color: var(--text-3); display: grid; place-items: center; }
+.prompt .hint { font-family: var(--mono); font-size: 10px; color: var(--text-3); }
+.prompt textarea { width: 100%; height: 62px; resize: none; border-radius: 10px; border: 1px solid var(--hairline); background: transparent; color: var(--text-1); font-size: 12.5px; line-height: 1.6; padding: 8px 10px; font-family: inherit; }
+.prompt .r3 { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.prompt .tool { height: 26px; display: inline-flex; align-items: center; gap: 5px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--text-2); font-size: 11.5px; }
+.prompt .gen { height: 28px; padding: 0 12px; border: 0; border-radius: 8px; background: var(--accent); color: #04121a; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; }
+.sp { flex: 1; }
+
+/* ---------- 底部工具栏：居中悬浮胶囊 ---------- */
+.tools { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); height: 46px; display: flex; align-items: center; gap: 2px; padding: 0 10px; border-radius: 999px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-panel); backdrop-filter: blur(18px); z-index: 30; }
+.tools button { width: 34px; height: 34px; border-radius: 50%; border: 0; background: transparent; color: var(--text-2); display: grid; place-items: center; cursor: pointer; }
+.tools button:hover { background: var(--hover); color: var(--text-1); }
+.tools button.on { background: var(--accent-soft); color: var(--accent); }
+.tools button.danger { color: var(--danger); }
+.tools .tsep { width: 1px; height: 18px; background: var(--hairline); margin: 0 5px; }
+
+/* ---------- 缩放控件：避让 Agent 面板 ---------- */
+.zoom { position: absolute; right: 348px; bottom: 20px; height: 38px; display: flex; align-items: center; gap: 2px; padding: 0 8px; border-radius: 999px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-float); backdrop-filter: blur(18px); z-index: 30; }
+.zoom button { width: 26px; height: 26px; border: 0; border-radius: 7px; background: transparent; color: var(--text-2); display: grid; place-items: center; }
+.zoom .val { font-family: var(--mono); font-size: 11px; color: var(--text-2); min-width: 34px; text-align: center; }
+.zoom input[type=range] { width: 84px; accent-color: var(--accent); }
+
+/* ---------- Agent 面板 ---------- */
+.agent { position: absolute; right: 16px; top: 76px; bottom: 16px; width: 320px; border-radius: 16px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-panel); backdrop-filter: blur(20px); z-index: 35; display: flex; flex-direction: column; overflow: hidden; }
+.agent .hd { height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--hairline); }
+.agent .hd .ttl { font-size: 13px; font-weight: 600; }
+.agent .st { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--ok); }
+.agent .st .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.agent .tabs { display: flex; gap: 4px; padding: 8px 10px 0; }
+.agent .tabs button { height: 26px; padding: 0 10px; border: 0; border-radius: 7px; background: transparent; color: var(--text-3); font-size: 12px; }
+.agent .tabs button.on { background: var(--hover); color: var(--text-1); }
+.agent .thread { flex: 1; overflow: hidden; padding: 12px 10px; display: flex; flex-direction: column; gap: 10px; }
+.msg-user { align-self: flex-end; max-width: 88%; background: var(--accent-soft); color: var(--text-1); border-radius: 12px 12px 4px 12px; padding: 8px 10px; font-size: 12.5px; line-height: 1.55; }
+.msg-ai { max-width: 92%; font-size: 12.5px; line-height: 1.6; color: var(--text-2); }
+.gencard { margin-top: 8px; border-radius: 10px; overflow: hidden; border: 1px solid var(--hairline); }
+.gencard img { width: 100%; height: 92px; object-fit: cover; display: block; }
+.gencard .cap { display: flex; justify-content: space-between; padding: 6px 8px; font-size: 10.5px; color: var(--text-3); font-family: var(--mono); }
+.agent .composer { padding: 10px; border-top: 1px solid var(--hairline); }
+.agent .box { border: 1px solid var(--hairline); border-radius: 12px; padding: 8px; }
+.agent .ph { font-size: 12px; color: var(--text-3); }
+.agent .cr { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
+.agent .send { width: 28px; height: 28px; border: 0; border-radius: 8px; background: var(--accent); color: #04121a; display: grid; place-items: center; }
+
+/* ---------- 预览工具条 ---------- */
+.hud { position: fixed; left: 16px; bottom: 16px; z-index: 99; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 12px; background: var(--chrome); border: 1px solid var(--hairline); box-shadow: var(--shadow-panel); backdrop-filter: blur(18px); font-size: 12px; color: var(--text-2); }
+.hud b { color: var(--text-1); font-weight: 600; }
+.hud button { height: 26px; padding: 0 10px; border: 1px solid var(--hairline); border-radius: 7px; background: transparent; color: var(--text-2); font-size: 12px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="stage">
+    <svg class="wires">
+        <path d="M348 252 C 366 252, 360 315, 372 315" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="7 7" stroke-opacity=".55" fill="none"/>
+        <path d="M648 315 C 672 315, 668 285, 692 285" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="7 7" stroke-opacity=".55" fill="none"/>
+        <path d="M968 285 C 982 285, 980 275, 992 275" stroke="var(--accent)" stroke-width="1.5" stroke-dasharray="7 7" stroke-opacity=".55" fill="none"/>
+        <path d="M348 252 C 362 252, 356 546, 372 546" stroke="var(--accent-alt)" stroke-width="1.5" stroke-dasharray="7 7" stroke-opacity=".5" fill="none"/>
+        <g fill="var(--canvas-bg)" stroke="var(--accent)" stroke-opacity=".85">
+            <circle cx="348" cy="252" r="4"/><circle cx="372" cy="315" r="4"/>
+            <circle cx="648" cy="315" r="4"/><circle cx="692" cy="285" r="4"/>
+            <circle cx="968" cy="285" r="4"/><circle cx="992" cy="275" r="4"/>
+            <circle cx="372" cy="546" r="4"/>
+        </g>
+    </svg>
+
+    <!-- 顶栏 -->
+    <div class="top">
+        <button class="ib" title="返回">←</button>
+        <button class="ib" title="收起/展开左侧面板">▤</button>
+        <button class="ib" title="菜单（撤销/重做/导入/导出/新建/删除）">☰</button>
+        <span class="title">雾中桥 · 分镜短片</span>
+        <button class="tx" title="文档切换">分镜-01 ⌄</button>
+        <button class="tx" title="保存">保存</button>
+        <button class="tx" title="剧本">剧本</button>
+        <div class="seg"><button class="on">画布</button><button>分镜</button></div>
+        <span class="vsep"></span>
+        <span class="live"><span class="dot"></span>8188</span>
+        <button class="tx" title="ComfyUI 队列监控">队列 2</button>
+        <button class="tx" title="多人协作">协作</button>
+        <span class="vsep"></span>
+        <span class="agent-state">● Agent 已连接</span>
+        <span class="avatar">林</span>
+    </div>
+
+    <!-- 左侧 rail -->
+    <aside class="rail">
+        <button class="on" title="画布">▣</button>
+        <button title="素材">▧</button>
+        <button title="提示词库">▥</button>
+        <button title="分镜">▤</button>
+        <span class="spacer"></span>
+        <button title="主题">☀</button>
+        <button title="设置">⚙</button>
+    </aside>
+
+    <!-- chipbar -->
+    <div class="chipbar">
+        <span class="chip on">GENERATING 62%</span>
+        <span class="chip">QUEUE 2</span>
+        <span class="chip">REF 2 / 9</span>
+        <span class="chip">SEED 118042</span>
+    </div>
+
+    <!-- 节点 -->
+    <div class="node" style="left:110px;top:200px;width:220px">
+        <div class="nlabel"><span class="t">TEXT</span><span class="n">· 角色设定</span></div>
+        <div class="card" style="height:104px">
+            <div class="txt"><div class="cap">CHARACTER</div>阿嬷，60 岁，深色粗布长衫，手上有一把旧油纸伞。</div>
+        </div>
+        <span class="handle r"></span>
+    </div>
+
+    <div class="node" style="left:380px;top:190px;width:250px">
+        <div class="nlabel"><span class="t">IMAGE</span><span class="n">· 角色参考</span></div>
+        <div class="card glow" style="height:250px"><img src="../mockup-src/assets/portrait-ref.jpg" alt=""></div>
+        <span class="handle l"></span><span class="handle r"></span>
+    </div>
+
+    <div class="node" style="left:700px;top:190px;width:250px">
+        <div class="nlabel"><span class="t">IMAGE</span><span class="n">· 首帧</span></div>
+        <div class="card" style="height:190px"><img src="../mockup-src/assets/film-still.jpg" alt=""></div>
+        <span class="handle l"></span><span class="handle r"></span>
+    </div>
+
+    <div class="node selected" style="left:1000px;top:200px;width:240px">
+        <div class="nlabel"><span class="t">VIDEO</span><span class="n">· 镜号 03</span></div>
+        <div class="ntools">
+            <button title="信息">i</button><button title="复制">⧉</button><button title="下载">↓</button><button title="图层">▤</button>
+            <span class="vsep"></span>
+            <button title="删除">⌫</button>
+        </div>
+        <div class="card" style="height:150px">
+            <img src="../mockup-src/assets/film-still.jpg" alt="">
+            <div class="playbig"><span>▶</span></div>
+            <div class="progress"><i></i></div>
+        </div>
+        <span class="handle l"></span>
+    </div>
+
+    <div class="node" style="left:110px;top:440px;width:200px">
+        <div class="nlabel"><span class="t">CONFIG</span><span class="n">· 参数</span></div>
+        <div class="card" style="height:124px">
+            <div class="cfg">
+                <div class="r"><span>模型</span><span>MiniMax H3</span></div><div class="bar"></div>
+                <div class="r"><span>时长</span><span>5s</span></div><div class="bar"></div>
+                <div class="r"><span>比例</span><span>16:9</span></div>
+            </div>
+        </div>
+        <span class="handle l"></span>
+    </div>
+
+    <div class="node" style="left:380px;top:500px;width:230px">
+        <div class="nlabel"><span class="t">AUDIO</span><span class="n">· 环境音</span></div>
+        <div class="card audio">
+            <span class="play">▶</span>
+            <div><div style="font-size:12px;font-weight:500">雨声 · 环境床</div><div class="m">WAV · 00:12 · 48kHz</div></div>
+        </div>
+        <span class="handle l"></span>
+    </div>
+
+    <!-- 提示词面板 -->
+    <div class="prompt" style="left:700px;top:430px">
+        <div class="r1">
+            <button class="model">✦ MiniMax H3 / I2V ⌄</button>
+            <span class="sp"></span>
+            <button class="ib" title="参数">⚙</button><button class="ib" title="放大">⤢</button>
+        </div>
+        <div class="refs">
+            <span class="ref"><img src="../mockup-src/assets/portrait-ref.jpg" alt=""></span>
+            <span class="ref"><img src="../mockup-src/assets/film-still.jpg" alt=""></span>
+            <button class="add">+</button>
+            <span class="sp"></span>
+            <span class="hint">2 / 9 REF</span>
+        </div>
+        <textarea>阿嬷站在雾中的桥头，缓慢收拢油纸伞，衣角被风吹动。</textarea>
+        <div class="r3">
+            <button class="tool">▤ 参考</button>
+            <button class="tool">¶ 提示词库</button>
+            <span class="sp"></span>
+            <button class="gen">停止 ✕</button>
+        </div>
+    </div>
+
+    <!-- 底部工具栏 -->
+    <div class="tools">
+        <button class="on" title="选择">➤</button>
+        <button title="抓手">✋</button>
+        <span class="tsep"></span>
+        <button title="文本">¶</button>
+        <button title="图片">▧</button>
+        <button title="视频">▷</button>
+        <button title="音频">♪</button>
+        <button title="配置">⚙</button>
+        <button title="组">▦</button>
+        <button title="插件">✧</button>
+        <button title="上传">↑</button>
+        <span class="tsep"></span>
+        <button title="外观">◨</button>
+        <span class="tsep"></span>
+        <button title="撤销">↺</button>
+        <button title="重做">↻</button>
+        <span class="tsep"></span>
+        <button class="danger" title="清空">⌫</button>
+    </div>
+
+    <!-- 缩放控件 -->
+    <div class="zoom">
+        <button title="小地图">▦</button>
+        <button title="复位">⤢</button>
+        <input type="range" min="10" max="200" value="86">
+        <span class="val">86%</span>
+        <button title="快捷键">?</button>
+    </div>
+
+    <!-- Agent 面板 -->
+    <aside class="agent">
+        <div class="hd">
+            <span>◉</span><span class="ttl">Agent</span>
+            <span class="st"><span class="dot"></span>已连接</span>
+            <span class="sp"></span>
+            <button class="ib" title="历史">↺</button><button class="ib" title="关闭">✕</button>
+        </div>
+        <div class="tabs"><button class="on">对话</button><button>历史</button><button>技能</button></div>
+        <div class="thread">
+            <div class="msg-user">把镜号 03 改成细雨，保持参考里阿嬷的服装，输出 5 秒。</div>
+            <div class="msg-ai">
+                <p style="margin:0">已提交，当前使用 MiniMax H3 工作流，2 张参考图作为角色与首帧约束。</p>
+                <div class="gencard">
+                    <img src="../mockup-src/assets/film-still.jpg" alt="">
+                    <div class="cap"><span>1280×720 · 5s</span><span>生成中 62%</span></div>
+                </div>
+            </div>
+        </div>
+        <div class="composer">
+            <div class="box">
+                <div class="ph">描述你想要的改动，或 @ 引用画布节点…</div>
+                <div class="cr">
+                    <button class="ib" title="附件">＋</button>
+                    <button class="ib" title="引用节点">▤</button>
+                    <span class="sp"></span>
+                    <button class="send" title="发送">↑</button>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <div class="hud">
+        <b>D 改造后预览</b>
+        <span>顶栏已塞入全部真实功能，方便你圈出不要的</span>
+        <button onclick="document.documentElement.classList.toggle('light')">切换明/暗</button>
+    </div>
+</div>
+</body>
+</html>

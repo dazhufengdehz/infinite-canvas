@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, Bot, Check, ChevronsUpDown, CircleUser, Clapperboard, Copy, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
+import { ArrowLeft, BookOpen, Bot, Check, ChevronsUpDown, CircleUser, Copy, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
 import { App, Dropdown, Input, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -25,7 +25,6 @@ export function CanvasTopBar({
     canUndo,
     canRedo,
     onBack,
-    onOpenScript,
     onHome,
     onProjects,
     onCreateProject,
@@ -50,7 +49,6 @@ export function CanvasTopBar({
     canUndo: boolean;
     canRedo: boolean;
     onBack: () => void;
-    onOpenScript: () => void;
     onHome: () => void;
     onProjects: () => void;
     onCreateProject: () => void;
@@ -107,9 +105,7 @@ export function CanvasTopBar({
                         menu={{
                             items: [
                                 { key: "view-canvas", icon: <MenuCheck active={viewMode === "canvas"} />, label: t("canvas.view.canvas"), onClick: () => setViewMode("canvas") },
-                                { key: "view-storyboard", icon: <MenuCheck active={viewMode === "storyboard"} />, label: t("canvas.view.storyboard"), onClick: () => setViewMode("storyboard") },
-                                { type: "divider" },
-                                { key: "script", icon: <Clapperboard className="size-4" />, label: t("canvas.script.entry"), onClick: onOpenScript },
+                                { key: "view-production", icon: <MenuCheck active={viewMode === "production"} />, label: t("canvas.view.production"), onClick: () => setViewMode("production") },
                                 { type: "divider" },
                                 { key: "undo", disabled: !canUndo, icon: <Undo2 className="size-4" />, label: <MenuLabel text={t("canvas.undo")} shortcut="⌘ Z" />, onClick: onUndo },
                                 { key: "redo", disabled: !canRedo, icon: <Redo2 className="size-4" />, label: <MenuLabel text={t("canvas.redo")} shortcut="⌘ ⇧ Z / ⌘ Y" />, onClick: onRedo },

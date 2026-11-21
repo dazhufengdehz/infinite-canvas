@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent as ReactChangeEvent, DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Group, Video } from "lucide-react";
@@ -48,7 +48,7 @@ import { calculateAlignmentSnap } from "@/lib/canvas/canvas-alignment-snapping";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
 import type { CrossCanvasAssetItem } from "@/components/canvas/canvas-resource-mention-menu";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
-import { CanvasStoryboardView } from "@/components/canvas/canvas-storyboard-view";
+import { ProductionWorkspace } from "@/components/production/production-workspace";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
@@ -64,9 +64,9 @@ import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNod
 import { exportCanvasProjects, safeFileName } from "@/lib/canvas/canvas-export";
 import { generateDuplicateNodeTitle, generateNextNodeTitle } from "@/lib/canvas/canvas-node-naming";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, cloneNodeMetadata, createCanvasNode, createDefaultNodeMetadata, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
-import { planScriptNodes, type ScriptNodeSource } from "@/lib/canvas/script-node";
-import { buildScriptProjectView, scriptAssetKey, validateH3Shot } from "@/lib/canvas/script-model";
-import { useScriptStore } from "@/stores/canvas/use-script-store";
+import { planProductionNodes } from "@/lib/production/production-nodes";
+import { listShots, productionAssetKey, validateShot } from "@/lib/production/production-model";
+import { useProductionStore } from "@/stores/canvas/use-production-store";
 import { useCanvasViewStore } from "@/stores/use-canvas-view-store";
 import { failCanvasGeneration, settleCanvasGeneration } from "@/lib/canvas/canvas-generation-settlement";
 import {
@@ -119,7 +119,6 @@ import { CanvasPluginManagerModal } from "@/components/canvas/canvas-plugin-mana
 import { CanvasRefreshShell } from "@/components/canvas/canvas-refresh-shell";
 import { CanvasTopBar } from "@/components/canvas/canvas-top-bar";
 import { CanvasStatusChips } from "@/components/canvas/canvas-status-chips";
-import { CanvasScriptAdaptDialog } from "@/components/canvas/canvas-script-adapt-dialog";
 import { ConnectionCreateMenu, NodeCreateMenu, type PendingConnectionCreate } from "@/components/canvas/canvas-create-menus";
 import {
     CanvasNodeType,
@@ -138,6 +137,7 @@ import {
     type Position,
     type SelectionBox,
     type ViewportTransform,
+    type ProductionState,
 } from "@/types/canvas";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
@@ -304,8 +304,8 @@ function InfiniteCanvasPage() {
     const viewMode = useCanvasViewStore((state) => state.mode);
 
     useEffect(() => {
-        if (viewMode === "storyboard" && projectId) void useScriptStore.getState().load(projectId);
-    }, [viewMode, projectId]);
+        if (viewMode === "production" && projectId) void useProductionStore.getState().load(projectId, currentCanvas?.id || canvasId);
+    }, [viewMode, projectId, currentCanvas?.id, canvasId]);
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
     const [chatSessions, setChatSessions] = useState<CanvasAssistantSession[]>([]);
@@ -330,7 +330,6 @@ function InfiniteCanvasPage() {
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [deleteConfirmNodes, setDeleteConfirmNodes] = useState<Set<string> | null>(null);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
-    const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
     const [projectAssets, setProjectAssets] = useState<Asset[]>([]);
     const projectAssetsRef = useRef<Asset[]>([]);
     const [projectLoaded, setProjectLoaded] = useState(false);
@@ -950,14 +949,13 @@ function InfiniteCanvasPage() {
         return screenToCanvas((rect?.left || 0) + (rect?.width || size.width) / 2, (rect?.top || 0) + (rect?.height || size.height) / 2);
     }, [screenToCanvas, size.height, size.width]);
 
-    const syncScriptNodes = useCallback((source: ScriptNodeSource) => {
+    const [scriptBatch, setScriptBatch] = useState({ total: 0, done: 0, failed: 0, running: false, phase: "" as "" | "assets" | "shots" });
+    const scriptBatchCancelRef = useRef(false);
+    const scriptPipelineRunningRef = useRef(false);
+
+    const syncProductionNodes = useCallback((source: ProductionState) => {
         const center = getCanvasCenter();
-        const layout = planScriptNodes(source, center, {
-            source: t("canvas.script.sourceNode"),
-            setting: t("canvas.script.settingNode"),
-            outline: t("canvas.script.outlineNode"),
-            script: t("canvas.script.scriptNode"),
-        });
+        const layout = planProductionNodes(source, center);
         const activeChannel = (config.channelId ? config.channels?.find((item) => item.id === config.channelId) : undefined) || config.channels?.[0];
         const h3Workflow = getDefaultWorkflow(activeChannel, "omniVideo");
         const h3ModelId = resolveModelIdFromWorkflowId(h3Workflow?.id);
@@ -1034,12 +1032,7 @@ function InfiniteCanvasPage() {
             const fromNodeId = ids.get(connection.fromKey);
             const toNodeId = ids.get(connection.toKey);
             if (fromNodeId && toNodeId) {
-                nextConnections.push({
-                    id: `script-connection:${connection.fromKey}:${connection.toKey}`,
-                    fromNodeId,
-                    toNodeId,
-                    kind: "input",
-                });
+                nextConnections.push({ id: `production-connection:${connection.fromKey}:${connection.toKey}`, fromNodeId, toNodeId, kind: "input" });
             }
         }
         nodesRef.current = next;
@@ -1053,67 +1046,66 @@ function InfiniteCanvasPage() {
         return ids;
     }, [config, getCanvasCenter, message, setNodes, t]);
 
-    const [scriptBatch, setScriptBatch] = useState({ total: 0, done: 0, failed: 0, running: false });
-    const scriptBatchCancelRef = useRef(false);
+    const syncStoredProduction = useCallback(() => {
+        const data = useProductionStore.getState().data;
+        return data ? syncProductionNodes(data) : new Map<string, string>();
+    }, [syncProductionNodes]);
 
-    const syncStoredScript = useCallback(() => {
-        const data = useScriptStore.getState().data;
-        return data ? syncScriptNodes(data) : new Map<string, string>();
-    }, [syncScriptNodes]);
-
-    const collectScriptKeys = useCallback((kind: "asset" | "character" | "shot") => {
-        const data = useScriptStore.getState().data;
-        const ids = syncStoredScript();
-        const view = data ? buildScriptProjectView(data) : { episodes: [], assets: [], shots: [] };
+    const collectProductionKeys = useCallback((kind: "asset" | "character" | "shot") => {
+        const data = useProductionStore.getState().data;
+        const ids = syncStoredProduction();
+        const shots = data ? listShots(data) : [];
         const wanted = new Set(
             kind === "shot"
-                ? view.shots.map((shot) => shot.key)
+                ? shots.map((shot) => shot.key)
                 : kind === "character"
-                  ? view.assets.filter((asset) => asset.kind === "character").map((asset) => scriptAssetKey(asset.id))
-                  : view.assets.map((asset) => scriptAssetKey(asset.id)),
+                  ? (data?.assets.filter((asset) => asset.kind === "character") || []).map((asset) => productionAssetKey(asset.id))
+                  : (data?.assets || []).map((asset) => productionAssetKey(asset.id)),
         );
-        return [...ids.keys()].filter((key) => wanted.has(key)).filter((key) => {
-            const node = nodesRef.current.find((item) => item.metadata?.scriptKey === key);
-            return node?.metadata?.status !== NODE_STATUS_SUCCESS;
-        });
-    }, [syncStoredScript]);
+        return [...ids.keys()].filter((key) => wanted.has(key)).filter((key) => nodesRef.current.find((node) => node.metadata?.scriptKey === key)?.metadata?.status !== NODE_STATUS_SUCCESS);
+    }, [syncStoredProduction]);
 
-    const runScriptGeneration = useCallback(async (keys: string[]) => {
+    const runProductionGeneration = useCallback(async (keys: string[], options?: { resetCancel?: boolean; phase?: "" | "assets" | "shots" }) => {
         if (!keys.length) return;
+        if (scriptPipelineRunningRef.current && options?.resetCancel !== false) {
+            message.warning(t("canvas.production.pipelineBusy"));
+            return;
+        }
         if (!isAiConfigReady(effectiveConfig, effectiveConfig.model)) {
             openConfigDialog(true);
             return;
         }
-        scriptBatchCancelRef.current = false;
-        setScriptBatch({ total: keys.length, done: 0, failed: 0, running: true });
+        if (options?.resetCancel !== false) scriptBatchCancelRef.current = false;
+        const phase = options?.phase || "";
+        const publish = (done: number, failed: number, running: boolean) => setScriptBatch({ total: keys.length, done, failed, running, phase });
+        publish(0, 0, true);
         let failed = 0;
         for (const [index, key] of keys.entries()) {
             if (scriptBatchCancelRef.current) break;
             const node = nodesRef.current.find((item) => item.metadata?.scriptKey === key);
             if (!node) {
                 failed += 1;
-                setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+                publish(index + 1, failed, true);
                 continue;
             }
             if (key.startsWith("shot:")) {
-                const data = useScriptStore.getState().data;
-                const view = data ? buildScriptProjectView(data) : null;
-                const shot = view?.shots.find((item) => item.key === key);
-                const errors = shot && data ? validateH3Shot(shot, data.assets, data.options.orientation) : ["找不到对应视频段"];
+                const data = useProductionStore.getState().data;
+                const shot = data ? listShots(data).find((item) => item.key === key) : undefined;
+                const errors = shot && data ? validateShot(shot, data.assets, data.options.orientation) : [t("canvas.production.error.shotNotFound")];
                 if (shot) {
                     const expected: Record<"image" | "video" | "audio", string[]> = { image: [], video: [], audio: [] };
                     const groups: ["image" | "video" | "audio", string, CanvasNodeType, string[]][] = [
-                        ["image", "图片", CanvasNodeType.Image, shot.imageAssetIds],
-                        ["video", "视频", CanvasNodeType.Video, shot.videoAssetIds],
-                        ["audio", "音频", CanvasNodeType.Audio, shot.audioAssetIds],
+                        ["image", t("canvas.production.referenceLabel.image"), CanvasNodeType.Image, shot.imageAssetIds],
+                        ["video", t("canvas.production.referenceLabel.video"), CanvasNodeType.Video, shot.videoAssetIds],
+                        ["audio", t("canvas.production.referenceLabel.audio"), CanvasNodeType.Audio, shot.audioAssetIds],
                     ];
                     for (const [bucket, label, expectedType, assetIds] of groups) {
                         for (const assetId of assetIds) {
-                            const referenceKey = scriptAssetKey(assetId);
+                            const referenceKey = productionAssetKey(assetId);
                             const referenceNode = nodesRef.current.find((item) => item.metadata?.scriptKey === referenceKey);
-                            if (!referenceNode) errors.push(`参考${label}节点尚未同步：${assetId}`);
-                            else if (referenceNode.type !== expectedType) errors.push(`参考${label}节点类型不匹配：${referenceKey}`);
-                            else if (!referenceNode.metadata?.content) errors.push(`参考${label}尚未生成或上传：${referenceKey}`);
+                            if (!referenceNode) errors.push(t("canvas.production.error.refNodeNotSynced", { label, id: assetId }));
+                            else if (referenceNode.type !== expectedType) errors.push(t("canvas.production.error.refNodeTypeMismatch", { label, key: referenceKey }));
+                            else if (!referenceNode.metadata?.content) errors.push(t("canvas.production.error.refNodeNotReady", { label, key: referenceKey }));
                             else expected[bucket].push(referenceNode.id);
                         }
                     }
@@ -1125,19 +1117,19 @@ function InfiniteCanvasPage() {
                                 video: context.referenceVideos.map((item) => item.id),
                                 audio: context.referenceAudios.map((item) => item.id),
                             };
-                            for (const [bucket, label] of [["image", "图片"], ["video", "视频"], ["audio", "音频"]] as const) {
-                                if (actual[bucket].length !== expected[bucket].length) errors.push(`实际连线的参考${label}数量（${actual[bucket].length}）与镜头约定（${expected[bucket].length}）不一致`);
-                                else if (actual[bucket].some((id, position) => id !== expected[bucket][position])) errors.push(`实际连线的参考${label}顺序与镜头约定不一致`);
+                            for (const [bucket, label] of [["image", t("canvas.production.referenceLabel.image")], ["video", t("canvas.production.referenceLabel.video")], ["audio", t("canvas.production.referenceLabel.audio")]] as const) {
+                                if (actual[bucket].length !== expected[bucket].length) errors.push(t("canvas.production.error.refCountMismatch", { label, actual: actual[bucket].length, expected: expected[bucket].length }));
+                                else if (actual[bucket].some((id, position) => id !== expected[bucket][position])) errors.push(t("canvas.production.error.refOrderMismatch", { label }));
                             }
                         } catch (error) {
-                            errors.push(error instanceof Error ? error.message : "参考资源校验失败");
+                            errors.push(error instanceof Error ? error.message : t("canvas.production.error.refCheckFailed"));
                         }
                     }
                 }
                 if (errors.length) {
                     failed += 1;
                     message.error(`${shot?.title || key}：${errors.join("；")}`);
-                    setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+                    publish(index + 1, failed, true);
                     continue;
                 }
             }
@@ -1145,17 +1137,41 @@ function InfiniteCanvasPage() {
             await generateNodeRef.current?.(node.id, mode, node.metadata?.prompt || "", "repeat");
             const latest = nodesRef.current.find((item) => item.id === node.id);
             if (latest?.metadata?.status !== NODE_STATUS_SUCCESS) failed += 1;
-            setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+            publish(index + 1, failed, true);
         }
-        setScriptBatch({ total: keys.length, done: keys.length, failed, running: false });
-    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog]);
+        publish(keys.length, failed, false);
+    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog, t]);
 
-    const stopScriptGeneration = useCallback(() => {
+    const stopProductionGeneration = useCallback(() => {
         scriptBatchCancelRef.current = true;
     }, []);
 
-    const replaceScriptAssetMedia = useCallback(async (key: string, file: File) => {
-        const ids = syncStoredScript();
+    const runProductionToFilm = useCallback(async () => {
+        const data = useProductionStore.getState().data;
+        const shots = data ? listShots(data) : [];
+        if (!data?.assets.length || !shots.length) {
+            message.warning(t("canvas.production.incomplete"));
+            return;
+        }
+        if (scriptPipelineRunningRef.current) return;
+        scriptPipelineRunningRef.current = true;
+        scriptBatchCancelRef.current = false;
+        try {
+            const synced = syncStoredProduction();
+            if (!shots.some((shot) => synced.has(shot.key))) return;
+            const assetKeys = collectProductionKeys("asset");
+            if (assetKeys.length) await runProductionGeneration(assetKeys, { resetCancel: false, phase: "assets" });
+            if (scriptBatchCancelRef.current) return;
+            const shotKeys = collectProductionKeys("shot");
+            if (shotKeys.length) await runProductionGeneration(shotKeys, { resetCancel: false, phase: "shots" });
+            else if (!assetKeys.length) message.success(t("canvas.production.pipelineDone"));
+        } finally {
+            scriptPipelineRunningRef.current = false;
+        }
+    }, [collectProductionKeys, message, runProductionGeneration, syncStoredProduction, t]);
+
+    const replaceProductionAssetMedia = useCallback(async (key: string, file: File) => {
+        const ids = syncStoredProduction();
         const nodeId = ids.get(key);
         if (!nodeId) return;
         const node = nodesRef.current.find((item) => item.id === nodeId);
@@ -1169,7 +1185,7 @@ function InfiniteCanvasPage() {
         } else if (node.type === CanvasNodeType.Video) {
             const video = await uploadMediaFile(file, "video", projectId);
             metadata = videoMetadata(video);
-            size = fitNodeSize(video.width, video.height);
+            size = fitNodeSize(video.width ?? 1280, video.height ?? 720);
         } else {
             const image = await uploadImage(file, projectId);
             metadata = imageMetadata(image);
@@ -1184,8 +1200,7 @@ function InfiniteCanvasPage() {
         nodesRef.current = next;
         setNodes(next);
         if (nextNode) await createNodeProjectAsset(nextNode);
-    }, [createNodeProjectAsset, projectId, setNodes, syncStoredScript]);
-
+    }, [createNodeProjectAsset, projectId, setNodes, syncStoredProduction]);
 
     const setConnecting = useCallback((next: ConnectionHandle | null) => {
         if (isViewerRef.current && next) return;
@@ -2699,6 +2714,7 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
+            if (viewMode === "production") return;
             const target = event.target instanceof Element ? event.target : null;
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-no-zoom],[data-canvas-shortcuts-ignore]")) return;
 
@@ -2772,7 +2788,7 @@ function InfiniteCanvasPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [copySelectedNodes, deleteConnection, deleteNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
+    }, [copySelectedNodes, deleteConnection, deleteNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas, viewMode]);
 
     const handleConnectStart = useCallback(
         (event: ReactMouseEvent | React.PointerEvent, nodeId: string, handleType: "source" | "target") => {
@@ -5352,7 +5368,6 @@ function InfiniteCanvasPage() {
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
                     onBack={() => navigate("/canvas")}
-                    onOpenScript={() => setScriptDialogOpen(true)}
                     onHome={() => navigate("/")}
                     onProjects={() => navigate("/canvas")}
                     onCreateProject={createAndOpenProject}
@@ -5611,18 +5626,23 @@ function InfiniteCanvasPage() {
                     }}
                 </CanvasScene>
 
-                {viewMode === "storyboard" ? (
-                    <CanvasStoryboardView
+                {viewMode === "production" ? (
+                    <ProductionWorkspace
+                        projectId={projectId || ""}
+                        canvasId={currentCanvas?.id || canvasId}
+                        title={currentProject?.title || ""}
                         nodes={nodes}
                         batch={scriptBatch}
-                        onSync={() => void syncStoredScript()}
-                        onGenerate={(keys) => void runScriptGeneration(keys)}
-                        onStop={stopScriptGeneration}
-                        onUploadAsset={replaceScriptAssetMedia}
+                        onSync={() => void syncStoredProduction()}
+                        onGenerate={(keys) => void runProductionGeneration(keys)}
+                        onProduce={() => void runProductionToFilm()}
+                        onStop={stopProductionGeneration}
+                        onUploadAsset={replaceProductionAssetMedia}
                         onLocate={(key) => {
                             locateScriptNode(key);
                             useCanvasViewStore.getState().setMode("canvas");
                         }}
+                        onOpenCanvas={() => useCanvasViewStore.getState().setMode("canvas")}
                     />
                 ) : null}
 
@@ -5858,7 +5878,6 @@ function InfiniteCanvasPage() {
                 ) : null}
 
                 <AssetPickerModal open={assetPickerOpen} projectAssets={projectAssets} onInsert={handleAssetInsert} onRemove={removeProjectAsset} onClose={() => setAssetPickerOpen(false)} />
-                <CanvasScriptAdaptDialog open={scriptDialogOpen} projectId={projectId || ""} nodes={nodes} onClose={() => setScriptDialogOpen(false)} onInsert={() => void syncStoredScript()} />
                 <CanvasCollabModal
                     projectId={projectId}
                     canvasId={currentCanvas?.id || canvasId}

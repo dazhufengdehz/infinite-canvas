@@ -2,16 +2,6 @@ import type { ModelSupportedTools } from "@/services/api/models/types";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { Asset } from "@/stores/use-asset-store";
 
-export type CanvasScriptOptions = {
-    episodes?: number;
-    duration?: number;
-    genre?: string;
-    audience?: string;
-    orientation?: "vertical" | "horizontal";
-    keep?: string;
-    change?: string;
-};
-
 export type ScriptAssetKind = "character" | "scene" | "prop" | "video" | "audio";
 
 /** 剧本资产：图片类为 character/scene/prop，参考类为 video/audio。 */
@@ -33,7 +23,7 @@ export type ScriptH3Prompt = {
     non_diegetic_music: string;
 };
 
-/** 结构化镜头：参数与有序引用随镜头保存，画布节点由 script-node 派生。 */
+/** 结构化镜头：参数与有序引用随镜头保存，画布节点由 production-nodes 派生。 */
 export type ScriptShot = {
     id: string;
     number: number;
@@ -46,25 +36,39 @@ export type ScriptShot = {
     h3: ScriptH3Prompt;
 };
 
-export type ScriptStoryboardEpisode = {
+/** 生产链路参数：画幅、集数、单集时长与题材等创作约束。 */
+export type ProductionOptions = {
+    episodes: number;
+    duration: number;
+    genre: string;
+    audience: string;
+    orientation: "vertical" | "horizontal";
+    keep?: string;
+    change?: string;
+};
+
+export type ProductionChapter = { title: string; content: string };
+
+/** 集是生产聚合根：自带大纲、正文与分镜，避免多处数组按下标对齐。 */
+export type ProductionEpisode = {
     id: string;
     number: number;
     title: string;
+    synopsis: string;
+    script: string;
     shots: ScriptShot[];
 };
 
-/** 项目级剧本数据：原文/设定/大纲/正文为 Markdown，资产与分镜为唯一权威结构化数据。 */
-export type CanvasScriptState = {
-    version: 2;
+/** 项目级生产数据（version 1）：结构化资产与分镜是唯一权威，媒体仍在画布节点上。 */
+export type ProductionState = {
+    version: 1;
     updatedAt: string;
-    source: string;
-    condensed: string;
-    options: CanvasScriptOptions;
+    canvasId: string;
+    options: ProductionOptions;
+    source: { text: string; condensed: string; chapters: ProductionChapter[] };
     setting: string;
-    outline: string;
-    script: string;
     assets: ScriptAsset[];
-    storyboard: ScriptStoryboardEpisode[];
+    episodes: ProductionEpisode[];
 };
 
 export type CanvasProject = {
@@ -75,7 +79,8 @@ export type CanvasProject = {
     updatedAt: string;
     revision: number;
     activeCanvasId: string | null;
-    script?: CanvasScriptState;
+    /** 项目级生产数据：原文、设定、资产与分集分镜的唯一权威。 */
+    production?: ProductionState;
 };
 
 export type CanvasDocument = {

@@ -352,12 +352,12 @@ export function createStorage(dataDir) {
                     const canvases = await readCanvasIndex(id);
                     if (!canvases.some((canvas) => canvas.id === patch.activeCanvasId)) throw new StorageError(400, "活动画布不存在");
                 }
-                if (patch.script !== undefined && (!patch.script || typeof patch.script !== "object" || patch.script.version !== 1)) throw new StorageError(400, "剧本数据不合法");
+                if (patch.production !== undefined && (!patch.production || typeof patch.production !== "object" || patch.production.version !== 1)) throw new StorageError(400, "生产数据不合法");
                 const stored = {
                     ...current,
                     ...(patch.title !== undefined ? { title: patch.title.trim() } : {}),
                     ...(patch.activeCanvasId !== undefined ? { activeCanvasId: patch.activeCanvasId } : {}),
-                    ...(patch.script !== undefined ? { script: patch.script } : {}),
+                    ...(patch.production !== undefined ? { production: patch.production } : {}),
                     updatedAt: new Date().toISOString(),
                     revision: (Number.isInteger(current.revision) ? current.revision : 1) + 1,
                 };

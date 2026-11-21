@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "infinite-canvas": {
+      "command": "C:\\Users\\Administrator\\nodejs\\node.exe",
+      "args": [
+        "D:\\infinite-canvas\\canvas-agent\\dist\\index.js",
+        "mcp"
+      ],
+      "env": {
+        "CANVAS_AUTO_START": "true"
+      }
+    }
+  }
+}

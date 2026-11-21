@@ -1,0 +1,216 @@
+﻿<!doctype html>
+<html lang="zh-CN" class="theme-light dir-b" id="root">
+<head>
+<meta charset="utf-8">
+<title>B · 项目库 · 亮色</title>
+<link rel="stylesheet" href="mock.css">
+<script>if (location.search.includes("dark")) document.getElementById("root").className = "theme-dark dir-b";</script>
+</head>
+<body><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-logo" viewBox="0 0 24 24"><path d="M4 8.5C4 6 5.7 4 8 4s4 2 4 4.5-1.7 4.5-4 4.5-4-2-4-4.5Z" fill="currentColor"/><path d="M12 15.5c0-2.5 1.7-4.5 4-4.5s4 2 4 4.5-1.7 4.5-4 4.5-4-2-4-4.5Z" fill="currentColor" opacity=".45"/></symbol>
+<symbol id="i-canvas" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M9 15l2.4-4.8L14 15l1.6-2.4L18 15" opacity=".55"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.2-4.2a2 2 0 0 1 2.8 0L17 17"/></symbol>
+<symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12.5" height="12" rx="2.5"/><path d="M15.5 10.5 20 8.2v7.6l-4.5-2.3"/></symbol>
+<symbol id="i-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14M5 12h14M5 17.5h8"/></symbol>
+<symbol id="i-images" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="11" rx="2"/><path d="M7 4.5h11.5A2.5 2.5 0 0 1 21 7v10"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.6H3a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 4.6 7.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.5 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 20.4 10H21a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4.5V8M9 13h.01M15 13h.01M9.5 16.5h5"/><circle cx="12" cy="4" r="1.2"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></symbol>
+<symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8.2 8.2 0 1 0 10.5 10.5Z"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10.5l4 4 4-4M5 19h14"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M8 13.5l4-4 4 4M5 5h14"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3L5.5 16 4 20Z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3V7M6.5 7l.8 12.2c0 1 .8 1.8 1.8 1.8h5.8c1 0 1.8-.8 1.8-1.8L17.5 7"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="6" r="2.6"/><circle cx="6.5" cy="12" r="2.6"/><circle cx="17" cy="18" r="2.6"/><path d="m8.8 10.7 5.9-3.4M8.8 13.3l5.9 3.4"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 4 10l4 4"/><path d="M4 10h9.5A5.5 5.5 0 0 1 19 15.5v0"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 4-4 4"/><path d="M20 10h-9.5A5.5 5.5 0 0 0 5 15.5v0"/></symbol>
+<symbol id="i-cursor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 4.5 18.5 12 13 13.4 10.4 19 6 4.5Z"/></symbol>
+<symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12V6.2a1.4 1.4 0 0 1 2.8 0V11m0-.8a1.4 1.4 0 0 1 2.8 0V12m0-.8a1.4 1.4 0 0 1 2.8 0v4.6a6 6 0 0 1-6 6h-.7a5 5 0 0 1-3.6-1.6L4.6 17a1.5 1.5 0 0 1 2.2-2l1.7 1.6"/></symbol>
+<symbol id="i-group" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-audio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h5.5A6.5 6.5 0 0 0 12 3Z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="8.5" cy="14.5" r="1"/></symbol>
+<symbol id="i-eraser" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 15 6.5-6.5a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L14 18H8l-3-3Z"/><path d="M12 18h8"/></symbol>
+<symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.6-2.4 1.9-2.4 3.4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 12h12"/></symbol>
+<symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m3.5 7 5.5-2.5L15 7l5.5-2.5v12L15 19l-6-2.5L3.5 19V7Z"/><path d="M9 4.5v12M15 7v12" opacity=".6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 5.5A2 2 0 0 0 13 3.5H6.5a2 2 0 0 0-2 2V12a2 2 0 0 0 2 2"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
+<symbol id="i-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></symbol>
+<symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11.5 12 18.5a4.2 4.2 0 0 1-6-6l7.5-7.5a2.8 2.8 0 0 1 4 4L10 16.5a1.4 1.4 0 0 1-2-2l6.5-6.5"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.6 9 19 10.6 13.6 12.2 12 17.7 10.4 12.2 5 10.6 10.4 9 12 3.5Z"/><path d="M18.5 16.5 19 18.5l2 .5-2 .5-.5 2-.5-2-2-.5 2-.5.5-2Z" opacity=".6"/></symbol>
+<symbol id="i-clapper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 9.5h17v9a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5v-9Z"/><path d="m4 9.5 1-4.2 15 2.4-1 1.8"/><path d="m7.5 5.6 2.2 3.2M12 6.6l2.2 3.2M16.5 7.6l2.2 3.2"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3.5 8 4.2-8 4.2-8-4.2 8-4.2Z"/><path d="m4 12.2 8 4.2 8-4.2M4 16.8l8 4.2 8-4.2"/></symbol>
+<symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 7.5A2 2 0 0 1 5.5 5.5h3.2l1.8 2h8A2 2 0 0 1 20.5 9.5v8a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2v-10Z"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M8 7h12M8 12h12M8 17h12M4 7h.01M4 12h.01M4 17h.01"/></symbol>
+<symbol id="i-grid" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="4" y="4" width="6.5" height="6.5" rx="1.3"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.3"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.3"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.3"/></symbol>
+<symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m4 10 8-6 8 6v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 19v-9Z"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4.5V10h5.5"/><path d="M12 8v4.5l3 1.8"/></symbol>
+</defs></svg>
+<header class="appbar">
+    <div class="brand"><span class="mark"><svg width="15" height="15"><use href="#i-logo"/></svg></span>无限画布</div>
+    <nav class="nav">
+        <a class="active" href="#"><svg width="15" height="15"><use href="#i-canvas"/></svg>画布</a>
+        <a href="#"><svg width="15" height="15"><use href="#i-image"/></svg>图像</a>
+        <a href="#"><svg width="15" height="15"><use href="#i-video"/></svg>视频</a>
+        <a href="#"><svg width="15" height="15"><use href="#i-text"/></svg>提示词</a>
+        <a href="#"><svg width="15" height="15"><use href="#i-images"/></svg>素材</a>
+        <a href="#"><svg width="15" height="15"><use href="#i-settings"/></svg>配置</a>
+    </nav>
+    <div class="right">
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-sun"/></svg></button>
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-bot"/></svg></button>
+        <span class="vsep"></span>
+        <span class="avatar">林</span>
+    </div>
+</header>
+
+<div class="lib-b">
+    <aside class="b-rail">
+        <div class="label">工作区</div>
+        <a class="active" href="#">全部画布<span class="cnt">09</span></a>
+        <a href="#">最近编辑<span class="cnt">03</span></a>
+        <a href="#">空白项目<span class="cnt">01</span></a>
+        <a href="#">已归档<span class="cnt">00</span></a>
+        <div class="spacer"></div>
+        <div class="storage">
+            <div class="t">本地存储</div>
+            <div class="v">412 MB / 1.2 GB</div>
+            <div class="bar"><i></i></div>
+            <div class="t" style="margin-top:8px">浏览器 IndexedDB</div>
+        </div>
+    </aside>
+
+    <main class="b-main">
+        <div class="b-head">
+            <div>
+                <h1>画布库</h1>
+                <div class="sub"><b>9 个项目</b> · 本地工作区 · 最近保存 2 分钟前</div>
+            </div>
+            <button class="btn primary" style="height:38px;padding:0 16px"><svg width="15" height="15"><use href="#i-plus"/></svg>新建画布</button>
+        </div>
+
+        <div class="b-search">
+            <svg width="16" height="16"><use href="#i-search"/></svg>
+            <span>搜索项目、画布或节点</span>
+            <span style="flex:1"></span>
+            <span class="mono" style="font-size:10px;letter-spacing:.1em;border:1px solid var(--line);padding:3px 6px;border-radius:4px">⌘ K</span>
+        </div>
+
+        <div class="b-section">
+            <span>全部项目 / 09</span><span>按最近编辑排序</span>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">01</span>
+            <div>
+                <h2>雾中桥 · 分镜短片</h2>
+                <div class="meta"><span>剧本改编 · 4 个画布</span><i>/</i><span>今天 10:24</span></div>
+            </div>
+            <div class="stat"><div class="v">04</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">186</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">32</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">02</span>
+            <div>
+                <h2>阿嬷 · 角色设定集</h2>
+                <div class="meta"><span>角色参考图 18 张</span><i>/</i><span>昨天 21:08</span></div>
+            </div>
+            <div class="stat"><div class="v">02</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">064</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">041</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">03</span>
+            <div>
+                <h2>品牌 TVC 提案</h2>
+                <div class="meta"><span>16:9 主视觉</span><i>/</i><span>11-18 16:40</span></div>
+            </div>
+            <div class="stat"><div class="v">01</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">028</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">012</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">04</span>
+            <div>
+                <h2>产品动效试验场</h2>
+                <div class="meta"><span>工作流调试</span><i>/</i><span>11-16 09:12</span></div>
+            </div>
+            <div class="stat"><div class="v">03</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">092</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">018</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">06</span>
+            <div>
+                <h2>城市夜行 · 概念片</h2>
+                <div class="meta"><span>夜景镜头</span><i>/</i><span>11-10 22:31</span></div>
+            </div>
+            <div class="stat"><div class="v">02</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">054</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">021</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">07</span>
+            <div>
+                <h2>产品主图批量生成</h2>
+                <div class="meta"><span>批量 96 张</span><i>/</i><span>11-08 15:07</span></div>
+            </div>
+            <div class="stat"><div class="v">01</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">132</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">096</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row">
+            <span class="idx">08</span>
+            <div>
+                <h2>角色表情测试</h2>
+                <div class="meta"><span>8 组表情</span><i>/</i><span>11-05 11:20</span></div>
+            </div>
+            <div class="stat"><div class="v">02</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">038</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">024</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="b-row" style="color:var(--text-3)">
+            <span class="idx">09</span>
+            <div>
+                <h2 style="color:var(--text-2)">未命名项目</h2>
+                <div class="meta"><span>1 个空白画布</span><i>/</i><span>10-28 14:02</span></div>
+            </div>
+            <div class="stat"><div class="v">01</div><div class="l">画布</div></div>
+            <div class="stat"><div class="v">000</div><div class="l">节点</div></div>
+            <div class="stat"><div class="v">000</div><div class="l">素材</div></div>
+            <div class="go"><svg width="16" height="16"><use href="#i-arrow-right"/></svg></div>
+        </div>
+
+        <div class="lib-foot"><span>当前 1—9 · 共 9 个项目</span><span>本地工作区 · 可导出 zip 备份</span></div>
+    </main>
+</div>
+</body>
+</html>

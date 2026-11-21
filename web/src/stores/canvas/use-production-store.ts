@@ -1,17 +1,17 @@
 import { create } from "zustand";
 
 import { readProject, updateStoredProject } from "@/services/project-storage";
-import { createEmptyScriptState } from "@/lib/canvas/script-model";
-import type { CanvasScriptOptions, CanvasScriptState } from "@/types/canvas";
+import { createEmptyProduction, normalizeProduction } from "@/lib/production/production-model";
+import type { ProductionState } from "@/types/canvas";
 
-type ScriptStore = {
+type ProductionStore = {
     projectId: string;
-    data: CanvasScriptState | null;
+    data: ProductionState | null;
     loading: boolean;
     saving: boolean;
     error: string;
-    load: (projectId: string) => Promise<void>;
-    update: (patch: Partial<CanvasScriptState>) => void;
+    load: (projectId: string, canvasId: string) => Promise<void>;
+    update: (patch: Partial<ProductionState>) => void;
     flush: () => Promise<void>;
     reset: () => void;
 };
@@ -20,34 +20,38 @@ const SAVE_DELAY = 400;
 let timer: ReturnType<typeof setTimeout> | null = null;
 let pending: Promise<void> | null = null;
 
-export const useScriptStore = create<ScriptStore>((set, get) => ({
+export const useProductionStore = create<ProductionStore>((set, get) => ({
     projectId: "",
     data: null,
     loading: false,
     saving: false,
     error: "",
-    load: async (projectId) => {
-        if (get().projectId === projectId && get().data) return;
+    load: async (projectId, canvasId) => {
+        const current = get();
+        if (current.projectId === projectId && current.data) {
+            if (canvasId && current.data.canvasId !== canvasId) set({ data: { ...current.data, canvasId } });
+            return;
+        }
         set({ projectId, loading: true, error: "" });
         try {
             const project = await readProject(projectId);
-            if (!project?.script) {
-                set({ data: createEmptyScriptState(), loading: false });
+            if (!project) {
+                set({ data: null, loading: false, error: "项目不存在" });
                 return;
             }
-            if (project.script.version !== 2) {
-                set({ data: null, loading: false, error: "剧本数据版本不兼容，请从项目备份恢复" });
+            if (!project.production) {
+                set({ data: createEmptyProduction(canvasId), loading: false });
                 return;
             }
-            set({ data: project.script, loading: false });
+            set({ data: normalizeProduction(project.production, canvasId), loading: false });
         } catch (error) {
-            set({ data: null, loading: false, error: error instanceof Error ? error.message : "剧本数据读取失败" });
+            set({ data: null, loading: false, error: error instanceof Error ? error.message : "生产数据读取失败" });
         }
     },
     update: (patch) => {
         const current = get().data;
         if (!current) return;
-        const next = { ...current, ...patch, version: 2 as const, updatedAt: new Date().toISOString() };
+        const next: ProductionState = { ...current, ...patch, version: 1, updatedAt: new Date().toISOString() };
         set({ data: next });
         if (timer) clearTimeout(timer);
         timer = setTimeout(() => void get().flush(), SAVE_DELAY);
@@ -63,10 +67,10 @@ export const useScriptStore = create<ScriptStore>((set, get) => ({
         set({ saving: true });
         pending = (async () => {
             try {
-                await updateStoredProject(projectId, { script: data });
+                await updateStoredProject(projectId, { production: data });
                 set({ error: "" });
             } catch (error) {
-                set({ error: error instanceof Error ? error.message : "剧本保存失败" });
+                set({ error: error instanceof Error ? error.message : "生产数据保存失败" });
             } finally {
                 set({ saving: false });
                 pending = null;
@@ -76,7 +80,3 @@ export const useScriptStore = create<ScriptStore>((set, get) => ({
     },
     reset: () => set({ projectId: "", data: null, loading: false, saving: false, error: "" }),
 }));
-
-export function emptyScriptState(options?: CanvasScriptOptions) {
-    return createEmptyScriptState(options);
-}

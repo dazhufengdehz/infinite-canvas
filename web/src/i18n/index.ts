@@ -26,4 +26,7 @@ export function changeAppLocale(locale: AppLocale) {
     return i18n.changeLanguage(locale);
 }
 
+/** 非组件代码（模型层、编排层）使用的翻译函数，始终绑定到应用配置好的 i18next 实例。 */
+export const t = i18n.t.bind(i18n);
+
 export default i18n;

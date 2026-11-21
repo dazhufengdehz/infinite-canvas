@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="zh-CN" class="theme-light dir-c" id="root">
+<head>
+<meta charset="utf-8">
+<title>C · 画布编辑 · 深色专业台</title>
+<link rel="stylesheet" href="mock.css">
+<script>if (location.search.includes("dark")) document.getElementById("root").className = "theme-dark dir-c";</script>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-canvas" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M9 15l2.4-4.8L14 15l1.6-2.4L18 15" opacity=".55"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17l4.2-4.2a2 2 0 0 1 2.8 0L17 17"/></symbol>
+<symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="12.5" height="12" rx="2.5"/><path d="M15.5 10.5 20 8.2v7.6l-4.5-2.3"/></symbol>
+<symbol id="i-text" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6.5h14M5 12h14M5 17.5h8"/></symbol>
+<symbol id="i-images" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="11" rx="2"/><path d="M7 4.5h11.5A2.5 2.5 0 0 1 21 7v10"/></symbol>
+<symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.2A1.6 1.6 0 0 0 7.5 19.4l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1A1.6 1.6 0 0 0 3 14.6H3a2 2 0 1 1 0-4h.2A1.6 1.6 0 0 0 4.6 7.5l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1A1.6 1.6 0 0 0 10 3.6V3a2 2 0 1 1 4 0v.2a1.6 1.6 0 0 0 2.5 1.4l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1A1.6 1.6 0 0 0 20.4 10H21a2 2 0 1 1 0 4h-.2a1.6 1.6 0 0 0-1.4 1Z"/></symbol>
+<symbol id="i-bot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 4.5V8M9 13h.01M15 13h.01M9.5 16.5h5"/><circle cx="12" cy="4" r="1.2"/></symbol>
+<symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6 7 7M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/></symbol>
+<symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10M8 10.5l4 4 4-4M5 19h14"/></symbol>
+<symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10M8 13.5l4-4 4 4M5 5h14"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3L5.5 16 4 20Z"/></symbol>
+<symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7h15M9.5 7V4.8c0-.7.6-1.3 1.3-1.3h2.4c.7 0 1.3.6 1.3 1.3V7M6.5 7l.8 12.2c0 1 .8 1.8 1.8 1.8h5.8c1 0 1.8-.8 1.8-1.8L17.5 7"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m7 10 5 5 5-5"/></symbol>
+<symbol id="i-arrow-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+<symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+<symbol id="i-panel" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="4.5" width="17" height="15" rx="2.5"/><path d="M9.5 4.5v15"/></symbol>
+<symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="17" cy="6" r="2.6"/><circle cx="6.5" cy="12" r="2.6"/><circle cx="17" cy="18" r="2.6"/><path d="m8.8 10.7 5.9-3.4M8.8 13.3l5.9 3.4"/></symbol>
+<symbol id="i-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6 4 10l4 4"/><path d="M4 10h9.5A5.5 5.5 0 0 1 19 15.5v0"/></symbol>
+<symbol id="i-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m16 6 4 4-4 4"/><path d="M20 10h-9.5A5.5 5.5 0 0 0 5 15.5v0"/></symbol>
+<symbol id="i-cursor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M6 4.5 18.5 12 13 13.4 10.4 19 6 4.5Z"/></symbol>
+<symbol id="i-hand" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 12V6.2a1.4 1.4 0 0 1 2.8 0V11m0-.8a1.4 1.4 0 0 1 2.8 0V12m0-.8a1.4 1.4 0 0 1 2.8 0v4.6a6 6 0 0 1-6 6h-.7a5 5 0 0 1-3.6-1.6L4.6 17a1.5 1.5 0 0 1 2.2-2l1.7 1.6"/></symbol>
+<symbol id="i-group" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/></symbol>
+<symbol id="i-audio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H12a2 2 0 0 1 0-4h5.5A6.5 6.5 0 0 0 12 3Z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="7.5" r="1"/><circle cx="8.5" cy="14.5" r="1"/></symbol>
+<symbol id="i-help" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.6-2.4 1.9-2.4 3.4"/><path d="M12 17h.01"/></symbol>
+<symbol id="i-zoom-out" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 12h12"/></symbol>
+<symbol id="i-zoom-in" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></symbol>
+<symbol id="i-fit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15"/></symbol>
+<symbol id="i-map" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m3.5 7 5.5-2.5L15 7l5.5-2.5v12L15 19l-6-2.5L3.5 19V7Z"/><path d="M9 4.5v12M15 7v12" opacity=".6"/></symbol>
+<symbol id="i-more" viewBox="0 0 24 24" fill="currentColor"><circle cx="6" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18" cy="12" r="1.6"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15 5.5A2 2 0 0 0 13 3.5H6.5a2 2 0 0 0-2 2V12a2 2 0 0 0 2 2"/></symbol>
+<symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8h.01"/></symbol>
+<symbol id="i-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4H4v5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></symbol>
+<symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5"/></symbol>
+<symbol id="i-paperclip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 11.5 12 18.5a4.2 4.2 0 0 1-6-6l7.5-7.5a2.8 2.8 0 0 1 4 4L10 16.5a1.4 1.4 0 0 1-2-2l6.5-6.5"/></symbol>
+<symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 13.6 9 19 10.6 13.6 12.2 12 17.7 10.4 12.2 5 10.6 10.4 9 12 3.5Z"/></symbol>
+<symbol id="i-clapper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M3.5 9.5h17v9a1.5 1.5 0 0 1-1.5 1.5H5a1.5 1.5 0 0 1-1.5-1.5v-9Z"/><path d="m4 9.5 1-4.2 15 2.4-1 1.8"/><path d="m7.5 5.6 2.2 3.2M12 6.6l2.2 3.2M16.5 7.6l2.2 3.2"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="m12 3.5 8 4.2-8 4.2-8-4.2 8-4.2Z"/><path d="m4 12.2 8 4.2 8-4.2M4 16.8l8 4.2 8-4.2"/></symbol>
+<symbol id="i-arrow-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+<symbol id="i-close" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+<symbol id="i-history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 0 2.3-5.6M4 4.5V10h5.5"/><path d="M12 8v4.5l3 1.8"/></symbol>
+<symbol id="i-save" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 4.5h11L19.5 8v11.5a1 1 0 0 1-1 1h-13a1 1 0 0 1-1-1v-14a1 1 0 0 1 1-1Z"/><path d="M8.5 4.5v5h7v-5M8.5 20v-5.5h7V20"/></symbol>
+</defs></svg>
+<div class="canvas-page">
+    <section class="stage">
+        <svg class="wires" viewBox="0 0 980 1000" preserveAspectRatio="none">
+            <path class="live" d="M210 178 C 230 178, 230 205, 250 205"/>
+            <path class="live" d="M480 205 C 500 205, 500 175, 520 175"/>
+            <circle cx="210" cy="178" r="3.5"/><circle cx="250" cy="205" r="3.5"/>
+            <circle cx="480" cy="205" r="3.5"/><circle cx="520" cy="175" r="3.5"/>
+        </svg>
+
+        <div class="node" style="left:30px;top:130px;width:180px">
+            <div class="label">TEXT · 分镜描述</div>
+            <div class="card" style="height:96px">
+                <div class="tstrip" style="background:#8a93a3"></div>
+                <div class="txt-node" style="font-size:12px">
+                    阿嬷站在雾中的桥头，缓慢收拢油纸伞。
+                </div>
+            </div>
+            <span class="nhandle r on"></span>
+        </div>
+
+        <div class="node selected" style="left:250px;top:110px;width:230px">
+            <div class="label">IMAGE · 首帧 01</div>
+            <div class="node-tools">
+                <button><svg width="13" height="13"><use href="#i-info"/></svg></button>
+                <button><svg width="13" height="13"><use href="#i-copy"/></svg></button>
+                <button><svg width="13" height="13"><use href="#i-download"/></svg></button>
+                <button><svg width="13" height="13"><use href="#i-layers"/></svg></button>
+                <span class="vsep"></span>
+                <button><svg width="13" height="13"><use href="#i-trash"/></svg></button>
+            </div>
+            <div class="card img" style="height:190px">
+                <div class="tstrip" style="background:#3b6df6"></div>
+                <img src="assets/film-still.jpg" alt="">
+            </div>
+            <span class="nhandle l on"></span><span class="nhandle r on"></span>
+        </div>
+
+        <div class="node" style="left:520px;top:110px;width:170px">
+            <div class="label">VIDEO · 镜号 03</div>
+            <div class="card img" style="height:130px">
+                <div class="tstrip" style="background:#7c3aed"></div>
+                <img src="assets/film-still.jpg" alt="">
+                <div style="position:absolute;inset:0;display:grid;place-items:center">
+                    <span style="width:34px;height:34px;border-radius:50%;background:rgba(10,12,16,.55);display:grid;place-items:center;color:#fff">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5-11-6.5Z"/></svg>
+                    </span>
+                </div>
+            </div>
+            <span class="nhandle l on"></span>
+        </div>
+
+        <div class="node" style="left:30px;top:470px;width:200px">
+            <div class="label">CONFIG · 生成参数</div>
+            <div class="card" style="height:128px">
+                <div class="tstrip" style="background:#c07a00"></div>
+                <div class="cfg-node" style="padding-top:14px">
+                    <div class="r"><span>模型</span><span>MiniMax H3</span></div>
+                    <div class="bar"></div>
+                    <div class="r"><span>尺寸</span><span>1280×720</span></div>
+                    <div class="bar"></div>
+                    <div class="r"><span>时长</span><span>5s</span></div>
+                </div>
+            </div>
+            <span class="nhandle l on"></span>
+        </div>
+
+        <div class="prompt" style="left:250px;top:334px;width:334px">
+            <div class="row1">
+                <button class="model"><svg width="12" height="12"><use href="#i-spark"/></svg><span>MiniMax H3 / I2V</span><svg width="12" height="12"><use href="#i-chev"/></svg></button>
+                <span class="spacer"></span>
+                <button class="ib"><svg width="14" height="14"><use href="#i-settings"/></svg></button>
+                <button class="ib"><svg width="14" height="14"><use href="#i-maximize"/></svg></button>
+            </div>
+            <div class="refs">
+                <span class="ref"><img src="assets/portrait-ref.jpg" alt=""></span>
+                <span class="ref"><img src="assets/film-still.jpg" alt=""></span>
+                <button class="ref-add"><svg width="13" height="13"><use href="#i-plus"/></svg></button>
+                <span class="hint mono">2 / 9 REF</span>
+            </div>
+            <textarea>阿嬷站在雾中的桥头，缓慢收拢油纸伞，衣角被风吹动。中景，35mm，低饱和暖灰调。</textarea>
+            <div class="row3">
+                <button class="tool"><svg width="12" height="12"><use href="#i-layers"/></svg>参考</button>
+                <button class="tool"><svg width="12" height="12"><use href="#i-text"/></svg>提示词库</button>
+                <span class="spacer"></span>
+                <button class="gen">生成<svg width="12" height="12"><use href="#i-arrow-right"/></svg></button>
+            </div>
+        </div>
+
+        <div class="insp">
+            <div class="hd"><svg width="14" height="14"><use href="#i-settings"/></svg>工作流参数<span class="mono">Z_IMAGE / T2I</span></div>
+            <div class="grp">
+                <div class="k">MODEL</div>
+                <div class="segs"><span class="on">moss</span><span>z_image</span><span>qwen</span></div>
+            </div>
+            <div class="grp">
+                <div class="k">RESOLUTION</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--text-2)">
+                    <span>width</span><b class="mono" style="color:var(--text)">1024</b>
+                </div>
+                <div class="slider"><i style="width:52%"></i><b style="left:52%"></b></div>
+                <div style="display:flex;align-items:center;justify-content:space-between;font-size:11.5px;color:var(--text-2)">
+                    <span>height</span><b class="mono" style="color:var(--text)">1536</b>
+                </div>
+                <div class="slider"><i style="width:74%"></i><b style="left:74%"></b></div>
+            </div>
+            <div class="grp">
+                <div class="k">SAMPLING</div>
+                <div class="row"><span>steps</span><b>28</b></div>
+                <div class="row"><span>cfg</span><b>4.5</b></div>
+                <div class="row"><span>seed</span><b>118042</b></div>
+            </div>
+            <div class="foot">
+                <button class="btn sm">重置</button>
+                <button class="btn sm primary">应用到节点</button>
+            </div>
+        </div>
+
+        <div class="canvas-tools">
+            <button class="tb active"><svg width="16" height="16"><use href="#i-cursor"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-hand"/></svg></button>
+            <span class="tsep"></span>
+            <button class="tb"><svg width="16" height="16"><use href="#i-undo"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-redo"/></svg></button>
+            <span class="tsep"></span>
+            <button class="tb"><svg width="16" height="16"><use href="#i-text"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-image"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-video"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-audio"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-settings"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-group"/></svg></button>
+            <span class="tsep"></span>
+            <button class="tb"><svg width="16" height="16"><use href="#i-palette"/></svg></button>
+            <button class="tb"><svg width="16" height="16"><use href="#i-trash"/></svg></button>
+        </div>
+
+        <div class="zoom">
+            <button class="zbtn"><svg width="14" height="14"><use href="#i-map"/></svg></button>
+            <button class="zbtn"><svg width="14" height="14"><use href="#i-fit"/></svg></button>
+            <span style="width:8px"></span>
+            <button class="zbtn"><svg width="14" height="14"><use href="#i-zoom-out"/></svg></button>
+            <span class="val">100%</span>
+            <button class="zbtn"><svg width="14" height="14"><use href="#i-zoom-in"/></svg></button>
+        </div>
+    </section>
+
+    <div class="canvas-top">
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-arrow-left"/></svg></button>
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-panel"/></svg></button>
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-menu"/></svg></button>
+        <span class="title">雾中桥 · 分镜短片</span>
+        <button class="doc">分镜-01<svg width="12" height="12"><use href="#i-chev"/></svg></button>
+        <button class="icon-btn"><svg width="16" height="16"><use href="#i-save"/></svg></button>
+        <span class="saved">已保存 10:24</span>
+        <span class="spacer"></span>
+        <span class="top-btn"><span class="live"><span class="dot"></span>ComfyUI 8188</span></span>
+        <button class="top-btn"><svg width="14" height="14"><use href="#i-share"/></svg>协作</button>
+        <button class="top-btn agent-on"><svg width="14" height="14"><use href="#i-bot"/></svg>Agent</button>
+        <span class="avatar">林</span>
+    </div>
+
+    <aside class="panel-a">
+        <div class="tabs"><button class="active">画布</button><button>素材</button><button>提示词</button></div>
+        <div class="filters">
+            <div class="searchline"><svg width="13" height="13"><use href="#i-search"/></svg>筛选节点</div>
+            <div class="chiprow"><span class="chip active">全部 12</span><span class="chip">图片 5</span><span class="chip">视频 2</span></div>
+        </div>
+        <div class="node-list">
+            <div class="nrow active">
+                <span class="thumb"><img src="assets/film-still.jpg" alt=""></span>
+                <div class="nt"><div class="t">首帧 01 · 雾中桥</div><div class="m">IMAGE · 1024×1536</div></div>
+            </div>
+            <div class="nrow">
+                <span class="thumb"><img src="assets/portrait-ref.jpg" alt=""></span>
+                <div class="nt"><div class="t">阿嬷 · 角色参考</div><div class="m">IMAGE · 1024×1536</div></div>
+            </div>
+            <div class="nrow">
+                <span class="thumb"><svg width="17" height="17"><use href="#i-video"/></svg></span>
+                <div class="nt"><div class="t">镜号 03 · 5s</div><div class="m">VIDEO · 1280×720</div></div>
+            </div>
+            <div class="nrow">
+                <span class="thumb"><svg width="17" height="17"><use href="#i-text"/></svg></span>
+                <div class="nt"><div class="t">分镜描述</div><div class="m">TEXT · 42 字</div></div>
+            </div>
+            <div class="nrow">
+                <span class="thumb"><svg width="17" height="17"><use href="#i-settings"/></svg></span>
+                <div class="nt"><div class="t">生成参数</div><div class="m">CONFIG · MiniMax H3</div></div>
+            </div>
+            <div class="nrow">
+                <span class="thumb"><svg width="17" height="17"><use href="#i-audio"/></svg></span>
+                <div class="nt"><div class="t">环境音 · 雨</div><div class="m">AUDIO · 00:12</div></div>
+            </div>
+        </div>
+        <div class="pfoot"><span>选择 / 导出</span><span class="mono">12 NODES</span></div>
+    </aside>
+
+    <aside class="agent">
+        <div class="hd">
+            <svg width="15" height="15"><use href="#i-bot"/></svg>
+            <span class="ttl">Agent</span>
+            <span class="st"><span class="dot"></span>已连接</span>
+            <span class="spacer"></span>
+            <button class="icon-btn sm"><svg width="14" height="14"><use href="#i-history"/></svg></button>
+            <button class="icon-btn sm"><svg width="14" height="14"><use href="#i-close"/></svg></button>
+        </div>
+        <div class="tabs"><button class="active">对话</button><button>历史</button><button>技能</button></div>
+        <div class="thread">
+            <div class="msg-user">把这个镜头补一个远景版本，保持同样的雾天光线，参考阿嬷的设定图。</div>
+            <div class="msg-ai">
+                <p>已按分镜 03 的设定生成远景，沿用 2 张参考图与当前工作流（MiniMax H3）。</p>
+                <div class="gen-card">
+                    <img src="assets/film-still.jpg" alt="">
+                    <div class="cap"><span class="mono">1024×576 · 5s</span><span>已加入画布</span></div>
+                </div>
+            </div>
+            <div class="msg-ai hint mono" style="font-size:9.5px;letter-spacing:.08em">TOOL · GENERATE VIDEO · 2 REFS · 18S</div>
+        </div>
+        <div class="composer">
+            <div class="box">
+                <div class="ph">描述你想要的改动，或 @ 引用画布节点…</div>
+                <div class="r">
+                    <button class="icon-btn sm"><svg width="14" height="14"><use href="#i-paperclip"/></svg></button>
+                    <button class="icon-btn sm"><svg width="14" height="14"><use href="#i-layers"/></svg></button>
+                    <span class="spacer"></span>
+                    <span class="mono" style="font-size:9.5px;color:var(--text-3)">MINIMAX H3</span>
+                    <button class="send"><svg width="13" height="13"><use href="#i-send"/></svg></button>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+</body>
+</html>

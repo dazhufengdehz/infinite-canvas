@@ -171,7 +171,7 @@ export async function createStoredProject(project: CanvasProject, canvases: Canv
     }
 }
 
-export async function updateStoredProject(id: string, patch: Partial<Pick<CanvasProject, "title" | "activeCanvasId" | "script">>) {
+export async function updateStoredProject(id: string, patch: Partial<Pick<CanvasProject, "title" | "activeCanvasId" | "production">>) {
     if (await hasStorageServer()) {
         return storageRequest<CanvasProject>(`/projects/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) });
     }

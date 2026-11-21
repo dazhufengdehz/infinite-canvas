@@ -58,11 +58,11 @@ export default function CanvasPage() {
     const visibleProjects = projects
         .filter((project) => {
             if (filter === "empty") return project.nodeCount === 0;
-            if (filter === "recent") return Date.now() - project.updatedAt <= RECENT_WINDOW;
+            if (filter === "recent") return Date.now() - Date.parse(project.updatedAt) <= RECENT_WINDOW;
             return true;
         })
         .filter((project) => !keyword || project.title.toLowerCase().includes(keyword))
-        .sort((a, b) => (sort === "name" ? a.title.localeCompare(b.title) : b.updatedAt - a.updatedAt));
+        .sort((a, b) => (sort === "name" ? a.title.localeCompare(b.title) : Date.parse(b.updatedAt) - Date.parse(a.updatedAt)));
     const enterProject = (id: string) => {
         const agentHash = hasAgentUrlBootstrap(window.location.hash) ? window.location.hash : "";
         navigate(`/canvas/${id}${agentQuery}${agentHash}`, { replace: Boolean(agentHash) });
