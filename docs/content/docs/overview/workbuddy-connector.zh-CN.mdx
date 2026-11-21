@@ -92,6 +92,10 @@ AI 将自动调用 `canvas_open`，通过 `infinite-canvas://` 唤起已安装�
 | 工具名称 | 功能说明 |
 | :--- | :--- |
 | `canvas_open` | 默认唤起桌面客户端（支持 `new` / `recent` / `choose` 模式），显式传入 `url` 时打开网页，并自动完成凭据注入与配对 |
+| `canvas_list_projects` | 列出全部项目（标题、创建/更新时间、节点数与连线数） |
+| `canvas_create_project` | 新建项目，桌面端可选 `storagePath` 指定本地存放文件夹 |
+| `canvas_update_project` | 重命名项目 |
+| `canvas_delete_projects` | 删除一个或多个项目（桌面端自选文件夹不会被删除） |
 | `canvas_get_state` | 获取当前画布所有节点、连线关系及视口信息 |
 | `canvas_get_selection` | 获取当前画布中被用户鼠标选中的节点集合 |
 | `canvas_create_text_node` | 创建单个文本内容节点 |

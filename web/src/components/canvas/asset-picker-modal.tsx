@@ -83,14 +83,14 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
 
     if (kind === "text") {
         coverElement = (
-            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-stone-100 p-3 text-center text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-surface-sunken p-3 text-center text-xs text-ink-faint">
                 <FileText className="size-6 text-blue-500" />
                 <span className="line-clamp-2 px-1 text-[11px] leading-tight opacity-75">{title}</span>
             </div>
         );
     } else if (kind === "audio") {
         coverElement = (
-            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-stone-100 p-3 text-center text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-surface-sunken p-3 text-center text-xs text-ink-faint">
                 <Music2 className="size-6 text-purple-500" />
                 <span className="line-clamp-1">{title}</span>
             </div>
@@ -106,14 +106,14 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
         );
     } else if (kind === "video") {
         coverElement = (
-            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-stone-100 p-3 text-center text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-surface-sunken p-3 text-center text-xs text-ink-faint">
                 <Video className="size-6 text-orange-500" />
                 <span className="line-clamp-1">{title}</span>
             </div>
         );
     } else {
         coverElement = (
-            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-stone-100 p-3 text-center text-xs text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+            <div className="flex aspect-[4/3] flex-col items-center justify-center gap-1.5 bg-surface-sunken p-3 text-center text-xs text-ink-faint">
                 <ImageIcon className="size-6 text-emerald-500" />
                 <span className="line-clamp-1">{title}</span>
             </div>
@@ -123,17 +123,17 @@ function PickerCard({ title, kind, cover, onClick }: { title: string; kind: stri
     return (
         <button
             type="button"
-            className="group relative w-full cursor-pointer overflow-hidden rounded-lg border border-stone-200 bg-white text-left transition hover:border-stone-400 hover:shadow-md dark:border-stone-700 dark:bg-stone-900 dark:hover:border-stone-500"
+            className="group relative w-full cursor-pointer overflow-hidden rounded-lg border border-hairline bg-surface text-left transition hover:border-hairline-strong hover:shadow-md"
             onClick={onClick}
         >
             {coverElement}
             <div className="p-2.5">
                 <div className="flex items-center justify-between gap-2">
-                    <span className="line-clamp-1 text-xs font-medium text-stone-800 dark:text-stone-200">{title}</span>
+                    <span className="line-clamp-1 text-xs font-medium text-ink">{title}</span>
                     <Tag className="m-0 shrink-0 text-[10px]">{t(`assets.kinds.${kind}`)}</Tag>
                 </div>
             </div>
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-stone-950/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-stone-950/55 group-hover:opacity-100">
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/0 text-sm font-medium text-white opacity-0 transition group-hover:bg-black/55 group-hover:opacity-100">
                 {t("canvas.assetPicker.insert")}
             </div>
         </button>
@@ -178,7 +178,7 @@ function AssetListTab({ assets, onInsert, onRemove }: { assets: Asset[]; onInser
                 <Input
                     className="w-56"
                     size="small"
-                    prefix={<Search className="size-3.5 text-stone-400" />}
+                    prefix={<Search className="size-3.5 text-ink-faint" />}
                     placeholder={t("canvas.assetPicker.search")}
                     value={keyword}
                     allowClear
@@ -219,7 +219,7 @@ function AssetListTab({ assets, onInsert, onRemove }: { assets: Asset[]; onInser
                                     type="button"
                                     title={t("canvas.assetPicker.remove")}
                                     aria-label={t("canvas.assetPicker.remove")}
-                                    className="absolute right-2 top-2 z-10 rounded-md bg-white/85 p-1.5 text-stone-500 opacity-0 transition hover:bg-white hover:text-red-500 focus:opacity-100 group-hover:opacity-100 dark:bg-stone-900/85 dark:text-stone-400 dark:hover:bg-stone-900"
+                                    className="absolute right-2 top-2 z-10 rounded-md bg-surface/85 p-1.5 text-ink-faint opacity-0 transition hover:bg-surface hover:text-danger focus:opacity-100 group-hover:opacity-100"
                                     onClick={() => onRemove(asset)}
                                 >
                                     <Trash2 className="size-4" />

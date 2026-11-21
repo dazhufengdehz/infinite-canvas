@@ -142,8 +142,8 @@ beforeEach(() => {
     harness.nodeProps.clear();
     harness.storedImages.clear();
     harness.config = { ...defaultConfig, count: "1", canvasImageCount: "1" };
-    harness.project = { id: "test-project", title: "测试项目", activeCanvasId: "test-canvas", revision: 1, createdAt: "", updatedAt: "" };
-    harness.canvas = { id: "test-canvas", projectId: "test-project", title: "测试画布", nodes: [], connections: [], chatSessions: [], activeChatId: null, backgroundMode: "lines", showImageInfo: false, viewport: { x: 0, y: 0, k: 1 }, revision: 1, createdAt: "", updatedAt: "" };
+    harness.project = { id: "test-project", schemaVersion: 2, title: "测试项目", activeCanvasId: "test-canvas", revision: 1, createdAt: "", updatedAt: "" };
+    harness.canvas = { id: "test-canvas", schemaVersion: 2, projectId: "test-project", title: "测试画布", nodes: [], connections: [], chatSessions: [], activeChatId: null, backgroundMode: "lines", showImageInfo: false, viewport: { x: 0, y: 0, k: 1 }, revision: 1, createdAt: "", updatedAt: "" };
     root = createRoot(document.createElement("div"));
     rejectRequests(failure());
     harness.uploadImage.mockImplementation(async (dataUrl: string) => {

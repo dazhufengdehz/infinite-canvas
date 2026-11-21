@@ -342,6 +342,9 @@ function siteToolSummary(name: string, result: unknown, input: unknown) {
     const data = result && typeof result === "object" ? (result as Record<string, unknown>) : {};
     if (name === "site_navigate") return tr("openedRoute", { route: routeName(stringText(objectField(input, "path")) || "/") });
     if (name === "canvas_list_projects") return tr("canvasCount", { count: numberField(data, "total") });
+    if (name === "canvas_create_project") return tr("projectCreated", { title: stringText(data.title) });
+    if (name === "canvas_update_project") return tr("projectRenamed", { title: stringText(data.title) });
+    if (name === "canvas_delete_projects") return tr("projectDeleted", { count: Array.isArray(data.deleted) ? data.deleted.length : 0 });
     if (name === "prompts_search") return tr("promptCount", { count: numberField(data, "total") });
     if (name === "assets_list") return tr("assetCount", { count: numberField(data, "total") });
     if (name === "assets_add") return tr("assetAdded");

@@ -71,7 +71,7 @@ export function CanvasInterruptedBanner({
                         type="button"
                         onClick={onDismiss}
                         aria-label={t("canvas.interruptedBanner.ignore")}
-                        className="grid size-6 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10"
+                        className="grid size-6 place-items-center rounded-full transition hover:bg-surface-hover"
                         style={{ color: theme.node.text }}
                     >
                         <X className="size-3.5 opacity-60 hover:opacity-100" />

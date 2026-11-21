@@ -106,7 +106,7 @@ type AgentStore = {
 export const CANVAS_AGENT_PANEL_MOTION_MS = 500;
 
 export const useAgentStore = create<AgentStore>((set, get) => ({
-    width: typeof window === "undefined" ? 440 : Number(localStorage.getItem("canvas-agent-panel-width")) || 440,
+    width: typeof window === "undefined" ? 340 : Number(localStorage.getItem("canvas-agent-panel-width")) || 340,
     panelOpen: false,
     panelMounted: true,
     panelClosing: false,

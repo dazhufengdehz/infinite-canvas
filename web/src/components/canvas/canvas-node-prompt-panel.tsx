@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, AtSign, LoaderCircle, Maximize2, Minimize2, RefreshCw, Square } from "lucide-react";
+import { ArrowUp, AtSign, Layers, LoaderCircle, Maximize2, Minimize2, RefreshCw, Square } from "lucide-react";
 import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -14,6 +14,7 @@ import { buildWorkflowModelProfiles, CUSTOM_WORKFLOW_CATEGORIES, customWorkflowH
 import { getNodeResourceCounts } from "@/lib/canvas/canvas-node-geometry";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
@@ -22,6 +23,7 @@ import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
 import { CanvasNodeType, type CanvasGenerationIntent, type CanvasGenerationMode, type CanvasNodeData } from "@/types/canvas";
 import { getCanvasAllCategorizedResources, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
+import type { CrossCanvasAssetItem } from "./canvas-resource-mention-menu";
 import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
 
 export type CanvasNodeGenerationMode = CanvasGenerationMode;
@@ -34,6 +36,8 @@ type CanvasNodePromptPanelProps = {
     onGenerate: (nodeId: string, mode: CanvasNodeGenerationMode, prompt: string, intent?: CanvasGenerationIntent) => void;
     onStop: (nodeId: string) => void;
     mentionReferences?: CanvasResourceReference[];
+    crossCanvasAssets?: CrossCanvasAssetItem[];
+    onReferenceCrossCanvasAsset?: (item: CrossCanvasAssetItem) => CanvasResourceReference | null | Promise<CanvasResourceReference | null>;
     nodes: CanvasNodeData[];
     connectedNodes?: CanvasNodeData[];
     onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
@@ -55,6 +59,8 @@ export function CanvasNodePromptPanel({
     onGenerate,
     onStop,
     mentionReferences = [],
+    crossCanvasAssets,
+    onReferenceCrossCanvasAsset,
     connectedNodes = [],
     onDisconnectReference,
     onConnectReference,
@@ -70,12 +76,25 @@ export function CanvasNodePromptPanel({
     const globalConfig = useEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const projectCanvases = useCanvasStore((state) => state.canvases);
+    const sourceCanvasTitle = useMemo(() => {
+        const sourceCanvasId = node.metadata?.sourceCanvasId;
+        if (!sourceCanvasId) return "";
+        return projectCanvases.find((canvas) => canvas.id === sourceCanvasId)?.title || t("canvas.promptPanel.sourceCanvasMissing");
+    }, [node.metadata?.sourceCanvasId, projectCanvases, t]);
+    const sourceCanvasHint = sourceCanvasTitle ? (
+        <div className="mb-1.5 flex items-center gap-1 text-[11px]" style={{ color: theme.text.secondary }}>
+            <Layers className="size-3 shrink-0" />
+            <span className="truncate">{t("canvas.promptPanel.sourceCanvas", { title: sourceCanvasTitle })}</span>
+        </div>
+    ) : null;
     const mode = modeOverride ?? defaultMode(node.type);
     const config = buildNodeConfig(globalConfig, node, mode);
     const activeChannel = globalConfig.channels.find((channel) => channel.id === (node.metadata?.channelId || globalConfig.channelId)) || globalConfig.channels[0];
     const nodeWorkflow = node.metadata?.workflowId ? findWorkflow(globalConfig, activeChannel?.id, node.metadata.workflowId) : undefined;
     const workflowCategory = nodeWorkflow ? nodeWorkflow.category : undefined;
     const videoTool = mode === "video" && (workflowCategory === "faceRefine" || workflowCategory === "depthVideo") ? workflowCategory : undefined;
+    const hasInlineVideoSettings = mode === "video" && !videoTool;
     const channelWorkflows = getChannelWorkflows(activeChannel, CUSTOM_WORKFLOW_CATEGORIES[mode]);
     const selectedWorkflow = videoTool ? nodeWorkflow : channelWorkflows.find((workflow) => workflow.id === node.metadata?.workflowId)
         || channelWorkflows.find((workflow) => (workflow.isBuiltin ? resolveModelIdFromWorkflowId(workflow.id) : workflow.id) === node.metadata?.modelId)
@@ -95,7 +114,7 @@ export function CanvasNodePromptPanel({
     const hasSavedToolResult = Boolean(videoTool && hasVideoContent);
     const savedVideoInput = node.metadata?.generationReferences?.find((reference) => reference.kind === "video");
     const savedToolInputSummary = hasSavedToolResult ? (
-        <div className="mb-2 space-y-1 text-xs" style={{ color: theme.node.muted }}>
+        <div className="mb-2 space-y-1 text-xs" style={{ color: theme.text.secondary }}>
             <div>{t("canvas.promptPanel.toolInputs", { title: nodes.find((input) => input.id === savedVideoInput?.nodeId)?.title || t("assets.kinds.video"), count: node.metadata?.generationReferences?.filter((reference) => reference.kind === "image").length || 0 })}</div>
             <div className="text-[11px]">{t("canvas.promptPanel.toolInputsHint")}</div>
         </div>
@@ -128,7 +147,7 @@ export function CanvasNodePromptPanel({
     const savedDraftImageCount = videoTool && !hasVideoContent && connectedResources.images === 0
         ? node.metadata?.generationReferences?.filter((reference) => reference.kind === "image" && !nodes.some((input) => input.id === reference.nodeId)).length || 0
         : 0;
-    const savedDraftReferenceHint = savedDraftImageCount > 0 ? <div className="mb-2 text-[11px]" style={{ color: theme.node.muted }}>{t("canvas.promptPanel.savedToolImages", { count: savedDraftImageCount })}</div> : null;
+    const savedDraftReferenceHint = savedDraftImageCount > 0 ? <div className="mb-2 text-[11px]" style={{ color: theme.text.secondary }}>{t("canvas.promptPanel.savedToolImages", { count: savedDraftImageCount })}</div> : null;
 
     const videoModelAvailability = useMemo(() => {
         if (mode !== "video" || videoTool) return { isAvailable: true, reasons: [] };
@@ -237,7 +256,7 @@ export function CanvasNodePromptPanel({
                     content: (
                         <div className="space-y-2 pt-2 text-xs">
                             <div>当前视频节点存在以下约束限制，请修正后再生成：</div>
-                            <div className="space-y-1 rounded bg-stone-100 p-2 dark:bg-stone-800">
+                            <div className="space-y-1 rounded bg-surface-sunken p-2 text-ink-soft">
                                 {videoModelAvailability.reasons.map((r, i) => (
                                     <div key={i} className="flex items-start gap-1.5">
                                         <span className="text-amber-500 font-bold">•</span>
@@ -261,7 +280,7 @@ export function CanvasNodePromptPanel({
                     content: (
                         <div className="space-y-2 pt-2 text-xs">
                             <div>当前图片节点存在以下约束限制，请修正后再生成：</div>
-                            <div className="space-y-1 rounded bg-stone-100 p-2 dark:bg-stone-800">
+                            <div className="space-y-1 rounded bg-surface-sunken p-2 text-ink-soft">
                                 {imageModelAvailability.reasons.map((r, i) => (
                                     <div key={i} className="flex items-start gap-1.5">
                                         <span className="text-amber-500 font-bold">•</span>
@@ -294,13 +313,153 @@ export function CanvasNodePromptPanel({
     return (
         <div
             data-canvas-no-zoom
-            className="flex min-h-0 flex-col rounded-xl border p-2 shadow-none"
-            style={{ maxHeight: "var(--canvas-node-panel-max-height, none)", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+            className="flex min-h-0 flex-col rounded-2xl border p-2.5 shadow-float backdrop-blur-xl"
+            style={{ maxHeight: "var(--canvas-node-panel-max-height, none)", background: theme.accent.chrome, borderColor: theme.hairline.base, color: theme.text.primary }}
             onMouseDown={(event) => event.stopPropagation()}
             onPointerDown={(event) => event.stopPropagation()}
             onWheel={(event) => event.stopPropagation()}
         >
+            <div
+                data-canvas-node-panel-toolbar
+                className={hasInlineVideoSettings
+                    ? "mb-1.5 grid min-w-0 shrink-0 grid-cols-[minmax(150px,1.5fr)_minmax(0,4fr)_26px] items-center gap-1.5"
+                    : "mb-1.5 flex min-w-0 shrink-0 items-center gap-1.5 overflow-x-auto overscroll-x-contain [&>*]:shrink-0"}
+            >
+                {mode === "image" ? (
+                    <>
+                        <ImageModelPicker
+                            channelId={node.metadata?.channelId || config.channelId}
+                            modelId={effectiveModelId}
+                            connectedImages={connectedResources.images}
+                            connectedVideos={connectedResources.videos}
+                            connectedAudios={connectedResources.audios}
+                            promptText={prompt}
+                            onChange={(nextChannelId, nextModelId) => {
+                                const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.image);
+                                onConfigChange(node.id, {
+                                    channelId: nextChannelId,
+                                    modelId: nextModelId,
+                                    workflowId: matchingWf?.id,
+                                });
+                            }}
+                        />
+                        <CanvasImageSettingsPopover
+                            modelId={effectiveModelId}
+                            profile={nodeProfile}
+                            config={config}
+                            placement="topLeft"
+                            buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
+                            onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
+                            onMissingConfig={() => openConfigDialog(true)}
+                            onOpenChange={handleSettingsOpenChange}
+                        />
+                    </>
+                ) : mode === "video" ? videoTool ? (
+                    <span className="truncate text-xs" style={{ color: theme.text.tertiary }}>{t(videoTool === "faceRefine" ? "canvas.faceRefine.title" : "canvas.nodeToolbar.depthVideo")}</span>
+                ) : (
+                    <>
+                        <VideoModelPicker
+                            channelId={node.metadata?.channelId || config.channelId}
+                            modelId={effectiveModelId}
+                            connectedImages={connectedResources.images}
+                            connectedVideos={connectedResources.videos}
+                            connectedAudios={connectedResources.audios}
+                            promptText={prompt}
+                            className="!w-full"
+                            onChange={(nextChannelId, nextModelId, profile) => {
+                                const nextVideoMode = profile.category === "frameVideo" ? "frame" : "omni";
+                                const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.video);
+                                onConfigChange(node.id, {
+                                    channelId: nextChannelId,
+                                    modelId: nextModelId,
+                                    videoMode: nextVideoMode,
+                                    workflowId: matchingWf?.id,
+                                });
+                            }}
+                        />
+                        <CanvasVideoSettingsPopover
+                            inline
+                            modelId={effectiveModelId}
+                            profile={nodeProfile}
+                            allowModeSwitch={!nodeCustomWorkflow || isEasyWorkflow}
+                            size={node.metadata?.size || config.size}
+                            duration={node.metadata?.seconds || config.videoSeconds}
+                            videoMode={(node.metadata?.videoMode as "omni" | "frame") || (config.videoMode as "omni" | "frame")}
+                            onParamChange={(patch) => {
+                                onConfigChange(node.id, isEasyWorkflow && patch.videoMode ? { videoMode: patch.videoMode } : patch);
+                            }}
+                            config={config}
+                            onConfigChange={(key, value) => onConfigChange(node.id, key === "videoMode" && isEasyWorkflow ? { videoMode: value } : videoConfigPatch(key, value, config, node.metadata?.modelId))}
+                        />
+                    </>
+                ) : mode === "audio" ? (
+                    <>
+                        <AudioModelPicker
+                            channelId={node.metadata?.channelId || config.channelId}
+                            modelId={effectiveModelId}
+                            connectedImages={connectedResources.images}
+                            connectedVideos={connectedResources.videos}
+                            connectedAudios={connectedResources.audios}
+                            promptText={prompt}
+                            onChange={(nextChannelId, nextModelId) => {
+                                const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.audio);
+                                onConfigChange(node.id, {
+                                    channelId: nextChannelId,
+                                    modelId: nextModelId,
+                                    workflowId: matchingWf?.id,
+                                });
+                            }}
+                        />
+                        <CanvasAudioSettingsPopover
+                            config={config}
+                            modelId={effectiveModelId}
+                            profile={nodeProfile}
+                            buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
+                            onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))}
+                            onOpenChange={handleSettingsOpenChange}
+                        />
+                    </>
+                ) : (
+                    <>
+                        <TextModelPicker
+                            channelId={node.metadata?.channelId || config.channelId}
+                            modelId={effectiveModelId}
+                            connectedImages={connectedResources.images}
+                            connectedVideos={connectedResources.videos}
+                            connectedAudios={connectedResources.audios}
+                            promptText={prompt}
+                            onChange={(nextChannelId, nextModelId) => {
+                                const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
+                                const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.text);
+                                onConfigChange(node.id, {
+                                    channelId: nextChannelId,
+                                    modelId: nextModelId,
+                                    workflowId: matchingWf?.id,
+                                });
+                            }}
+                        />
+                        <CanvasTextSettingsPopover
+                            modelId={effectiveModelId}
+                            maxLength={node.metadata?.maxLength}
+                            thinking={node.metadata?.thinking}
+                            onParamChange={(patch) => onConfigChange(node.id, patch)}
+                            config={config}
+                            count={node.metadata?.textCount || 1}
+                            buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
+                            onCountChange={(textCount) => onConfigChange(node.id, { textCount })}
+                            onOpenChange={handleSettingsOpenChange}
+                        />
+                    </>
+                )}
+                <Tooltip title={t("canvas.promptPanel.expandEditor")}>
+                    <Button type="text" className="!ml-auto !h-[26px] !w-[26px] !min-w-[26px] shrink-0 !rounded-md !bg-transparent !p-0" style={{ color: theme.text.primary }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
+                </Tooltip>
+            </div>
             <div data-canvas-node-panel-body className="thin-scrollbar min-h-0 overflow-y-auto overscroll-contain">
+            {sourceCanvasHint}
             {savedToolInputSummary || <CanvasNodeReferenceBar
                 nodeId={node.id}
                 nodes={nodes}
@@ -314,25 +473,25 @@ export function CanvasNodePromptPanel({
             />}
             {savedDraftReferenceHint}
             {mode === "text" && connectedResources.images > 0 && (
-                <div className="mb-1.5 flex items-center gap-1 overflow-x-auto py-0.5 text-xs" style={{ color: theme.node.muted }}>
+                <div className="mb-1.5 flex items-center gap-1 overflow-x-auto py-0.5 text-xs" style={{ color: theme.text.secondary }}>
                     <span className="shrink-0">快捷指令:</span>
                     <button
                         type="button"
-                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-surface-hover"
                         onClick={() => updatePrompt("请根据参考图片反推一段适合用于 AI 生图的提示词。涵盖主体、构图、光影、色彩与质感。")}
                     >
                         生图反推
                     </button>
                     <button
                         type="button"
-                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-surface-hover"
                         onClick={() => updatePrompt("详细分析提取这张图片的视觉风格、艺术流派、配色方案与渲染材质。")}
                     >
                         风格提取
                     </button>
                     <button
                         type="button"
-                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
+                        className="shrink-0 rounded px-2 py-0.5 text-xs transition hover:bg-surface-hover"
                         onClick={() => updatePrompt("用详细的自然语言描述画面中的主体、人物姿态、镜头机位与环境分镜。")}
                     >
                         分镜描述
@@ -344,155 +503,25 @@ export function CanvasNodePromptPanel({
                 references={hasSavedToolResult ? [] : mentionReferences}
                 categorizedResources={categorizedResources}
                 showMotionPresets={mode === "video"}
+                crossCanvasAssets={crossCanvasAssets}
+                onReferenceCrossCanvasAsset={onReferenceCrossCanvasAsset}
                 onConnectResource={(sourceNodeId) => (onConnectReference ? onConnectReference(sourceNodeId, node.id) : true)}
                 triggerMentionRef={triggerMentionRef}
                 onChange={updatePrompt}
                 onSubmit={submit}
                 className="thin-scrollbar h-32 w-full cursor-text resize-none rounded-lg px-2.5 py-2 text-sm leading-5 outline-none"
-                style={{ background: "transparent", color: theme.node.text }}
+                style={{ background: "transparent", color: theme.text.primary }}
                 placeholder={promptPlaceholder}
             />
             </div>
 
-            <div data-canvas-node-panel-actions className="mt-1.5 flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-1.5">
-                <div className="thin-scrollbar flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
-                    <Tooltip title={t("canvas.promptPanel.expandEditor")}>
-                        <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-lg !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
-                    </Tooltip>
-                    {mode === "image" ? (
-                        <>
-                            <ImageModelPicker
-                                channelId={node.metadata?.channelId || config.channelId}
-                                modelId={effectiveModelId}
-                                connectedImages={connectedResources.images}
-                                connectedVideos={connectedResources.videos}
-                                connectedAudios={connectedResources.audios}
-                                promptText={prompt}
-                                onChange={(nextChannelId, nextModelId) => {
-                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.image);
-                                    onConfigChange(node.id, {
-                                        channelId: nextChannelId,
-                                        modelId: nextModelId,
-                                        workflowId: matchingWf?.id,
-                                    });
-                                }}
-                            />
-                            <CanvasImageSettingsPopover
-                                modelId={effectiveModelId}
-                                profile={nodeProfile}
-                                config={config}
-                                placement="topLeft"
-                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
-                                onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
-                                onMissingConfig={() => openConfigDialog(true)}
-                                onOpenChange={handleSettingsOpenChange}
-                            />
-                        </>
-                    ) : mode === "video" ? videoTool ? (
-                        <span className="truncate text-xs" style={{ color: theme.node.placeholder }}>{t(videoTool === "faceRefine" ? "canvas.faceRefine.title" : "canvas.nodeToolbar.depthVideo")}</span>
-                    ) : (
-                        <>
-                            <VideoModelPicker
-                                channelId={node.metadata?.channelId || config.channelId}
-                                modelId={effectiveModelId}
-                                connectedImages={connectedResources.images}
-                                connectedVideos={connectedResources.videos}
-                                connectedAudios={connectedResources.audios}
-                                promptText={prompt}
-                                onChange={(nextChannelId, nextModelId, profile) => {
-                                    const nextVideoMode = profile.category === "frameVideo" ? "frame" : "omni";
-                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.video);
-                                    onConfigChange(node.id, {
-                                        channelId: nextChannelId,
-                                        modelId: nextModelId,
-                                        videoMode: nextVideoMode,
-                                        workflowId: matchingWf?.id,
-                                    });
-                                }}
-                            />
-                            <CanvasVideoSettingsPopover
-                                modelId={effectiveModelId}
-                                profile={nodeProfile}
-                                allowModeSwitch={!nodeCustomWorkflow || isEasyWorkflow}
-                                size={node.metadata?.size || config.size}
-                                duration={node.metadata?.seconds || config.videoSeconds}
-                                videoMode={(node.metadata?.videoMode as "omni" | "frame") || (config.videoMode as "omni" | "frame")}
-                                onParamChange={(patch) => {
-                                    onConfigChange(node.id, isEasyWorkflow && patch.videoMode ? { videoMode: patch.videoMode } : patch);
-                                }}
-                                config={config}
-                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
-                                onConfigChange={(key, value) => onConfigChange(node.id, key === "videoMode" && isEasyWorkflow ? { videoMode: value } : videoConfigPatch(key, value, config, node.metadata?.modelId))}
-                                onOpenChange={handleSettingsOpenChange}
-                            />
-                        </>
-                    ) : mode === "audio" ? (
-                        <>
-                            <AudioModelPicker
-                                channelId={node.metadata?.channelId || config.channelId}
-                                modelId={effectiveModelId}
-                                connectedImages={connectedResources.images}
-                                connectedVideos={connectedResources.videos}
-                                connectedAudios={connectedResources.audios}
-                                promptText={prompt}
-                                onChange={(nextChannelId, nextModelId) => {
-                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.audio);
-                                    onConfigChange(node.id, {
-                                        channelId: nextChannelId,
-                                        modelId: nextModelId,
-                                        workflowId: matchingWf?.id,
-                                    });
-                                }}
-                            />
-                            <CanvasAudioSettingsPopover
-                                config={config}
-                                modelId={effectiveModelId}
-                                profile={nodeProfile}
-                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
-                                onConfigChange={(key, value) => onConfigChange(node.id, audioConfigPatch(key, value))}
-                                onOpenChange={handleSettingsOpenChange}
-                            />
-                        </>
-                    ) : (
-                        <>
-                            <TextModelPicker
-                                channelId={node.metadata?.channelId || config.channelId}
-                                modelId={effectiveModelId}
-                                connectedImages={connectedResources.images}
-                                connectedVideos={connectedResources.videos}
-                                connectedAudios={connectedResources.audios}
-                                promptText={prompt}
-                                onChange={(nextChannelId, nextModelId) => {
-                                    const targetChannel = globalConfig.channels?.find((c) => c.id === nextChannelId);
-                                    const matchingWf = resolveWorkflowSelection(targetChannel, nextModelId, CUSTOM_WORKFLOW_CATEGORIES.text);
-                                    onConfigChange(node.id, {
-                                        channelId: nextChannelId,
-                                        modelId: nextModelId,
-                                        workflowId: matchingWf?.id,
-                                    });
-                                }}
-                            />
-                            <CanvasTextSettingsPopover
-                                modelId={effectiveModelId}
-                                maxLength={node.metadata?.maxLength}
-                                thinking={node.metadata?.thinking}
-                                onParamChange={(patch) => onConfigChange(node.id, patch)}
-                                config={config}
-                                count={node.metadata?.textCount || 1}
-                                buttonClassName="!h-8 min-w-0 !max-w-[160px] !justify-start !rounded-lg !px-3"
-                                onCountChange={(textCount) => onConfigChange(node.id, { textCount })}
-                                onOpenChange={handleSettingsOpenChange}
-                            />
-                        </>
-                    )}
+            <div data-canvas-node-panel-actions className="mt-1.5 flex min-w-0 shrink-0 items-center justify-between gap-1.5">
+                <div className="thin-scrollbar flex min-w-0 flex-1 items-center gap-1 overflow-x-auto overscroll-x-contain [&>*]:shrink-0">
                     <Tooltip title={t("canvas.promptPanel.mentionResource", "召唤/引用画布资源 (@)")}>
                         <Button
                             type="text"
                             className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-lg !bg-transparent !p-0"
-                            style={{ color: theme.node.text }}
+                            style={{ color: theme.text.primary }}
                             icon={<AtSign className="size-3.5" />}
                             onMouseDown={(e) => {
                                 e.preventDefault();
@@ -599,8 +628,8 @@ export function CanvasNodePromptPanel({
                             <Button
                                 type="text"
                                 size="small"
-                                className="!flex !h-7 !w-7 !items-center !justify-center !rounded-lg !bg-transparent hover:!bg-black/5 dark:hover:!bg-white/10"
-                                style={{ color: theme.node.text }}
+                                className="!flex !h-7 !w-7 !items-center !justify-center !rounded-lg !bg-transparent hover:!bg-surface-hover"
+                                style={{ color: theme.text.primary }}
                                 icon={isFullscreen ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                                 onClick={() => setIsFullscreen((prev) => !prev)}
                                 aria-label={isFullscreen ? t("canvas.promptPanel.exitFullscreen") : t("canvas.promptPanel.fullscreen")}
@@ -623,7 +652,7 @@ export function CanvasNodePromptPanel({
                 }}
                 footer={
                     <div className="flex items-center justify-between pt-2">
-                        <div className="flex items-center gap-3 text-xs" style={{ color: theme.node.placeholder }}>
+                        <div className="flex items-center gap-3 text-xs" style={{ color: theme.text.tertiary }}>
                             <CanvasPromptLibrary onSelect={updatePrompt} />
                             <span>{t("canvas.promptPanel.charCount", { count: prompt.length })}</span>
                         </div>
@@ -640,6 +669,7 @@ export function CanvasNodePromptPanel({
                     className={cn("flex flex-col pt-2", isFullscreen ? "flex-1 min-h-0" : "")}
                     onWheelCapture={(event) => event.stopPropagation()}
                 >
+                    {sourceCanvasHint}
                     {savedToolInputSummary || <CanvasNodeReferenceBar
                         nodeId={node.id}
                         nodes={nodes}
@@ -661,6 +691,8 @@ export function CanvasNodePromptPanel({
                         references={hasSavedToolResult ? [] : mentionReferences}
                         categorizedResources={categorizedResources}
                         showMotionPresets={mode === "video"}
+                        crossCanvasAssets={crossCanvasAssets}
+                        onReferenceCrossCanvasAsset={onReferenceCrossCanvasAsset}
                         onConnectResource={(sourceNodeId) => (onConnectReference ? onConnectReference(sourceNodeId, node.id) : true)}
                         onChange={updatePrompt}
                         containerClassName={isFullscreen ? "flex-1 min-h-0 flex flex-col" : ""}
@@ -668,7 +700,7 @@ export function CanvasNodePromptPanel({
                             "thin-scrollbar w-full cursor-text overflow-y-auto rounded-xl border p-4 text-[15px] leading-6 outline-none",
                             isFullscreen ? "flex-1 min-h-[50vh] h-full" : "h-[52dvh] min-h-80"
                         )}
-                        style={{ background: "transparent", borderColor: theme.toolbar.border, color: theme.node.text }}
+                        style={{ background: "transparent", borderColor: theme.hairline.base, color: theme.text.primary }}
                         placeholder={promptPlaceholder}
                     />
                 </div>

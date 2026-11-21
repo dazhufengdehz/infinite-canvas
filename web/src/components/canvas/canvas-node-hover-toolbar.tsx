@@ -96,6 +96,7 @@ export function CanvasNodeHoverToolbar({
     const configToolbar = useConfigStore((state) => state.config.toolbar) || defaultToolbarConfig;
     const updateToolbarConfig = useConfigStore((state) => state.updateToolbarConfig);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
     const quickImageToolIds = Array.isArray(configToolbar?.ids) ? (configToolbar.ids as ImageQuickToolId[]) : defaultImageQuickToolIds;
     const showImageToolLabels = configToolbar.showLabels ?? false;
@@ -274,10 +275,10 @@ export function CanvasNodeHoverToolbar({
             <div
                 ref={toolbarRef}
                 data-canvas-node-toolbar
-                className={`thin-scrollbar absolute z-[70] flex h-12 -translate-x-1/2 items-center overflow-x-auto rounded-[18px] border border-black/10 bg-white text-[15px] text-[#242529] shadow-[0_8px_28px_rgba(15,23,42,.12)] transition-transform duration-150 [&>*]:shrink-0 ${
+                className={`thin-scrollbar absolute z-[70] flex h-10 -translate-x-1/2 items-center gap-0.5 overflow-x-auto rounded-xl border px-1 shadow-float backdrop-blur-md transition-transform duration-150 [&>*]:shrink-0 ${
                     placement === "top" ? "-translate-y-full" : "translate-y-0"
                 }`}
-                style={{ left: clampedLeft, top, width: "max-content", maxWidth }}
+                style={{ left: clampedLeft, top, width: "max-content", maxWidth, background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.primary }}
                 onMouseEnter={() => onKeep(node.id)}
                 onMouseLeave={() => {
                     if (!imageToolSettingsOpen) onLeave();
@@ -286,7 +287,7 @@ export function CanvasNodeHoverToolbar({
                 onPointerDown={(event) => event.stopPropagation()}
             >
                 {toolbarTools.map((tool) => (
-                    <ToolbarAction key={tool.id} {...tool} placement={placement} showLabel={isImage ? showImageToolLabels : true} />
+                    <ToolbarAction key={tool.id} {...tool} placement={placement} showLabel={isImage ? showImageToolLabels : false} />
                 ))}
                 {hasImage && !isViewer ? <ToolbarAction id="more" title={t("canvas.imageTools.configure")} label={t("canvas.imageTools.more")} icon={<Ellipsis className="size-4" />} placement={placement} active={imageToolSettingsOpen} onClick={openImageToolSettings} showLabel={showImageToolLabels} /> : null}
             </div>
@@ -395,19 +396,17 @@ function ToolbarAction({
     danger = false,
 }: ToolbarTool & { showLabel: boolean; placement?: "top" | "bottom" }) {
     const hasText = showLabel && Boolean(label);
+    const hitboxClass = hasText ? "px-2" : "w-[26px] justify-center";
     return (
-        <Tooltip
-            title={title}
-            placement={placement === "bottom" ? "bottom" : "top"}
-            mouseEnterDelay={0.2}
-            color="#ffffff"
-            styles={{ root: { color: "#242529", boxShadow: "0 8px 24px rgba(15,23,42,.16)", fontSize: 13, fontWeight: 500 } }}
-        >
-            <button type="button" className={`group relative flex h-12 items-center whitespace-nowrap px-1.5 ${danger ? "text-[#ef4444]" : ""}`} onClick={onClick} aria-label={title}>
-                <span className={`flex h-9 items-center ${hasText ? "gap-2 px-2.5" : "justify-center px-2"} rounded-lg transition group-hover:bg-[#f0f0f1] ${active ? "bg-[#eeeeef]" : ""}`}>
-                    {icon}
-                    {hasText ? <span>{label}</span> : null}
-                </span>
+        <Tooltip title={title} placement={placement === "bottom" ? "bottom" : "top"} mouseEnterDelay={0.2}>
+            <button
+                type="button"
+                className={`group relative flex h-[26px] items-center whitespace-nowrap rounded-md transition-colors duration-150 hover:bg-surface-hover ${hitboxClass} ${active ? "bg-surface-active" : ""} ${danger ? "text-danger" : ""}`}
+                onClick={onClick}
+                aria-label={title}
+            >
+                {icon}
+                {hasText ? <span className="ml-1.5 text-label">{label}</span> : null}
             </button>
         </Tooltip>
     );

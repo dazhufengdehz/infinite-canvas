@@ -143,9 +143,29 @@ export function createDesktopServer(options = {}) {
     const configuredStaticDir = options.staticDir === undefined ? process.env.INFINITE_CANVAS_STATIC_DIR : options.staticDir;
     const staticDir = configuredStaticDir ? resolve(configuredStaticDir) : null;
     const storage = createStorage(dataDir);
+    let inFlight = 0;
+    let closing = false;
 
-    return http.createServer((req, res) => {
+    const server = http.createServer((req, res) => {
         setCors(req, res);
+        if (req.method === "POST" && (req.url || "").split("?")[0] === "/api/shutdown") {
+            closing = true;
+            sendJson(req, res, 200, { ok: true });
+            server.close();
+            res.on("finish", () => {
+                if (inFlight === 0) process.exit(0);
+            });
+            return;
+        }
+        if (closing) {
+            sendJson(req, res, 503, { error: "存储服务正在退出" });
+            return;
+        }
+        inFlight += 1;
+        res.on("close", () => {
+            inFlight -= 1;
+            if (closing && inFlight === 0) process.exit(0);
+        });
         handle(req, res).catch((error) => {
             if (res.headersSent) {
                 res.destroy();
@@ -155,6 +175,7 @@ export function createDesktopServer(options = {}) {
             sendJson(req, res, status, { error: status === 500 ? "服务器内部错误" : error.message });
         });
     });
+    return server;
 
     async function handle(req, res) {
         if (req.method === "OPTIONS") {
@@ -169,6 +190,11 @@ export function createDesktopServer(options = {}) {
             sendJson(req, res, 200, { ok: true });
             return;
         }
+        if (pathname === "/api/storage/projects/check-folder" && req.method === "POST") {
+            const body = await readJson(req);
+            sendJson(req, res, 200, await storage.checkProjectFolder(body.path));
+            return;
+        }
         if (pathname === "/api/storage/projects") {
             if (req.method === "GET") {
                 sendJson(req, res, 200, await storage.listProjects());
@@ -176,7 +202,7 @@ export function createDesktopServer(options = {}) {
             }
             if (req.method === "POST") {
                 const body = await readJson(req);
-                sendJson(req, res, 201, await storage.createProject(body.project, body.canvases, body.assets));
+                sendJson(req, res, 201, await storage.createProject(body.project, body.canvases, body.assets, body.storagePath));
                 return;
             }
         }

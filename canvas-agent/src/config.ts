@@ -12,7 +12,8 @@ const initializedWorkspaces = new Set<string>();
 
 export type SiteWorkspaceConfig = { workspacePath: string; activeThreadId?: string; pinnedThreadIds?: string[] };
 export type WorkbuddyConfig = { accessToken?: string; baseUrl?: string };
-export type OpenAiConfig = { apiKey?: string; baseUrl?: string; model?: string };
+export type OpenAiProtocol = "auto" | "chat" | "responses";
+export type OpenAiConfig = { apiKey?: string; baseUrl?: string; model?: string; protocol?: OpenAiProtocol };
 export type CanvasAgentConfig = { url: string; token: string; origins?: string[]; workspace?: SiteWorkspaceConfig; workbuddy?: WorkbuddyConfig; openai?: OpenAiConfig };
 
 /** 读取 OpenAI Agent 配置，支持环境变量优先覆盖。 */
@@ -21,6 +22,7 @@ export function getOpenAiConfig(config: CanvasAgentConfig): Required<OpenAiConfi
         apiKey: process.env.OPENAI_API_KEY || config.openai?.apiKey || "",
         baseUrl: (process.env.OPENAI_BASE_URL || config.openai?.baseUrl || "https://api.openai.com/v1").replace(/\/+$/, ""),
         model: process.env.OPENAI_MODEL || config.openai?.model || "gpt-4.1-mini",
+        protocol: config.openai?.protocol || "auto",
     };
 }
 

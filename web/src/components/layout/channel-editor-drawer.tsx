@@ -214,7 +214,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                 <div className="mb-4">
                     <div className="text-base font-semibold">工作流能力矩阵（9 大分类）</div>
                     <div className="mt-0.5 text-xs text-stone-500">
-                        统一管理该渠道下的所有内置 ComfyUI 工作流能力与默认项。
+                        统一管理该渠道下的所有 ComfyUI 工作流能力与默认项。
                     </div>
                 </div>
 
@@ -233,7 +233,7 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                                 <div className="space-y-1.5">
                                     {items.length === 0 ? (
                                         <div className="rounded-lg border border-dashed border-stone-200 py-3 text-center text-xs text-stone-400 dark:border-stone-800">
-                                            暂无内置工作流
+                                            暂无工作流
                                         </div>
                                     ) : (
                                         items.map((item) => (
@@ -249,7 +249,6 @@ export function ChannelEditorDrawer({ open, channel, onSave, onClose }: { open: 
                                                     <div className="flex items-center gap-1.5 font-medium text-stone-800 dark:text-stone-200">
                                                         <FileCode className="size-3.5 shrink-0 text-stone-400" />
                                                         <span className="truncate">{item.name}</span>
-                                                        {item.isBuiltin && <Tag color="default" className="!mr-0 !text-[10px]">内置</Tag>}
                                                         {item.isDefault && (
                                                              <Tag color="blue" className="!mr-0 !text-[10px] flex items-center gap-0.5">
                                                                 <CheckCircle2 className="size-2.5" /> 默认

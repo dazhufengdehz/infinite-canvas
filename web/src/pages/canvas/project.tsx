@@ -9,7 +9,7 @@ import { requestEdit, requestGeneration, requestImageQuestion } from "@/services
 import { generateRandomSeed, validateVideoToolInputs } from "@/services/api/comfyui";
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
-import { getModelProfile } from "@/services/api/models";
+import { getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
 import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
@@ -46,7 +46,9 @@ import { CanvasAlignmentGuides } from "@/components/canvas/canvas-alignment-guid
 import { CanvasMultiSelectionOverlay } from "@/components/canvas/canvas-multi-selection-overlay";
 import { calculateAlignmentSnap } from "@/lib/canvas/canvas-alignment-snapping";
 import { CanvasNodePromptPanel, type CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
+import type { CrossCanvasAssetItem } from "@/components/canvas/canvas-resource-mention-menu";
 import { CanvasToolbar } from "@/components/canvas/canvas-toolbar";
+import { CanvasStoryboardView } from "@/components/canvas/canvas-storyboard-view";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasZoomControls } from "@/components/canvas/canvas-zoom-controls";
@@ -62,6 +64,10 @@ import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNod
 import { exportCanvasProjects, safeFileName } from "@/lib/canvas/canvas-export";
 import { generateDuplicateNodeTitle, generateNextNodeTitle } from "@/lib/canvas/canvas-node-naming";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, cloneNodeMetadata, createCanvasNode, createDefaultNodeMetadata, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
+import { planScriptNodes, type ScriptNodeSource } from "@/lib/canvas/script-node";
+import { buildScriptProjectView, scriptAssetKey, validateH3Shot } from "@/lib/canvas/script-model";
+import { useScriptStore } from "@/stores/canvas/use-script-store";
+import { useCanvasViewStore } from "@/stores/use-canvas-view-store";
 import { failCanvasGeneration, settleCanvasGeneration } from "@/lib/canvas/canvas-generation-settlement";
 import {
     calculateGroupBoundsForNodes,
@@ -112,12 +118,15 @@ import { CanvasInterruptedBanner } from "@/components/canvas/canvas-interrupted-
 import { CanvasPluginManagerModal } from "@/components/canvas/canvas-plugin-manager-modal";
 import { CanvasRefreshShell } from "@/components/canvas/canvas-refresh-shell";
 import { CanvasTopBar } from "@/components/canvas/canvas-top-bar";
+import { CanvasStatusChips } from "@/components/canvas/canvas-status-chips";
+import { CanvasScriptAdaptDialog } from "@/components/canvas/canvas-script-adapt-dialog";
 import { ConnectionCreateMenu, NodeCreateMenu, type PendingConnectionCreate } from "@/components/canvas/canvas-create-menus";
 import {
     CanvasNodeType,
     type CanvasAssistantImage,
     type CanvasAssistantSession,
     type CanvasConnection,
+    type CanvasDocumentSummary,
     type CanvasGenerationIntent,
     type CanvasNodeData,
     type CanvasNodeImage,
@@ -182,6 +191,7 @@ const VIDEO_NODE_MAX_WIDTH = 420;
 const VIDEO_NODE_MAX_HEIGHT = 420;
 // Stable empty reference array prevents `... || []` from invalidating CanvasNode's React.memo on every render.
 const EMPTY_REFERENCES: CanvasResourceReference[] = [];
+const EMPTY_CANVAS_SUMMARIES: CanvasDocumentSummary[] = [];
 const CONNECTION_HANDLE_HIT_RADIUS = 40;
 const CONNECTION_NODE_HIT_PADDING = 32;
 const NODE_STATUS_IDLE = "idle" as const;
@@ -289,7 +299,13 @@ function InfiniteCanvasPage() {
     const storageError = useCanvasStore((state) => state.storageError);
     const currentProject = useCanvasStore((state) => (state.activeProject?.id === projectId ? state.activeProject : null));
     const currentCanvas = useCanvasStore((state) => (state.activeProject?.id === projectId && (!canvasId || state.activeCanvas?.id === canvasId) ? state.activeCanvas : null));
+    const projectCanvases = useCanvasStore((state) => (state.activeProject?.id === projectId ? state.canvases : EMPTY_CANVAS_SUMMARIES));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const viewMode = useCanvasViewStore((state) => state.mode);
+
+    useEffect(() => {
+        if (viewMode === "storyboard" && projectId) void useScriptStore.getState().load(projectId);
+    }, [viewMode, projectId]);
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
     const [chatSessions, setChatSessions] = useState<CanvasAssistantSession[]>([]);
@@ -314,6 +330,7 @@ function InfiniteCanvasPage() {
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
     const [deleteConfirmNodes, setDeleteConfirmNodes] = useState<Set<string> | null>(null);
     const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+    const [scriptDialogOpen, setScriptDialogOpen] = useState(false);
     const [projectAssets, setProjectAssets] = useState<Asset[]>([]);
     const projectAssetsRef = useRef<Asset[]>([]);
     const [projectLoaded, setProjectLoaded] = useState(false);
@@ -470,6 +487,100 @@ function InfiniteCanvasPage() {
         const asset = assetFromCanvasNode(node, projectId, currentCanvas?.id || canvasId);
         return asset ? persistProjectAsset(asset) : null;
     }, [canvasId, currentCanvas?.id, persistProjectAsset, projectId]);
+
+    const registerGeneratedMediaAsset = useCallback(async (node: CanvasNodeData) => {
+        try {
+            const asset = assetFromCanvasNode(node, projectId, currentCanvas?.id || canvasId);
+            if (!asset) return null;
+            const resolved = await persistProjectAsset(asset);
+            setNodes((prev) => prev.map((item) => (item.id === node.id ? { ...item, metadata: { ...item.metadata, assetId: resolved.id } } : item)));
+            return resolved;
+        } catch (error) {
+            console.error("Failed to register generated media asset:", error);
+            return null;
+        }
+    }, [canvasId, currentCanvas?.id, persistProjectAsset, projectId]);
+
+    const crossCanvasAssetItems = useMemo<CrossCanvasAssetItem[]>(() => {
+        const activeCanvasId = currentCanvas?.id || canvasId;
+        const canvasTitleById = new Map(projectCanvases.map((canvas) => [canvas.id, canvas.title]));
+        return projectAssets
+            .filter((asset) => asset.origin?.canvasId !== activeCanvasId)
+            .filter((asset) => asset.kind !== "text" || Boolean(asset.data.content.trim()))
+            .map((asset) => ({
+                id: asset.id,
+                kind: asset.kind,
+                title: asset.title,
+                previewUrl: asset.kind === "image" ? asset.data.dataUrl || asset.coverUrl : asset.kind === "video" ? asset.data.posterUrl || asset.coverUrl : undefined,
+                text: asset.kind === "text" ? asset.data.content : undefined,
+                canvasTitle: canvasTitleById.get(asset.origin?.canvasId || "") || "项目资产",
+            }));
+    }, [canvasId, currentCanvas?.id, projectAssets, projectCanvases]);
+
+    // 从其他画布的项目资产创建引用节点并连线到目标节点，节点记录项目级 assetId 以便跨画布/重启后仍可解析
+    const referenceCrossCanvasAsset = useCallback(
+        async (targetNodeId: string, item: CrossCanvasAssetItem): Promise<CanvasResourceReference | null> => {
+            if (isViewerRef.current) return null;
+            const target = nodesRef.current.find((node) => node.id === targetNodeId);
+            const asset = projectAssetsRef.current.find((candidate) => candidate.id === item.id);
+            if (!target || !asset) return null;
+
+            const id = `${asset.kind}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            let width = NODE_DEFAULT_SIZE[CanvasNodeType.Text].width;
+            let height = NODE_DEFAULT_SIZE[CanvasNodeType.Text].height;
+            let nodeType: CanvasNodeType = CanvasNodeType.Text;
+            let metadata: CanvasNodeMetadata;
+            if (asset.kind === "image") {
+                const size = fitNodeSize(asset.data.width || 1024, asset.data.height || 1024);
+                nodeType = CanvasNodeType.Image;
+                width = size.width;
+                height = size.height;
+                metadata = imageMetadata({ url: asset.data.dataUrl, storageKey: asset.data.storageKey || "", width: asset.data.width, height: asset.data.height, bytes: asset.data.bytes, mimeType: asset.data.mimeType });
+            } else if (asset.kind === "video") {
+                const size = fitNodeSize(asset.data.width || 1280, asset.data.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
+                nodeType = CanvasNodeType.Video;
+                width = size.width;
+                height = size.height;
+                metadata = videoMetadata({ url: asset.data.url, storageKey: asset.data.storageKey || "", posterUrl: asset.data.posterUrl, posterStorageKey: asset.data.posterStorageKey, width: asset.data.width, height: asset.data.height, bytes: asset.data.bytes, mimeType: asset.data.mimeType });
+            } else if (asset.kind === "audio") {
+                const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
+                nodeType = CanvasNodeType.Audio;
+                width = spec.width;
+                height = spec.height;
+                metadata = audioMetadata({ url: asset.data.url, storageKey: asset.data.storageKey || "", bytes: asset.data.bytes, mimeType: asset.data.mimeType, durationMs: asset.data.durationMs });
+            } else {
+                metadata = { content: asset.data.content, status: NODE_STATUS_SUCCESS };
+            }
+            metadata = { ...metadata, assetId: asset.id, sourceAssetId: asset.id, sourceCanvasId: asset.origin?.canvasId };
+
+            const node: CanvasNodeData = {
+                id,
+                type: nodeType,
+                title: asset.title,
+                position: { x: target.position.x - width - 64, y: target.position.y },
+                width,
+                height,
+                metadata,
+            };
+            const nextNodes = [...nodesRef.current, node];
+            const rejection = getConnectionRejectionDetail(id, targetNodeId, nextNodes, connectionsRef.current);
+            if (rejection) {
+                message.warning(rejection.defaultMessage);
+                return null;
+            }
+            if (!validateInputConnection(id, targetNodeId, nextNodes, connectionsRef.current)) {
+                message.warning(t("canvas.projectPage.configConnection", { defaultValue: "连接不兼容或无法连接" }));
+                return null;
+            }
+            nodesRef.current = nextNodes;
+            setNodes(nextNodes);
+            const connection: CanvasConnection = { id: nanoid(), fromNodeId: id, toNodeId: targetNodeId, kind: "input" };
+            connectionsRef.current = [...connectionsRef.current, connection];
+            setConnections((prev) => [...prev, connection]);
+            return { id, nodeId: id, kind: asset.kind, label: asset.title, title: asset.title, previewUrl: item.previewUrl, text: item.text, active: true, connected: true };
+        },
+        [message, t],
+    );
 
     const createHistoryEntry = useCallback(
         (): CanvasHistoryEntry => ({
@@ -674,6 +785,61 @@ function InfiniteCanvasPage() {
     }, [message, storageError]);
 
     useEffect(() => {
+        const flush = () => void flushProject();
+        const flushHidden = () => {
+            if (document.visibilityState === "hidden") flush();
+        };
+        window.addEventListener("pagehide", flush);
+        window.addEventListener("beforeunload", flush);
+        document.addEventListener("visibilitychange", flushHidden);
+        return () => {
+            window.removeEventListener("pagehide", flush);
+            window.removeEventListener("beforeunload", flush);
+            document.removeEventListener("visibilitychange", flushHidden);
+        };
+    }, [flushProject]);
+
+    useEffect(() => {
+        if (!("__TAURI_INTERNALS__" in window)) return;
+        let cancelled = false;
+        let unlisten: (() => void) | undefined;
+        let closing = false;
+        void import("@tauri-apps/api/window")
+            .then(({ getCurrentWindow }) => {
+                const appWindow = getCurrentWindow();
+                return appWindow.onCloseRequested(async (event) => {
+                    if (closing) return;
+                    closing = true;
+                    event.preventDefault();
+                    try {
+                        await flushProject();
+                        if (useCanvasStore.getState().hasPendingSaves()) throw new Error(useCanvasStore.getState().storageError || t("canvas.saveStatus.failed"));
+                        await appWindow.destroy();
+                    } catch (error) {
+                        closing = false;
+                        modal.confirm({
+                            title: t("canvas.saveStatus.failed"),
+                            content: t("canvas.projectPage.saveFailed", { message: error instanceof Error ? error.message : "" }),
+                            okText: t("canvas.projectPage.exitAnyway"),
+                            cancelText: t("canvas.projectPage.stay"),
+                            okButtonProps: { danger: true },
+                            onOk: () => void appWindow.destroy(),
+                        });
+                    }
+                });
+            })
+            .then((cleanup) => {
+                if (cancelled) cleanup();
+                else unlisten = cleanup;
+            })
+            .catch((error) => console.error("Failed to listen for close requests:", error));
+        return () => {
+            cancelled = true;
+            unlisten?.();
+        };
+    }, [flushProject, modal, t]);
+
+    useEffect(() => {
         if (!projectLoaded || !["new", "recent", "choose"].includes(searchParams.get("mode") || "")) return;
         if (!searchParams.has("agentUrl") && !localAgentEnabled && !fragmentBootstrap) openAgentPanel();
     }, [fragmentBootstrap, localAgentEnabled, openAgentPanel, projectLoaded, searchParams]);
@@ -783,6 +949,236 @@ function InfiniteCanvasPage() {
         const rect = containerRef.current?.getBoundingClientRect();
         return screenToCanvas((rect?.left || 0) + (rect?.width || size.width) / 2, (rect?.top || 0) + (rect?.height || size.height) / 2);
     }, [screenToCanvas, size.height, size.width]);
+
+    const syncScriptNodes = useCallback((source: ScriptNodeSource) => {
+        const center = getCanvasCenter();
+        const layout = planScriptNodes(source, center, {
+            source: t("canvas.script.sourceNode"),
+            setting: t("canvas.script.settingNode"),
+            outline: t("canvas.script.outlineNode"),
+            script: t("canvas.script.scriptNode"),
+        });
+        const activeChannel = (config.channelId ? config.channels?.find((item) => item.id === config.channelId) : undefined) || config.channels?.[0];
+        const h3Workflow = getDefaultWorkflow(activeChannel, "omniVideo");
+        const h3ModelId = resolveModelIdFromWorkflowId(h3Workflow?.id);
+        const h3Binding = h3Workflow && h3ModelId ? { workflowId: h3Workflow.id, modelId: h3ModelId, videoMode: "omni" as const } : null;
+        if (layout.nodes.some((plan) => plan.h3) && !h3Binding) {
+            message.error(t("canvas.script.h3Missing"));
+            return new Map<string, string>();
+        }
+        const existing = new Map<string, CanvasNodeData>();
+        nodesRef.current.forEach((node) => {
+            const key = node.metadata?.scriptKey;
+            if (key) existing.set(key, node);
+        });
+        const planKeys = new Set(layout.nodes.map((plan) => plan.key));
+        const removedIds = new Set(nodesRef.current.filter((node) => node.metadata?.scriptKey && !planKeys.has(node.metadata.scriptKey)).map((node) => node.id));
+        const next = nodesRef.current.filter((node) => !removedIds.has(node.id));
+        const ids = new Map<string, string>();
+        const created: string[] = [];
+        for (const plan of layout.nodes) {
+            const binding = plan.h3 ? h3Binding || {} : {};
+            const current = existing.get(plan.key);
+            if (current) {
+                const index = next.findIndex((node) => node.id === current.id);
+                if (index < 0) continue;
+                const generationChanged =
+                    (plan.prompt !== undefined && current.metadata?.prompt !== plan.prompt) ||
+                    (plan.seconds !== undefined && current.metadata?.seconds !== plan.seconds) ||
+                    (plan.size !== undefined && current.metadata?.size !== plan.size);
+                next[index] = {
+                    ...current,
+                    title: plan.title,
+                    metadata: {
+                        ...current.metadata,
+                        ...binding,
+                        ...(plan.content !== undefined ? { content: plan.content, status: NODE_STATUS_SUCCESS } : {}),
+                        ...(plan.prompt !== undefined ? { prompt: plan.prompt } : {}),
+                        ...(plan.seconds !== undefined ? { seconds: plan.seconds } : {}),
+                        ...(plan.size !== undefined ? { size: plan.size } : {}),
+                        ...(generationChanged ? { content: "", storageKey: "", status: NODE_STATUS_IDLE, errorDetails: undefined } : {}),
+                        scriptKey: plan.key,
+                    },
+                };
+                ids.set(plan.key, current.id);
+                continue;
+            }
+            const node = createCanvasNode(
+                plan.type,
+                { x: plan.position.x + plan.width / 2, y: plan.position.y + plan.height / 2 },
+                {
+                    ...createDefaultNodeMetadata(plan.type, config),
+                    ...binding,
+                    ...(plan.content !== undefined ? { content: plan.content, status: NODE_STATUS_SUCCESS } : {}),
+                    ...(plan.prompt !== undefined ? { prompt: plan.prompt } : {}),
+                    ...(plan.seconds !== undefined ? { seconds: plan.seconds } : {}),
+                    ...(plan.size !== undefined ? { size: plan.size } : {}),
+                    scriptKey: plan.key,
+                },
+                plan.title,
+            );
+            node.width = plan.width;
+            node.height = plan.height;
+            node.position = plan.position;
+            next.push(node);
+            ids.set(plan.key, node.id);
+            created.push(node.id);
+        }
+        const assetIds = new Set(layout.nodes.filter((plan) => plan.key.startsWith("asset:")).map((plan) => ids.get(plan.key)).filter((id): id is string => Boolean(id)));
+        const shotIds = new Set(layout.nodes.filter((plan) => plan.key.startsWith("shot:")).map((plan) => ids.get(plan.key)).filter((id): id is string => Boolean(id)));
+        const nextConnections = connectionsRef.current.filter((connection) =>
+            !removedIds.has(connection.fromNodeId) && !removedIds.has(connection.toNodeId) &&
+            !(connection.kind === "input" && assetIds.has(connection.fromNodeId) && shotIds.has(connection.toNodeId)),
+        );
+        for (const connection of layout.connections) {
+            const fromNodeId = ids.get(connection.fromKey);
+            const toNodeId = ids.get(connection.toKey);
+            if (fromNodeId && toNodeId) nextConnections.push({ id: nanoid(), fromNodeId, toNodeId, kind: "input" });
+        }
+        nodesRef.current = next;
+        connectionsRef.current = nextConnections;
+        setNodes(next);
+        setConnections(nextConnections);
+        if (created.length) {
+            setSelectedNodeIds(new Set(created));
+            setSelectedConnectionId(null);
+        }
+        return ids;
+    }, [config, getCanvasCenter, message, setNodes, t]);
+
+    const [scriptBatch, setScriptBatch] = useState({ total: 0, done: 0, failed: 0, running: false });
+    const scriptBatchCancelRef = useRef(false);
+
+    const syncStoredScript = useCallback(() => {
+        const data = useScriptStore.getState().data;
+        return data ? syncScriptNodes(data) : new Map<string, string>();
+    }, [syncScriptNodes]);
+
+    const collectScriptKeys = useCallback((kind: "asset" | "character" | "shot") => {
+        const data = useScriptStore.getState().data;
+        const ids = syncStoredScript();
+        const view = data ? buildScriptProjectView(data) : { episodes: [], assets: [], shots: [] };
+        const wanted = new Set(
+            kind === "shot"
+                ? view.shots.map((shot) => shot.key)
+                : kind === "character"
+                  ? view.assets.filter((asset) => asset.kind === "character").map((asset) => scriptAssetKey(asset.id))
+                  : view.assets.map((asset) => scriptAssetKey(asset.id)),
+        );
+        return [...ids.keys()].filter((key) => wanted.has(key)).filter((key) => {
+            const node = nodesRef.current.find((item) => item.metadata?.scriptKey === key);
+            return node?.metadata?.status !== NODE_STATUS_SUCCESS;
+        });
+    }, [syncStoredScript]);
+
+    const runScriptGeneration = useCallback(async (keys: string[]) => {
+        if (!keys.length) return;
+        if (!isAiConfigReady(effectiveConfig, effectiveConfig.model)) {
+            openConfigDialog(true);
+            return;
+        }
+        scriptBatchCancelRef.current = false;
+        setScriptBatch({ total: keys.length, done: 0, failed: 0, running: true });
+        let failed = 0;
+        for (const [index, key] of keys.entries()) {
+            if (scriptBatchCancelRef.current) break;
+            const node = nodesRef.current.find((item) => item.metadata?.scriptKey === key);
+            if (!node) {
+                failed += 1;
+                setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+                continue;
+            }
+            if (key.startsWith("shot:")) {
+                const data = useScriptStore.getState().data;
+                const view = data ? buildScriptProjectView(data) : null;
+                const shot = view?.shots.find((item) => item.key === key);
+                const errors = shot && data ? validateH3Shot(shot, data.assets, data.options.orientation) : ["找不到对应视频段"];
+                if (shot) {
+                    const expected: Record<"image" | "video" | "audio", string[]> = { image: [], video: [], audio: [] };
+                    const groups: ["image" | "video" | "audio", string, CanvasNodeType, string[]][] = [
+                        ["image", "图片", CanvasNodeType.Image, shot.imageAssetIds],
+                        ["video", "视频", CanvasNodeType.Video, shot.videoAssetIds],
+                        ["audio", "音频", CanvasNodeType.Audio, shot.audioAssetIds],
+                    ];
+                    for (const [bucket, label, expectedType, assetIds] of groups) {
+                        for (const assetId of assetIds) {
+                            const referenceKey = scriptAssetKey(assetId);
+                            const referenceNode = nodesRef.current.find((item) => item.metadata?.scriptKey === referenceKey);
+                            if (!referenceNode) errors.push(`参考${label}节点尚未同步：${assetId}`);
+                            else if (referenceNode.type !== expectedType) errors.push(`参考${label}节点类型不匹配：${referenceKey}`);
+                            else if (!referenceNode.metadata?.content) errors.push(`参考${label}尚未生成或上传：${referenceKey}`);
+                            else expected[bucket].push(referenceNode.id);
+                        }
+                    }
+                    if (!errors.length) {
+                        try {
+                            const context = buildNodeGenerationContext(node.id, nodesRef.current, connectionsRef.current, node.metadata?.prompt || "");
+                            const actual: Record<"image" | "video" | "audio", string[]> = {
+                                image: context.referenceImages.map((item) => item.id),
+                                video: context.referenceVideos.map((item) => item.id),
+                                audio: context.referenceAudios.map((item) => item.id),
+                            };
+                            for (const [bucket, label] of [["image", "图片"], ["video", "视频"], ["audio", "音频"]] as const) {
+                                if (actual[bucket].length !== expected[bucket].length) errors.push(`实际连线的参考${label}数量（${actual[bucket].length}）与镜头约定（${expected[bucket].length}）不一致`);
+                                else if (actual[bucket].some((id, position) => id !== expected[bucket][position])) errors.push(`实际连线的参考${label}顺序与镜头约定不一致`);
+                            }
+                        } catch (error) {
+                            errors.push(error instanceof Error ? error.message : "参考资源校验失败");
+                        }
+                    }
+                }
+                if (errors.length) {
+                    failed += 1;
+                    message.error(`${shot?.title || key}：${errors.join("；")}`);
+                    setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+                    continue;
+                }
+            }
+            const mode = node.type === CanvasNodeType.Video ? "video" : node.type === CanvasNodeType.Audio ? "audio" : "image";
+            await generateNodeRef.current?.(node.id, mode, node.metadata?.prompt || "", "repeat");
+            const latest = nodesRef.current.find((item) => item.id === node.id);
+            if (latest?.metadata?.status !== NODE_STATUS_SUCCESS) failed += 1;
+            setScriptBatch({ total: keys.length, done: index + 1, failed, running: true });
+        }
+        setScriptBatch({ total: keys.length, done: keys.length, failed, running: false });
+    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog]);
+
+    const stopScriptGeneration = useCallback(() => {
+        scriptBatchCancelRef.current = true;
+    }, []);
+
+    const replaceScriptAssetMedia = useCallback(async (key: string, file: File) => {
+        const ids = syncStoredScript();
+        const nodeId = ids.get(key);
+        if (!nodeId) return;
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        if (!node) return;
+        let metadata: CanvasNodeMetadata;
+        let size: { width: number; height: number };
+        if (node.type === CanvasNodeType.Audio) {
+            const audio = await uploadMediaFile(file, "audio", projectId);
+            metadata = audioMetadata(audio);
+            size = { width: node.width, height: node.height };
+        } else if (node.type === CanvasNodeType.Video) {
+            const video = await uploadMediaFile(file, "video", projectId);
+            metadata = videoMetadata(video);
+            size = fitNodeSize(video.width, video.height);
+        } else {
+            const image = await uploadImage(file, projectId);
+            metadata = imageMetadata(image);
+            size = fitNodeSize(image.width, image.height);
+        }
+        let nextNode: CanvasNodeData | undefined;
+        const next = nodesRef.current.map((item) => {
+            if (item.id !== nodeId) return item;
+            nextNode = { ...item, ...size, metadata: { ...item.metadata, ...metadata, errorDetails: undefined, scriptKey: key } };
+            return nextNode;
+        });
+        nodesRef.current = next;
+        setNodes(next);
+        if (nextNode) await createNodeProjectAsset(nextNode);
+    }, [createNodeProjectAsset, projectId, setNodes, syncStoredScript]);
+
 
     const setConnecting = useCallback((next: ConnectionHandle | null) => {
         if (isViewerRef.current && next) return;
@@ -1672,6 +2068,11 @@ function InfiniteCanvasPage() {
     );
 
     useEffect(() => () => void (focusAnimRef.current && cancelAnimationFrame(focusAnimRef.current)), []);
+
+    const locateScriptNode = useCallback((key: string) => {
+        const node = nodesRef.current.find((item) => item.metadata?.scriptKey === key);
+        if (node) focusNode(node.id);
+    }, [focusNode]);
 
     const setZoomScale = useCallback(
         (scale: number) => {
@@ -2675,10 +3076,13 @@ function InfiniteCanvasPage() {
         async (nodeId: string, position: VideoFramePosition) => {
             setContextMenu(null);
             const node = nodesRef.current.find((item) => item.id === nodeId);
-            const video = Array.from(containerRef.current!.querySelectorAll<HTMLVideoElement>("video[data-canvas-video]")).find((item) => item.dataset.canvasVideo === nodeId);
-            if (node?.type !== CanvasNodeType.Video || !node.metadata?.content || !video) return message.error(t("canvas.videoFrames.failed"));
+            if (node?.type !== CanvasNodeType.Video || (!node.metadata?.content && !node.metadata?.storageKey)) return message.error(t("canvas.videoFrames.failed"));
+            const video = Array.from(containerRef.current?.querySelectorAll<HTMLVideoElement>("video[data-canvas-video]") || []).find((item) => item.dataset.canvasVideo === nodeId);
+            const storageKey = node.metadata.storageKey;
+            const source = await acquireMediaUrl(storageKey, node.metadata.content || "");
+            if (!source) return message.error(t("canvas.videoFrames.failed"));
             try {
-                const image = await uploadImage(await captureVideoFrame(node.metadata.content, position, video.currentTime), projectId);
+                const image = await uploadImage(await captureVideoFrame(source, position, video?.currentTime ?? 0), projectId);
                 const size = fitNodeSize(image.width, image.height, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
                 const id = nanoid();
                 const x = node.position.x + node.width + 96;
@@ -2700,6 +3104,8 @@ function InfiniteCanvasPage() {
                 message.success(t("canvas.videoFrames.captured"));
             } catch {
                 message.error(t("canvas.videoFrames.failed"));
+            } finally {
+                releaseMediaUrl(storageKey, node.metadata.content || "");
             }
         },
         [message, projectId, t],
@@ -3549,6 +3955,15 @@ function InfiniteCanvasPage() {
                     setNodes((prev) =>
                         prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, ...imageMetadata(uploaded), prompt: scene, composerContent: undefined, model: generationConfig.model, status: NODE_STATUS_SUCCESS, errorDetails: undefined, seed: image.seed ?? nextSeed } } : node)),
                     );
+                    await registerGeneratedMediaAsset({
+                        id: nodeId,
+                        type: CanvasNodeType.Image,
+                        title: sourceNode?.title || "",
+                        position: sourceNode?.position || { x: 0, y: 0 },
+                        width: uploaded.width,
+                        height: uploaded.height,
+                        metadata: { ...imageMetadata(uploaded), prompt: scene },
+                    });
                     setDialogNodeId(null);
                 } catch (error) {
                     if (!isGenerationCanceled(error)) {
@@ -3722,6 +4137,28 @@ function InfiniteCanvasPage() {
                     let hasSuccess = false;
                     let hasFailure = false;
                     let firstError = "";
+                    const generatedImages: CanvasNodeImage[] = [];
+                    const registerPrimaryImage = async () => {
+                        const primary = generatedImages[0];
+                        if (!primary) return;
+                        await registerGeneratedMediaAsset({
+                            id: rootId,
+                            type: CanvasNodeType.Image,
+                            title: rootNode.title,
+                            position: rootNode.position,
+                            width: primary.naturalWidth || rootNode.width,
+                            height: primary.naturalHeight || rootNode.height,
+                            metadata: {
+                                content: primary.content,
+                                storageKey: primary.storageKey,
+                                naturalWidth: primary.naturalWidth,
+                                naturalHeight: primary.naturalHeight,
+                                bytes: primary.bytes,
+                                mimeType: primary.mimeType,
+                                prompt,
+                            },
+                        });
+                    };
                     await Promise.all(
                         imageIds.map(async (imageId, index) => {
                             const slotSeed = (nextSeed + index) % 9007199254740991;
@@ -3752,6 +4189,7 @@ function InfiniteCanvasPage() {
                                     mimeType: uploaded.mimeType,
                                     seed: image.seed ?? slotSeed,
                                 };
+                                generatedImages.push(item);
                                 setNodes((prev) =>
                                     prev.map((node) => {
                                         if (node.id !== rootId) return node;
@@ -3840,12 +4278,14 @@ function InfiniteCanvasPage() {
                                 };
                             }),
                         );
+                        await registerPrimaryImage();
                         return;
                     }
                     if (hasFailure) {
                         message.error(hasSuccess ? t("canvas.projectPage.partialFailed") : firstError || t("canvas.projectPage.generationFailed"));
                     }
                     setNodes((prev) => settleCanvasGeneration(prev, { nodeId: rootId, sourceNodeId: nodeId }));
+                    await registerPrimaryImage();
                     return;
                 }
 
@@ -3995,6 +4435,10 @@ function InfiniteCanvasPage() {
                                 };
                             }),
                         );
+                        await registerGeneratedMediaAsset({
+                            ...videoNode,
+                            metadata: { ...videoNode.metadata, ...videoMetadata(video), prompt, effectivePrompt },
+                        });
                         setNodes((prev) => settleCanvasGeneration(prev, { nodeId: videoId, sourceNodeId: nodeId }));
                     } finally {
                         finishGenerationRequest(videoId, controller);
@@ -4094,6 +4538,10 @@ function InfiniteCanvasPage() {
                                     : node,
                             ),
                         );
+                        await registerGeneratedMediaAsset({
+                            ...audioNode,
+                            metadata: { ...audioNode.metadata, ...audioMetadata(audio), prompt, effectivePrompt },
+                        });
                         setNodes((prev) => settleCanvasGeneration(prev, { nodeId: audioId, sourceNodeId: nodeId }));
                     } finally {
                         finishGenerationRequest(audioId, controller);
@@ -4344,7 +4792,7 @@ function InfiniteCanvasPage() {
                 if (!isRepeat) finishGenerationRequest(nodeId, runController);
             }
         },
-        [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, startGenerationRequest, t],
+        [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, registerGeneratedMediaAsset, startGenerationRequest, t],
     );
     useEffect(() => {
         generateNodeRef.current = handleGenerateNode;
@@ -4493,6 +4941,15 @@ function InfiniteCanvasPage() {
                                 : item,
                         ),
                     );
+                    await registerGeneratedMediaAsset({
+                        id: node.id,
+                        type: CanvasNodeType.Video,
+                        title: node.title,
+                        position: node.position,
+                        width: videoSize.width,
+                        height: videoSize.height,
+                        metadata: { ...videoMetadata(video), prompt, effectivePrompt: node.metadata?.effectivePrompt },
+                    });
                 } else if (mode === "audio") {
                     const duration = Number(node.metadata?.seconds || generationConfig.audioSeconds) || 60;
                     const initialSeed = node.metadata?.seed;
@@ -4530,6 +4987,15 @@ function InfiniteCanvasPage() {
                                 : item,
                         ),
                     );
+                    await registerGeneratedMediaAsset({
+                        id: node.id,
+                        type: CanvasNodeType.Audio,
+                        title: node.title,
+                        position: node.position,
+                        width: node.width,
+                        height: node.height,
+                        metadata: { ...audioMetadata(audio), prompt, effectivePrompt: node.metadata?.effectivePrompt },
+                    });
                 } else {
                     const referenceImages = context.referenceImages;
                     const useEdit = saved.generationType === "edit" || referenceImages.length > 0;
@@ -4561,10 +5027,10 @@ function InfiniteCanvasPage() {
                         ...(image.seed !== undefined ? { seed: image.seed } : {}),
                     };
                     const generationMetadata = buildImageGenerationMetadata(useEdit ? "edit" : "generation", generationConfig, saved.count || 1, referenceImages, image.seed);
+                    const makePrimary = !imageId || !node.metadata?.content;
                     setNodes((prev) =>
                         prev.map((item) => {
                             if (item.id !== node.id) return item;
-                            const makePrimary = !imageId || !item.metadata?.content;
                             const shouldLockFrame = Boolean(
                                 item.metadata?.freeResize ||
                                 isAspectRatioClose(item.width, item.height, uploadedImage.width, uploadedImage.height)
@@ -4595,6 +5061,17 @@ function InfiniteCanvasPage() {
                             };
                         }),
                     );
+                    if (makePrimary) {
+                        await registerGeneratedMediaAsset({
+                            id: node.id,
+                            type: CanvasNodeType.Image,
+                            title: node.title,
+                            position: node.position,
+                            width: uploadedImage.width,
+                            height: uploadedImage.height,
+                            metadata: { ...imageMetadata(uploadedImage), prompt, effectivePrompt: saved.effectivePrompt },
+                        });
+                    }
                 }
 
                 setNodes((prev) => settleCanvasGeneration(prev, { nodeId: node.id, sourceNodeId: originConfigId }));
@@ -4607,7 +5084,7 @@ function InfiniteCanvasPage() {
                 finishGenerationRequest(node.id, controller);
             }
         },
-        [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, startGenerationRequest, t],
+        [effectiveConfig, finishGenerationRequest, isAiConfigReady, message, openConfigDialog, projectId, registerGeneratedMediaAsset, startGenerationRequest, t],
     );
 
     const deleteBatchImage = useCallback((nodeId: string, imageId: string) => {
@@ -4799,6 +5276,8 @@ function InfiniteCanvasPage() {
                     nodes={nodes}
                     isRunning={runningNodeIds.has(panelNode.id)}
                     mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || EMPTY_REFERENCES}
+                    crossCanvasAssets={crossCanvasAssetItems}
+                    onReferenceCrossCanvasAsset={(item) => referenceCrossCanvasAsset(panelNode.id, item)}
                     connectedNodes={connectedNodesByNodeId.get(panelNode.id) || []}
                     onPromptChange={handleNodePromptChange}
                     onConfigChange={handleConfigNodeChange}
@@ -4816,7 +5295,7 @@ function InfiniteCanvasPage() {
                     }}
                 />
             ),
-        [configInputsById, confirmStopGeneration, connectNodeReference, connectedNodesByNodeId, disconnectNodeReference, focusNode, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, nodes, renderPluginPanel, reorderNodeReferences, runningNodeIds, startNodeReferenceSelection],
+        [configInputsById, confirmStopGeneration, connectNodeReference, connectedNodesByNodeId, crossCanvasAssetItems, disconnectNodeReference, focusNode, handleConfigNodeChange, handleGenerateNode, handleNodePromptChange, mentionReferencesByNodeId, nodes, referenceCrossCanvasAsset, renderPluginPanel, reorderNodeReferences, runningNodeIds, startNodeReferenceSelection],
     );
 
     const renderNodeContentPanel = useCallback(
@@ -4843,15 +5322,17 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
-            <CanvasSidePanel
-                nodes={nodes}
-                selectedNodeIds={selectedNodeIds}
-                onFocusNode={focusNode}
-                onPreviewNode={setPreviewNodeId}
-                onInsertAsset={handleAssetInsert}
-                onTitleChange={handleNodeTitleChange}
-                projectTitle={currentProject?.title}
-            />
+            {viewMode === "canvas" ? (
+                <CanvasSidePanel
+                    nodes={nodes}
+                    selectedNodeIds={selectedNodeIds}
+                    onFocusNode={focusNode}
+                    onPreviewNode={setPreviewNodeId}
+                    onInsertAsset={handleAssetInsert}
+                    onTitleChange={handleNodeTitleChange}
+                    projectTitle={currentProject?.title}
+                />
+            ) : null}
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
@@ -4863,6 +5344,8 @@ function InfiniteCanvasPage() {
                     onCancelTitleEditing={() => setTitleEditing(false)}
                     canUndo={historyState.canUndo}
                     canRedo={historyState.canRedo}
+                    onBack={() => navigate("/canvas")}
+                    onOpenScript={() => setScriptDialogOpen(true)}
                     onHome={() => navigate("/")}
                     onProjects={() => navigate("/canvas")}
                     onCreateProject={createAndOpenProject}
@@ -4877,6 +5360,8 @@ function InfiniteCanvasPage() {
                     compactAgentStatus={{ connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity }}
                     onToggleAgent={toggleAgentPanel}
                 />
+
+                <CanvasStatusChips nodes={nodes} connections={connections} selectedNodeIds={selectedNodeIds} />
 
                 {!interruptedBannerDismissed && interruptedTaskCount > 0 && !isViewer ? (
                     <CanvasInterruptedBanner
@@ -5119,6 +5604,21 @@ function InfiniteCanvasPage() {
                     }}
                 </CanvasScene>
 
+                {viewMode === "storyboard" ? (
+                    <CanvasStoryboardView
+                        nodes={nodes}
+                        batch={scriptBatch}
+                        onSync={() => void syncStoredScript()}
+                        onGenerate={(keys) => void runScriptGeneration(keys)}
+                        onStop={stopScriptGeneration}
+                        onUploadAsset={replaceScriptAssetMedia}
+                        onLocate={(key) => {
+                            locateScriptNode(key);
+                            useCanvasViewStore.getState().setMode("canvas");
+                        }}
+                    />
+                ) : null}
+
                 {isViewer ? (
                     <div
                         className="pointer-events-auto absolute bottom-6 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-2xl px-4 py-2.5 shadow-lg backdrop-blur"
@@ -5138,7 +5638,7 @@ function InfiniteCanvasPage() {
                         <span className="h-4 w-px bg-stone-300 dark:bg-stone-700" />
                         <span className="text-xs opacity-60">{t("canvas.collabWatchMode.tip")}</span>
                     </div>
-                ) : (
+                ) : viewMode === "canvas" ? (
                     <CanvasToolbar
                         selectedCount={selectedNodeIds.size}
                         interruptedSelectedCount={selectedInterruptedNodes.length}
@@ -5164,7 +5664,7 @@ function InfiniteCanvasPage() {
                         onBackgroundModeChange={setBackgroundMode}
                         onShowImageInfoChange={setShowImageInfo}
                     />
-                )}
+                ) : null}
 
                 {contextMenu ? (
                     <CanvasNodeContextMenu
@@ -5351,6 +5851,7 @@ function InfiniteCanvasPage() {
                 ) : null}
 
                 <AssetPickerModal open={assetPickerOpen} projectAssets={projectAssets} onInsert={handleAssetInsert} onRemove={removeProjectAsset} onClose={() => setAssetPickerOpen(false)} />
+                <CanvasScriptAdaptDialog open={scriptDialogOpen} projectId={projectId || ""} nodes={nodes} onClose={() => setScriptDialogOpen(false)} onInsert={() => void syncStoredScript()} />
                 <CanvasCollabModal
                     projectId={projectId}
                     canvasId={currentCanvas?.id || canvasId}

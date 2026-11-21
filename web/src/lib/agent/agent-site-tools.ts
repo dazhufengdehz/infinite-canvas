@@ -3,6 +3,7 @@ import type { NavigateFunction } from "react-router-dom";
 import i18n from "@/i18n";
 import { fetchPrompts } from "@/services/api/prompts";
 import { uploadImage } from "@/services/image-storage";
+import { listStoredCanvases } from "@/services/project-storage";
 import { imageAspectOptions, imageQualityOptions } from "@/components/image-settings-panel";
 import { videoResolutionOptions, videoSecondOptions, videoSizeOptions } from "@/components/video-settings-panel";
 import type { CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
@@ -16,6 +17,9 @@ import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 
 export const SITE_TOOL_NAMES = [
     "canvas_list_projects",
+    "canvas_create_project",
+    "canvas_update_project",
+    "canvas_delete_projects",
     "generation_get_status",
     "workbench_image_get_config",
     "workbench_image_generate",
@@ -38,6 +42,9 @@ function siteText(key: string, options?: Record<string, unknown>) {
 
 export const SITE_TOOL_LABELS: Record<SiteToolName, string> = {
     get canvas_list_projects() { return siteText("canvasList"); },
+    get canvas_create_project() { return siteText("projectCreate"); },
+    get canvas_update_project() { return siteText("projectUpdate"); },
+    get canvas_delete_projects() { return siteText("projectDelete"); },
     get generation_get_status() { return siteText("generationStatus"); },
     get workbench_image_get_config() { return siteText("imageConfig"); },
     get workbench_image_generate() { return siteText("imageGenerate"); },
@@ -57,6 +64,12 @@ export async function runSiteTool(name: SiteToolName, input: SiteToolInput, navi
     switch (name) {
         case "canvas_list_projects":
             return listCanvasProjects(input);
+        case "canvas_create_project":
+            return createProject(input);
+        case "canvas_update_project":
+            return updateProject(input);
+        case "canvas_delete_projects":
+            return deleteProjects(input);
         case "generation_get_status":
             return getGenerationStatus(input, context.canvasSnapshot);
         case "workbench_image_get_config":
@@ -143,6 +156,34 @@ function listCanvasProjects(input: SiteToolInput) {
         connectionCount: project.connectionCount,
     }));
     return { total: filtered.length, page, pageSize, items, hint: siteText("canvasHint") };
+}
+
+async function createProject(input: SiteToolInput) {
+    const title = String(input.title || "").trim();
+    if (!title) throw new Error(siteText("projectTitleRequired"));
+    const store = useCanvasStore.getState();
+    if (!store.hydrated) throw new Error(siteText("canvasLoading"));
+    const storagePath = typeof input.storagePath === "string" && input.storagePath.trim() ? input.storagePath.trim() : undefined;
+    if (storagePath && !("__TAURI_INTERNALS__" in window)) throw new Error(siteText("storagePathDesktopOnly"));
+    const projectId = await store.createProject(title, undefined, storagePath);
+    const canvases = await listStoredCanvases(projectId);
+    return { ok: true, projectId, canvasId: canvases[0]?.id, title, storagePath, hint: siteText("projectCreated", { title }) };
+}
+
+async function updateProject(input: SiteToolInput) {
+    const projectId = String(input.projectId || "").trim();
+    const title = String(input.title || "").trim();
+    if (!projectId) throw new Error(siteText("projectIdRequired"));
+    if (!title) throw new Error(siteText("projectTitleRequired"));
+    await useCanvasStore.getState().renameProject(projectId, title);
+    return { ok: true, projectId, title };
+}
+
+async function deleteProjects(input: SiteToolInput) {
+    const ids = Array.isArray(input.projectIds) ? input.projectIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).map((id) => id.trim()) : [];
+    if (!ids.length) throw new Error(siteText("projectIdRequired"));
+    await useCanvasStore.getState().deleteProjects(ids);
+    return { ok: true, deleted: ids };
 }
 
 function getImageConfig() {

@@ -1,100 +1,76 @@
 import { Check, Download, Pencil, Trash2, X } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { App, Button, Input } from "antd";
+import { Input } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { useCanvasStore, type CanvasProjectSummary } from "@/stores/canvas/use-canvas-store";
-import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
-import { readProjectBundle } from "@/services/project-storage";
-import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
-import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
+import { IconButton } from "@/components/ui/button";
+import { useCanvasProjectActions } from "@/components/canvas/use-canvas-project-actions";
+import { cn } from "@/lib/utils";
+import type { CanvasProjectSummary } from "@/stores/canvas/use-canvas-store";
 
 export function CanvasProjectCard({ project }: { project: CanvasProjectSummary }) {
-    const { message } = App.useApp();
     const { i18n, t } = useTranslation();
-    const navigate = useNavigate();
-    const [searchParams] = useSearchParams();
-    const renameProject = useCanvasStore((state) => state.renameProject);
-    const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
-    const editingId = useCanvasUiStore((state) => state.editingProjectId);
-    const editingTitle = useCanvasUiStore((state) => state.editingProjectTitle);
-    const startEditing = useCanvasUiStore((state) => state.startEditingProject);
-    const setEditingTitle = useCanvasUiStore((state) => state.setEditingProjectTitle);
-    const stopEditing = useCanvasUiStore((state) => state.stopEditingProject);
-    const toggleSelected = useCanvasUiStore((state) => state.toggleSelectedProjectId);
-    const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
-    const editing = editingId === project.id;
-    const selected = selectedIds.includes(project.id);
-    const open = () => {
-        const agentHash = hasAgentUrlBootstrap(window.location.hash) ? window.location.hash : "";
-        navigate(`/canvas/${project.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}${agentHash}`, { replace: Boolean(agentHash) });
-    };
-    const saveTitle = async () => {
-        try {
-            await renameProject(project.id, editingTitle);
-            stopEditing();
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : t("canvas.project.rename"));
-        }
-    };
-    const exportProject = async () => {
-        try {
-            const stored = await readProjectBundle(project.id);
-            if (stored) await exportCanvasProjects([stored], project.title || t("canvas.title"));
-        } catch (error) {
-            message.error(error instanceof Error ? error.message : t("canvas.project.export"));
-        }
-    };
+    const actions = useCanvasProjectActions(project);
 
     return (
-        <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-2xl bg-[#f1eee8] p-5 transition hover:bg-[#ebe6dc] dark:bg-white/5 dark:hover:bg-white/10" onClick={() => !editing && open()}>
+        <article
+            className={cn(
+                "group flex min-h-44 cursor-pointer flex-col justify-between rounded-xl border border-hairline bg-surface p-5 transition-colors hover:bg-surface-hover",
+                actions.selected && "border-hairline-strong bg-surface-active hover:bg-surface-active",
+            )}
+            onClick={() => !actions.editing && actions.open()}
+        >
             <div className="flex items-start gap-3">
                 <input
                     type="checkbox"
-                    checked={selected}
+                    checked={actions.selected}
                     onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => toggleSelected(project.id, event.target.checked)}
-                    className="mt-1 size-4 accent-stone-950 dark:accent-stone-100"
+                    onChange={(event) => actions.toggleSelected(event.target.checked)}
+                    className="mt-1 size-4 shrink-0 accent-action"
                     aria-label={t("canvas.project.select", { name: project.title })}
                 />
-                {editing ? (
-                    <Input className="min-w-0" value={editingTitle} onClick={(event) => event.stopPropagation()} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void saveTitle()} autoFocus />
+                {actions.editing ? (
+                    <Input className="min-w-0" value={actions.editingTitle} onClick={(event) => event.stopPropagation()} onChange={(event) => actions.setEditingTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && void actions.saveTitle()} autoFocus />
                 ) : (
                     <button
                         type="button"
                         className="min-w-0 cursor-pointer text-left"
                         onClick={(event) => {
                             event.stopPropagation();
-                            open();
+                            actions.open();
                         }}
                     >
-                        <h2 className="truncate text-xl font-semibold">{project.title}</h2>
-                        <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">
+                        <h2 className="truncate text-heading font-semibold text-ink">{project.title}</h2>
+                        <p className="mt-3 text-meta leading-5 text-ink-soft">
                             {t("canvas.project.stats", { canvases: project.canvasCount, nodes: project.nodeCount, connections: project.connectionCount, assets: project.assetCount })}
                         </p>
                     </button>
                 )}
             </div>
             <div className="mt-8 flex items-end justify-between gap-3">
-                <p className="text-xs text-stone-500">{t("canvas.project.updated", { date: new Date(project.updatedAt).toLocaleString(i18n.resolvedLanguage, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) })}</p>
-                <div className="flex items-center gap-1" onClick={(event) => event.stopPropagation()}>
-                    {editing ? (
+                <p className="text-meta text-ink-faint">
+                    {t("canvas.project.updated", { date: new Date(project.updatedAt).toLocaleString(i18n.resolvedLanguage, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) })}
+                </p>
+                <div className="flex items-center gap-0.5" onClick={(event) => event.stopPropagation()}>
+                    {actions.editing ? (
                         <>
-                            <Button type="text" size="small" shape="circle" icon={<Check className="size-4" />} onClick={() => void saveTitle()} aria-label={t("canvas.project.saveName")} />
-                            <Button type="text" size="small" shape="circle" icon={<X className="size-4" />} onClick={stopEditing} aria-label={t("canvas.project.cancelRename")} />
+                            <IconButton size="sm" onClick={() => void actions.saveTitle()} aria-label={t("canvas.project.saveName")}>
+                                <Check />
+                            </IconButton>
+                            <IconButton size="sm" onClick={actions.stopEditing} aria-label={t("canvas.project.cancelRename")}>
+                                <X />
+                            </IconButton>
                         </>
                     ) : (
                         <>
-                            <Button
-                                type="text"
-                                size="small"
-                                shape="circle"
-                                icon={<Download className="size-4" />}
-                                onClick={() => void exportProject()}
-                                aria-label={t("canvas.project.export")}
-                            />
-                            <Button type="text" size="small" shape="circle" icon={<Pencil className="size-4" />} onClick={() => startEditing(project.id, project.title)} aria-label={t("canvas.project.rename")} />
-                            <Button type="text" size="small" shape="circle" icon={<Trash2 className="size-4" />} onClick={() => setDeleteIds([project.id])} aria-label={t("canvas.project.delete")} />
+                            <IconButton size="sm" onClick={() => void actions.exportProject()} aria-label={t("canvas.project.export")}>
+                                <Download />
+                            </IconButton>
+                            <IconButton size="sm" onClick={actions.startEditing} aria-label={t("canvas.project.rename")}>
+                                <Pencil />
+                            </IconButton>
+                            <IconButton size="sm" className="hover:text-danger" onClick={actions.requestDelete} aria-label={t("canvas.project.delete")}>
+                                <Trash2 />
+                            </IconButton>
                         </>
                     )}
                 </div>

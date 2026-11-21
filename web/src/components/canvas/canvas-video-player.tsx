@@ -170,7 +170,7 @@ export function CanvasVideoPlayer({ nodeId, src, storageKey, posterUrl, autoPlay
     return (
         <div
             ref={containerRef}
-            className="group relative flex h-full w-full select-none items-center justify-center overflow-hidden rounded-[18px] bg-black"
+            className="group relative flex h-full w-full select-none items-center justify-center overflow-hidden rounded-[14px] bg-black"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
         >
@@ -337,7 +337,7 @@ export function LazyAudioPlayer({ src, storageKey, autoPlay = false, className =
     if (!src && !storageKey) return null;
     if (resolvedUrl) return <audio ref={audioRef} src={resolvedUrl} controls autoPlay className={className} data-canvas-no-zoom />;
     return (
-        <button type="button" disabled={loading} className="flex items-center justify-center gap-2 rounded-md py-2 text-sm hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10" onClick={() => void activate()}>
+        <button type="button" disabled={loading} className="flex items-center justify-center gap-2 rounded-md py-2 text-sm hover:bg-surface-hover disabled:opacity-50" onClick={() => void activate()}>
             <Play className="size-4" />
             {t("canvas.videoPlayer.play")}
         </button>

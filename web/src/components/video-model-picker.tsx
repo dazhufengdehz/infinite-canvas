@@ -1,5 +1,5 @@
 import { Select, Tooltip } from "antd";
-import { AlertTriangle, Film, HelpCircle, Server, Sparkles, Workflow } from "lucide-react";
+import { AlertTriangle, Film, HelpCircle, Sparkles, Workflow } from "lucide-react";
 import { useMemo } from "react";
 
 import {
@@ -92,10 +92,7 @@ export function VideoModelPicker({
                             ) : (
                                 <Film className="size-3.5 shrink-0 text-emerald-500" />
                             )}
-                            <div className="flex min-w-0 flex-col">
-                                <span className="font-medium text-xs truncate">{model.name}</span>
-                                <span className="truncate text-[10px] opacity-50">{channel.name || "ComfyUI 主机"}{isCustom ? " · 自定义" : ""}</span>
-                            </div>
+                            <span className="font-medium text-xs truncate">{model.name}</span>
                         </div>
                         {isBlocked ? (
                             <Tooltip
@@ -194,15 +191,9 @@ export function VideoModelPicker({
             }}
             labelRender={() => {
                 const isFrame = activeProfile?.category === "frameVideo";
-                const channelName = activeChannel?.name || "ComfyUI";
 
                 return (
                     <div className="flex items-center gap-1.5 truncate text-xs">
-                        <Server className="size-3.5 shrink-0 text-blue-500 opacity-80" />
-                        <span className="truncate max-w-[80px] font-medium opacity-85">
-                            {channelName}
-                        </span>
-                        <span className="opacity-30">/</span>
                         {activeIsCustom ? (
                             <Workflow className="size-3.5 shrink-0 text-cyan-500" />
                         ) : isFrame ? (

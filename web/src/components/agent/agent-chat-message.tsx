@@ -45,10 +45,10 @@ function AgentLinkModal({ isOpen, onClose, onConfirm, url }: LinkSafetyModalProp
     };
     return (
         <Modal open={isOpen} onCancel={onClose} footer={null} centered width={420} title={t(localPath ? "agent.message.openLocal" : "agent.message.openExternal")}>
-            <div className="text-sm text-black/55 dark:text-white/55">
+            <div className="text-sm text-ink-soft">
                 {t(localPath ? "agent.message.localDescription" : "agent.message.externalDescription")}
             </div>
-            <div className="mt-4 max-h-32 overflow-auto break-all rounded-lg bg-black/[.035] px-3 py-2.5 font-mono text-xs leading-5 dark:bg-white/[.06]">{localPath || url}</div>
+            <div className="mt-4 max-h-32 overflow-auto break-all rounded-lg bg-surface-sunken px-3 py-2.5 font-mono text-xs leading-5">{localPath || url}</div>
             <div className="mt-5 flex justify-end gap-2">
                 <Button type="text" icon={<Copy className="size-4" />} onClick={() => copyText(localPath || url, t(localPath ? "agent.message.pathCopied" : "agent.message.linkCopied"))}>
                     {t(localPath ? "agent.message.copyPath" : "agent.message.copyLink")}
@@ -105,11 +105,11 @@ export type AgentChatMessageItem = {
 export function AgentChatMessage({ item, theme, onRejectTool, onApproveTool }: { item: AgentChatMessageItem; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onRejectTool?: (id: string) => void; onApproveTool?: (id: string) => void }) {
     const isUser = item.role === "user";
     const isSystem = item.role === "system";
-    const color = item.role === "error" ? "#dc2626" : item.role === "tool" ? "#2563eb" : theme.node.text;
+    const color = item.role === "error" ? theme.state.danger : item.role === "tool" ? theme.text.secondary : theme.text.primary;
     if (isSystem) {
         return (
             <div className="flex justify-center text-xs">
-                <div className="max-w-[88%] px-3 py-1.5 text-center" style={{ color: theme.node.muted }}>
+                <div className="max-w-[88%] px-3 py-1.5 text-center" style={{ color: theme.text.secondary }}>
                     {item.text}
                     {item.meta ? <span className="ml-2 opacity-60">{item.meta}</span> : null}
                 </div>
@@ -123,8 +123,8 @@ export function AgentChatMessage({ item, theme, onRejectTool, onApproveTool }: {
     return (
         <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
             <div
-                className={isUser ? "min-w-0 max-w-[82%] py-1 text-right text-sm leading-6" : "min-w-0 w-full text-left text-sm leading-6"}
-                style={{ color }}
+                className={isUser ? "min-w-0 max-w-[82%] rounded-[10px] px-3 py-2 text-right text-sm leading-6" : "min-w-0 w-full text-left text-sm leading-6"}
+                style={{ color, background: isUser ? theme.surface.sunken : undefined }}
             >
                 {isUser ? (
                     <AgentUserMessageContent text={item.text} references={item.canvasReferences || []} skill={item.skill} theme={theme} />
@@ -152,7 +152,7 @@ function AgentUserMessageContent({ text, references, skill, theme }: { text: str
 }
 
 function AgentSkillMention({ skill, theme }: { skill: AgentSkillReference; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
-    return <span className={agentInlineTokenClass} style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }} title={skill.path}>/{skill.displayName || skill.name}</span>;
+    return <span className={agentInlineTokenClass} style={{ background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.primary }} title={skill.path}>/{skill.displayName || skill.name}</span>;
 }
 
 function AgentCanvasMention({ reference, theme }: { reference: AgentCanvasReference; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
@@ -171,8 +171,8 @@ function AgentCanvasMention({ reference, theme }: { reference: AgentCanvasRefere
         >
             <span
                 tabIndex={0}
-                className={`${agentInlineTokenClass} max-w-56 cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/10 dark:focus-visible:ring-white/15`}
-                style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }}
+                className={`${agentInlineTokenClass} max-w-56 cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-hairline-strong`}
+                style={{ background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.primary }}
                 aria-label={i18n.t("agent.composer.mentions.referenceLabel", { kind: canvasReferenceKindLabel(reference.kind), title: reference.title })}
             >
                 {reference.kind === "image" && previewUrl
@@ -188,24 +188,24 @@ export function AgentPendingToolCard({ summary, detail, theme, onReject, onAppro
     const { t } = useTranslation();
     const view = userDetail(detail);
     return (
-        <div className="min-w-0 rounded-xl border px-3 py-3" style={{ borderColor: "rgba(217,119,6,.28)", background: "rgba(217,119,6,.025)", color: theme.node.text }}>
+        <div className="min-w-0 rounded-xl border px-3 py-3" style={{ borderColor: `color-mix(in srgb, ${theme.state.warning} 28%, transparent)`, background: `color-mix(in srgb, ${theme.state.warning} 4%, transparent)`, color: theme.text.primary }}>
             <details className="group">
                 <summary className={`list-none ${view ? "cursor-pointer" : "cursor-default"}`} onClick={(event) => { if (!view) event.preventDefault(); }}>
                     <div className="flex min-w-0 items-center gap-2 text-sm font-medium leading-5">
-                        <CircleAlert className="size-4 shrink-0 text-amber-600" />
+                        <CircleAlert className="size-4 shrink-0" style={{ color: theme.state.warning }} />
                         <span className="min-w-0 flex-1">{t("agent.message.awaitingConfirmation")}</span>
-                        {view ? <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.node.muted }} /> : null}
+                        {view ? <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.text.secondary }} /> : null}
                     </div>
-                    <div className="mt-1 pl-6 text-sm leading-5" style={{ color: theme.node.muted }}>{summary}</div>
+                    <div className="mt-1 pl-6 text-sm leading-5" style={{ color: theme.text.secondary }}>{summary}</div>
                 </summary>
                 {view ? <div className="ml-6"><AgentDetailBlock detail={view} theme={theme} /></div> : null}
             </details>
             {onReject || onApprove ? (
-                <div className="mt-3 flex justify-end gap-2 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
+                <div className="mt-3 flex justify-end gap-2 border-t pt-3" style={{ borderColor: theme.hairline.base }}>
                     <Button danger type="text" className="!h-8" icon={<XCircle className="size-3.5" />} onClick={() => onReject?.()}>
                         {t("agent.message.reject")}
                     </Button>
-                    <Button type="text" className="!h-8" icon={<CheckCircle2 className="size-3.5" />} style={{ color: "#16a34a" }} onClick={() => onApprove?.()}>
+                    <Button type="text" className="!h-8" icon={<CheckCircle2 className="size-3.5" />} style={{ color: theme.state.success }} onClick={() => onApprove?.()}>
                         {t("agent.message.approve")}
                     </Button>
                 </div>
@@ -221,19 +221,19 @@ export function AgentApprovalCard({ approval, theme, onDecision }: { approval: A
     const title = t(isNetwork ? "agent.message.networkApproval" : isFile ? "agent.message.fileApproval" : approval.method === "item/permissions/requestApproval" ? "agent.message.permissionApproval" : "agent.message.commandApproval");
     const target = isNetwork ? approvalTarget(approval.networkApprovalContext) : isFile ? approval.grantRoot || approval.cwd : commandText(approval.command) || approval.cwd;
     return (
-        <div className="min-w-0 rounded-xl border px-3 py-3" style={{ borderColor: "rgba(234,88,12,.32)", background: "rgba(234,88,12,.035)", color: theme.node.text }}>
+        <div className="min-w-0 rounded-xl border px-3 py-3" style={{ borderColor: `color-mix(in srgb, ${theme.state.warning} 32%, transparent)`, background: `color-mix(in srgb, ${theme.state.warning} 5%, transparent)`, color: theme.text.primary }}>
             <div className="flex items-start gap-2.5">
-                <ShieldAlert className="mt-0.5 size-4 shrink-0 text-orange-600" />
+                <ShieldAlert className="mt-0.5 size-4 shrink-0" style={{ color: theme.state.warning }} />
                 <div className="min-w-0 flex-1">
                     <div className="text-sm font-medium">{title}</div>
-                    {approval.reason ? <div className="mt-1 text-xs leading-5" style={{ color: theme.node.muted }}>{approval.reason}</div> : null}
-                    {target ? <div className="mt-1.5 break-all rounded-lg px-2.5 py-2 font-mono text-[11px] leading-4" style={{ background: theme.toolbar.panel, color: theme.node.text }}>{target}</div> : null}
+                    {approval.reason ? <div className="mt-1 text-xs leading-5" style={{ color: theme.text.secondary }}>{approval.reason}</div> : null}
+                    {target ? <div className="mt-1.5 break-all rounded-lg px-2.5 py-2 font-mono text-[11px] leading-4" style={{ background: theme.surface.sunken, color: theme.text.primary }}>{target}</div> : null}
                 </div>
             </div>
-            <div className="mt-3 flex flex-wrap justify-end gap-1.5 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
+            <div className="mt-3 flex flex-wrap justify-end gap-1.5 border-t pt-3" style={{ borderColor: theme.hairline.base }}>
                 <Button danger type="text" className="!h-8" disabled={Boolean(approval.deciding)} loading={approval.deciding === "decline"} onClick={() => onDecision("decline")}>{t("agent.message.decline")}</Button>
                 <Button type="text" className="!h-8" disabled={Boolean(approval.deciding)} loading={approval.deciding === "accept"} onClick={() => onDecision("accept")}>{t("agent.message.allowOnce")}</Button>
-                <Button type="text" className="!h-8" disabled={Boolean(approval.deciding)} loading={approval.deciding === "acceptForSession"} style={{ color: "#ea580c" }} onClick={() => onDecision("acceptForSession")}>{t("agent.message.allowSession")}</Button>
+                <Button type="text" className="!h-8" disabled={Boolean(approval.deciding)} loading={approval.deciding === "acceptForSession"} style={{ color: theme.state.warning }} onClick={() => onDecision("acceptForSession")}>{t("agent.message.allowSession")}</Button>
             </div>
         </div>
     );
@@ -249,17 +249,17 @@ export function AgentToolCard({ title, text, detail, theme }: { title: string; t
     const view = userDetail(detail);
     const showText = title !== "读取画布" || text !== "已读取当前画布内容";
     const className = "group min-w-0 rounded-xl border px-3 py-2.5 text-left";
-    const style = { borderColor: theme.node.stroke, background: "transparent", color: theme.node.text };
+    const style = { borderColor: theme.hairline.base, background: "transparent", color: theme.text.primary };
     const content = (
         <>
             <div className="flex min-w-0 items-center gap-2 text-sm leading-5">
                 <span className="shrink-0" style={{ color: state.color }}>{toolIcon(kind, state.icon)}</span>
                 <span className="min-w-0 truncate font-medium">{title}</span>
                 <span className="shrink-0 text-[11px]" style={{ color: state.color }}>{state.label}</span>
-                {view ? <ChevronDown className="ml-auto size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.node.muted }} /> : null}
+                {view ? <ChevronDown className="ml-auto size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.text.secondary }} /> : null}
             </div>
             {showText ? (
-                <div className={`mt-1 whitespace-pre-wrap break-words pl-6 text-sm leading-5 ${kind === "command" ? "font-mono text-[12px]" : ""}`} style={{ color: state.isError ? state.color : theme.node.muted }}>
+                <div className={`mt-1 whitespace-pre-wrap break-words pl-6 text-sm leading-5 ${kind === "command" ? "font-mono text-[12px]" : ""}`} style={{ color: state.isError ? state.color : theme.text.secondary }}>
                     {text}
                 </div>
             ) : null}
@@ -280,14 +280,14 @@ function AgentReasoningSummary({ text, detail, theme }: { text: string; detail?:
     const running = ["inProgress", "in_progress", "running", "started", "pending"].includes(status);
     return (
         <details className="group min-w-0 text-left">
-            <summary className="cursor-pointer list-none py-1 text-sm" style={{ color: theme.node.muted }}>
+            <summary className="cursor-pointer list-none py-1 text-sm" style={{ color: theme.text.secondary }}>
                 <div className="flex min-w-0 items-center gap-2">
                     {running ? <LoaderCircle className="size-4 shrink-0 animate-spin" /> : <Brain className="size-4 shrink-0" />}
                     <span>{t(running ? "agent.message.thinking" : "agent.events.reasoning")}</span>
                     <ChevronRight className="size-3.5 shrink-0 transition-transform group-open:rotate-90" />
                 </div>
             </summary>
-            <div className="break-words pb-1 pl-6 pr-2 text-xs leading-5 [&_code]:rounded [&_code]:px-1 [&_p]:my-1 [&_pre]:my-2" style={{ color: theme.node.muted }}>
+            <div className="break-words pb-1 pl-6 pr-2 text-xs leading-5 [&_code]:rounded [&_code]:px-1 [&_p]:my-1 [&_pre]:my-2" style={{ color: theme.text.secondary }}>
                 <Streamdown {...streamdownProps()} animated={streamdownAnimation} isAnimating={running}>{text}</Streamdown>
             </div>
         </details>
@@ -302,7 +302,7 @@ export function AgentCommandGroup({ items, theme }: { items: AgentCommandItem[];
     const running = states.some((state) => state.running);
     const failed = states.filter((state) => state.failed).length;
     const expandable = items.some((item) => Boolean(item.text.trim() || userDetail(item.detail)));
-    const color = running ? "#d97706" : failed ? "#dc2626" : theme.node.muted;
+    const color = running ? theme.state.warning : failed ? theme.state.danger : theme.text.secondary;
     const label = running ? t(items.length > 1 ? "agent.message.commandsRunning" : "agent.message.commandRunning", { count: items.length }) : t("agent.message.commandsCompleted", { count: items.length, failed: failed ? t("agent.message.commandsFailed", { count: failed }) : "" });
     const header = (
         <div className="flex min-w-0 items-center gap-2 text-sm" style={{ color }}>
@@ -327,7 +327,7 @@ function AgentSingleCommand({ item, theme }: { item: AgentCommandItem; theme: (t
     const view = userDetail(item.detail);
     return (
         <div className="ml-6 pb-1">
-            {item.text ? <div className="mt-1.5 whitespace-pre-wrap break-all font-mono text-[11px] leading-5" style={{ color: theme.node.text }}>{item.text}</div> : null}
+            {item.text ? <div className="mt-1.5 whitespace-pre-wrap break-all font-mono text-[11px] leading-5" style={{ color: theme.text.primary }}>{item.text}</div> : null}
             {view ? <AgentDetailBlock detail={view} theme={theme} /> : null}
         </div>
     );
@@ -343,16 +343,16 @@ function AgentCommandEntry({ item, index, theme }: { item: AgentCommandItem; ind
     const color = state.failed ? "#dc2626" : state.running ? "#d97706" : "#16a34a";
     const content = (
         <>
-            <span className="w-4 shrink-0 text-center text-[10px] tabular-nums opacity-50" style={{ color: theme.node.muted }}>{index + 1}</span>
-            <code className="min-w-0 flex-1 truncate text-[11px] leading-5" style={{ color: theme.node.text }} title={item.text}>{item.text || t("agent.message.command")}</code>
+            <span className="w-4 shrink-0 text-center text-[10px] tabular-nums opacity-50" style={{ color: theme.text.secondary }}>{index + 1}</span>
+            <code className="min-w-0 flex-1 truncate text-[11px] leading-5" style={{ color: theme.text.primary }} title={item.text}>{item.text || t("agent.message.command")}</code>
             <span className="shrink-0" style={{ color }} title={status} aria-label={status}>
                 {state.running ? <LoaderCircle className="size-3.5 animate-spin" /> : state.failed ? <XCircle className="size-3.5" /> : <CheckCircle2 className="size-3.5" />}
             </span>
-            {view ? <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} style={{ color: theme.node.muted }} /> : null}
+            {view ? <ChevronRight className={`size-3.5 shrink-0 transition-transform ${open ? "rotate-90" : ""}`} style={{ color: theme.text.secondary }} /> : null}
         </>
     );
     return (
-        <div className={index ? "border-t" : ""} style={{ borderColor: theme.node.stroke }}>
+        <div className={index ? "border-t" : ""} style={{ borderColor: theme.hairline.base }}>
             {view
                 ? <button type="button" className="flex w-full min-w-0 items-center gap-2 py-2 text-left" aria-expanded={open} aria-controls={detailId} onClick={() => setOpen((value) => !value)}>{content}</button>
                 : <div className="flex min-w-0 items-center gap-2 py-2 text-left">{content}</div>}
@@ -374,22 +374,22 @@ function AgentPlanCard({ title, plan, theme }: { title: string; plan: PlanDetail
     const completed = plan.tasks.filter((item) => item.status === "completed").length;
     const state = planCardState(plan, completed);
     return (
-        <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-left" style={{ borderColor: theme.node.stroke, background: "transparent", color: theme.node.text }}>
+        <details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group min-w-0 flex-1 rounded-xl border px-3 py-2.5 text-left" style={{ borderColor: theme.hairline.base, background: "transparent", color: theme.text.primary }}>
             <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2.5">
                 <ListChecks className="size-4 shrink-0" style={{ color: state.color }} />
                 <span className="min-w-0 flex-1 truncate text-sm font-medium">{title}</span>
                 <span className="shrink-0 text-[11px]" style={{ color: state.color }}>{state.label}</span>
-                <span aria-live="polite" className="shrink-0 text-[11px] tabular-nums" style={{ color: theme.node.muted }}>{completed}/{plan.tasks.length}</span>
-                <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.node.muted }} />
+                <span aria-live="polite" className="shrink-0 text-[11px] tabular-nums" style={{ color: theme.text.secondary }}>{completed}/{plan.tasks.length}</span>
+                <ChevronDown className="size-3.5 shrink-0 transition-transform group-open:rotate-180" style={{ color: theme.text.secondary }} />
             </summary>
-            {plan.explanation ? <div className="mt-1.5 text-xs leading-5" style={{ color: theme.node.muted }}>{plan.explanation}</div> : null}
-            <div className="mt-2.5 space-y-2 border-t pt-2.5" style={{ borderColor: theme.node.stroke }}>
+            {plan.explanation ? <div className="mt-1.5 text-xs leading-5" style={{ color: theme.text.secondary }}>{plan.explanation}</div> : null}
+            <div className="mt-2.5 space-y-2 border-t pt-2.5" style={{ borderColor: theme.hairline.base }}>
                 {plan.tasks.map((item, index) => {
-                    const task = planTaskState(item.status, theme.node.muted);
+                    const task = planTaskState(item.status, theme.text.secondary);
                     return (
                         <div key={`${index}-${item.step}`} className="flex items-start gap-2 text-sm leading-5">
                             <span className="mt-0.5 shrink-0" style={{ color: task.color }}>{task.icon}</span>
-                            <span className={`min-w-0 flex-1 ${item.status === "completed" ? "opacity-55" : item.status === "inProgress" ? "font-medium" : ""}`} style={{ color: item.status === "inProgress" ? theme.node.text : theme.node.muted }}>{item.step}</span>
+                            <span className={`min-w-0 flex-1 ${item.status === "completed" ? "opacity-55" : item.status === "inProgress" ? "font-medium" : ""}`} style={{ color: item.status === "inProgress" ? theme.text.primary : theme.text.secondary }}>{item.step}</span>
                             <span className="shrink-0 text-[11px]" style={{ color: task.color }}>{task.label}</span>
                         </div>
                     );
@@ -410,26 +410,26 @@ export function AgentWorkingMessage({ text, detail, status = "running", mcpStatu
     }, [activityKey]);
     return (
         <div className="min-w-0 py-1" aria-live="polite">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.node.muted }}>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" style={{ color: theme.text.secondary }}>
                 {status === "running" ? <LoaderCircle className="size-3.5 shrink-0 animate-spin" /> : status === "ready" ? <CheckCircle2 className="size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="size-3.5 shrink-0 text-red-600" />}
                 <span className="min-w-0">{text}</span>
                 {status === "running" && elapsed >= 5 ? <span className="shrink-0 text-[11px] tabular-nums opacity-60">{waitingTime(elapsed)}</span> : null}
             </div>
-            {detail ? <div className="ml-5.5 mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{detail}</div> : null}
+            {detail ? <div className="ml-5.5 mt-1 text-xs leading-5 opacity-65" style={{ color: theme.text.secondary }}>{detail}</div> : null}
             {mcpStatuses.length ? (
                 <div className="ml-5.5 mt-3 space-y-2">
                     {mcpStatuses.map((item) => (
-                        <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.node.muted }}>
+                        <div key={item.name} className="flex min-w-0 items-start gap-2 text-xs leading-5" style={{ color: theme.text.secondary }}>
                             {item.status === "running" ? <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" /> : item.status === "ready" ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-emerald-600" /> : <XCircle className="mt-0.5 size-3.5 shrink-0 text-red-600" />}
                             <div className="min-w-0">
-                                <div className="font-medium" style={{ color: theme.node.text }}>{item.name}</div>
+                                <div className="font-medium" style={{ color: theme.text.primary }}>{item.name}</div>
                                 <div className="opacity-65">{item.detail}</div>
                             </div>
                         </div>
                     ))}
                 </div>
             ) : null}
-            {status === "running" && elapsed >= 30 ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.node.muted }}>{t("agent.message.slowResponse")}</div> : null}
+            {status === "running" && elapsed >= 30 ? <div className="mt-1 text-xs leading-5 opacity-65" style={{ color: theme.text.secondary }}>{t("agent.message.slowResponse")}</div> : null}
         </div>
     );
 }
@@ -459,13 +459,13 @@ type UserDetail = { kind?: string; status?: string; rows?: Array<{ label: string
 function AgentDetailBlock({ detail, theme }: { detail: UserDetail; theme: (typeof canvasThemes)[keyof typeof canvasThemes] }) {
     const { t } = useTranslation();
     return (
-        <div className="mt-3 space-y-2.5 border-t pt-3 text-xs" style={{ borderColor: theme.node.stroke, color: theme.node.muted }}>
+        <div className="mt-3 space-y-2.5 border-t pt-3 text-xs" style={{ borderColor: theme.hairline.base, color: theme.text.secondary }}>
             {detail.rows?.length ? (
                 <dl className="space-y-1.5">
                     {detail.rows.map((row) => (
                         <div key={`${row.label}-${row.value}`} className="grid grid-cols-[64px_minmax(0,1fr)] gap-2">
                             <dt className="opacity-60">{row.label}</dt>
-                            <dd className="min-w-0 break-words" style={{ color: theme.node.text }}>{row.value}</dd>
+                            <dd className="min-w-0 break-words" style={{ color: theme.text.primary }}>{row.value}</dd>
                         </div>
                     ))}
                 </dl>
@@ -476,7 +476,7 @@ function AgentDetailBlock({ detail, theme }: { detail: UserDetail; theme: (typeo
                     {detail.files.map((file) => (
                         <div key={`${file.action}-${file.path}`} className="flex items-start gap-2">
                             <FileText className="mt-0.5 size-3.5 shrink-0" />
-                            <span className="min-w-0 flex-1 break-all" style={{ color: theme.node.text }}>{file.path}</span>
+                            <span className="min-w-0 flex-1 break-all" style={{ color: theme.text.primary }}>{file.path}</span>
                             {file.action ? <span className="shrink-0 opacity-60">{file.action}</span> : null}
                         </div>
                     ))}
@@ -485,7 +485,7 @@ function AgentDetailBlock({ detail, theme }: { detail: UserDetail; theme: (typeo
             {detail.output ? (
                 <div className="space-y-1.5">
                     <div className="opacity-60">{t(detail.status === "failed" || detail.status === "error" ? "agent.message.errorInfo" : "agent.message.output")}</div>
-                    <pre className="thin-scrollbar max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg px-3 py-2 font-mono text-[11px] leading-4" style={{ background: theme.toolbar.panel, color: theme.node.text }}>{detail.output}</pre>
+                    <pre className="thin-scrollbar max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg px-3 py-2 font-mono text-[11px] leading-4" style={{ background: theme.surface.base, color: theme.text.primary }}>{detail.output}</pre>
                 </div>
             ) : null}
         </div>

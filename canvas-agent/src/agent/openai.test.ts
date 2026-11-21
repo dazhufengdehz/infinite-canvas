@@ -5,9 +5,9 @@ import { runOpenAiConversation, type OpenAiConversationOptions } from "./openai.
 import type { AgentEmit } from "./types.js";
 
 type EventRecord = { type: string; payload: Record<string, unknown> };
-type RequestRecord = { body: Record<string, unknown> };
+type RequestRecord = { body: Record<string, unknown>; url?: string };
 
-const config = { apiKey: "test-key", baseUrl: "https://openai.test/v1", model: "gpt-test" };
+const config = { apiKey: "test-key", baseUrl: "https://openai.test/v1", model: "gpt-test", protocol: "auto" as const };
 
 function response(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -40,7 +40,7 @@ function optionsFor(requests: RequestRecord[], events: EventRecord[], responses:
         turnId: "turn-1",
         sourceClientId: "client-1",
         fetchImpl: async (_input, init) => {
-            requests.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown> });
+            requests.push({ body: JSON.parse(String(init?.body)) as Record<string, unknown>, url: String(_input) });
             const next = responses.shift();
             if (!next) throw new Error("unexpected request");
             return next;
@@ -112,4 +112,56 @@ test("HTTP 错误提炼服务端 error.message 且不泄露 API Key", async () =
         assert.doesNotMatch(error.message, /test-key/);
         return true;
     });
+});
+
+function chatMessage(text = "你好") {
+    return {
+        id: "chatcmpl-1",
+        choices: [{ message: { role: "assistant", content: text } }],
+        usage: { prompt_tokens: 5, completion_tokens: 2 },
+    };
+}
+
+test("auto 模式在 Responses 404 时自动降级到 Chat Completions", async () => {
+    const requests: RequestRecord[] = [];
+    const events: EventRecord[] = [];
+    const options = optionsFor(requests, events, [response({ error: { message: "Not Found" } }, 404), response(chatMessage("降级成功"))], async () => ({}));
+
+    const result = await runOpenAiConversation(options);
+
+    assert.equal(result.protocol, "chat");
+    assert.match(String(requests[0].url), /\/responses$/);
+    assert.match(String(requests[1].url), /\/chat\/completions$/);
+    const fallbackLog = events.find((event) => event.type === "agent_log");
+    assert.match(String(fallbackLog?.payload.text), /自动切换为 Chat Completions/);
+    const message = events.find((event) => event.payload.type === "item.completed" && (event.payload.item as Record<string, unknown>)?.type === "agent_message");
+    assert.equal((message?.payload.item as Record<string, unknown>).text, "降级成功");
+});
+
+test("Chat Completions 不支持 tools 时自动降级为纯对话并提示", async () => {
+    const requests: RequestRecord[] = [];
+    const events: EventRecord[] = [];
+    const options = { ...optionsFor(requests, events, [response({ error: { message: "tools is not supported by this model" } }, 400), response(chatMessage("纯对话"))], async () => ({})), protocol: "chat" as const };
+
+    const result = await runOpenAiConversation(options);
+
+    assert.equal(result.protocol, "chat");
+    assert.ok(Array.isArray(requests[0].body.tools));
+    assert.equal(requests[1].body.tools, undefined);
+    const degraded = events.find((event) => event.type === "agent_log");
+    assert.match(String(degraded?.payload.text), /不支持工具调用/);
+});
+
+test("Base URL 缺少 /v1 时自动补齐", async () => {
+    const requests: RequestRecord[] = [];
+    const events: EventRecord[] = [];
+    const options = {
+        ...optionsFor(requests, events, [response(chatMessage())], async () => ({})),
+        config: { ...config, baseUrl: "https://api.example.com" },
+        protocol: "chat" as const,
+    };
+
+    await runOpenAiConversation(options);
+
+    assert.equal(requests[0].url, "https://api.example.com/v1/chat/completions");
 });

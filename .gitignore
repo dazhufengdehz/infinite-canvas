@@ -21,5 +21,6 @@ web/public/plugins
 .collab-cache/
 web/.collab-cache/
 web/src-tauri/binaries/
+web/src-tauri/resources/canvas-agent/
 web/src-tauri/gen/
 web/src-tauri/target/

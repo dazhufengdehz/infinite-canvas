@@ -67,7 +67,7 @@ export function CanvasImageSettingsPopover({ modelId, profile: profileProp, conf
     return (
         <>
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[180px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[180px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.text.primary }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">
                         {hasSizeConfig ? `${imageSizeLabel(activeSize)} · ` : ""}
                         {t("canvas.controls.images", { count })}
@@ -98,7 +98,7 @@ function ImageSettingsPortal({
     config: AiConfig;
     onConfigChange: (key: keyof AiConfig, value: string) => void;
 }) {
-    const width = 356;
+    const width = 380;
     const gap = 8;
     const margin = 12;
     const spaceAbove = buttonRect.top - gap - margin;
@@ -116,13 +116,13 @@ function ImageSettingsPortal({
         ...(isTop
             ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceAbove)) }
             : { top: buttonRect.bottom + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceBelow)) }),
-        background: theme.toolbar.panel,
-        border: `1px solid ${theme.toolbar.border}`,
-        borderRadius: 12,
-        boxShadow: "0 8px 24px rgba(28, 25, 23, 0.10)",
-        padding: 12,
+        background: theme.surface.base,
+        border: `1px solid ${theme.hairline.base}`,
+        borderRadius: 14,
+        boxShadow: "var(--elevation-float)",
+        padding: 18,
         overflowY: "auto",
-        color: theme.node.text,
+        color: theme.text.primary,
     } as const;
 
     return createPortal(

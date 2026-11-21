@@ -95,7 +95,7 @@ export function CanvasFaceRefineModal({
         <Modal
             title={
                 <div className="flex items-center gap-2">
-                    <span className="flex size-7 items-center justify-center rounded-lg bg-pink-500/10 text-pink-500 dark:bg-pink-400/20 dark:text-pink-400">
+                    <span className="flex size-7 items-center justify-center rounded-lg bg-pink-500/10 text-pink-500">
                         <SmilePlus className="size-4" />
                     </span>
                     <span className="text-base font-semibold">{t("canvas.faceRefine.modal.title")}</span>
@@ -108,7 +108,7 @@ export function CanvasFaceRefineModal({
             width={540}
             footer={
                 <div className="flex items-center justify-between pt-2">
-                    <div className="text-xs text-stone-400">
+                    <div className="text-xs text-ink-faint">
                         {hasReferences ? t("canvas.faceRefine.modal.hasReferences") : t("canvas.faceRefine.modal.noReferences")}
                     </div>
                     <div className="flex items-center gap-2">
@@ -126,14 +126,14 @@ export function CanvasFaceRefineModal({
             }
         >
             <div className="space-y-4 py-2">
-                <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed">
+                <p className="text-xs text-ink-faint leading-relaxed">
                     {t("canvas.faceRefine.modal.description")}
                 </p>
 
                 {/* 1. 执行主机 / 渠道选择 */}
                 <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs">
-                        <label className="font-medium text-stone-700 dark:text-stone-200">
+                        <label className="font-medium text-ink">
                             {t("canvas.faceRefine.modal.channelLabel")}
                         </label>
                         <button
@@ -161,7 +161,7 @@ export function CanvasFaceRefineModal({
                                             <span className="font-medium truncate max-w-[180px]">{c.name}</span>
                                             {isDefault && <Tag className="text-[10px] m-0 px-1 py-0">{t("common.default")}</Tag>}
                                         </span>
-                                        <span className="font-mono text-xs text-stone-400 truncate max-w-[200px]">
+                                        <span className="font-mono text-xs text-ink-faint truncate max-w-[200px]">
                                             {hostUrl}
                                         </span>
                                     </div>
@@ -173,7 +173,7 @@ export function CanvasFaceRefineModal({
 
                 {/* 2. 人脸修复工作流选择 */}
                 <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">
+                    <label className="text-xs font-medium text-ink">
                         {t("canvas.faceRefine.modal.workflowLabel")}
                     </label>
                     <Select
@@ -197,23 +197,23 @@ export function CanvasFaceRefineModal({
                 </div>
 
                 {/* 3. 角色参考图与状态检测 */}
-                <div className="rounded-lg border border-stone-200 dark:border-stone-800 bg-stone-50/50 dark:bg-stone-900/50 p-3 space-y-2">
+                <div className="rounded-lg border border-hairline bg-surface-sunken/50 p-3 space-y-2">
                     <div className="flex items-center justify-between text-xs">
-                        <span className="text-stone-500 dark:text-stone-400">{t("canvas.faceRefine.modal.refDetection")}</span>
+                        <span className="text-ink-faint">{t("canvas.faceRefine.modal.refDetection")}</span>
                         {hasReferences ? (
-                            <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-medium">
+                            <span className="flex items-center gap-1 text-ok font-medium">
                                 <CheckCircle2 className="size-3.5" />
                                 <span>{t("canvas.faceRefine.modal.refReady", { count: upstreamImageNodes.length || node?.metadata?.references?.length || 0 })}</span>
                             </span>
                         ) : (
-                            <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                            <span className="flex items-center gap-1 text-warn font-medium">
                                 <AlertCircle className="size-3.5" />
                                 <span>{t("canvas.faceRefine.modal.refPending")}</span>
                             </span>
                         )}
                     </div>
                     {!hasReferences && (
-                        <p className="text-[11px] text-stone-400 leading-normal">
+                        <p className="text-[11px] text-ink-faint leading-normal">
                             {t("canvas.faceRefine.modal.refTip")}
                         </p>
                     )}
@@ -221,7 +221,7 @@ export function CanvasFaceRefineModal({
 
                 {/* 4. 修复提示词 */}
                 <div className="space-y-1.5">
-                    <label className="text-xs font-medium text-stone-700 dark:text-stone-200">
+                    <label className="text-xs font-medium text-ink">
                         {t("canvas.faceRefine.modal.promptLabel")}
                     </label>
                     <Input.TextArea

@@ -9,6 +9,7 @@ import { formatBytes, readFileAsDataUrl } from "@/lib/image-utils";
 import { uploadImage } from "@/services/image-storage";
 import { getMediaBlob, uploadMediaFile } from "@/services/file-storage";
 import { CanvasVideoPlayer, LazyAudioPlayer } from "@/components/canvas/canvas-video-player";
+import { PageHeader } from "@/components/ui/page-header";
 import { cn } from "@/lib/utils";
 import { useAssetStore, type Asset, type AssetKind, type AudioAsset, type ImageAsset, type VideoAsset } from "@/stores/use-asset-store";
 import { exportAssets, readAssetPackage } from "./asset-transfer";
@@ -234,32 +235,30 @@ export default function AssetsPage() {
     return (
         <div className="flex h-full flex-col overflow-hidden bg-background text-stone-900 dark:text-stone-100">
             <main className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-8 [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.14)_1px,transparent_1px)]">
-                <div className="pb-8">
-                    <div className="mx-auto max-w-5xl text-center">
-                        <h1 className="text-4xl font-semibold tracking-tight text-stone-950 dark:text-stone-100">{t("assets.title")}</h1>
-                        <p className="mt-3 text-sm text-stone-500 dark:text-stone-400">{t("assets.description")}</p>
-                    </div>
+                <div className="mx-auto w-full max-w-[1180px] pb-8">
+                    <PageHeader
+                        title={t("assets.title")}
+                        description={t("assets.description")}
+                        actions={
+                            <Input.Search
+                                className="w-[320px]"
+                                allowClear
+                                prefix={<Search className="size-4 text-ink-faint" />}
+                                value={keyword}
+                                placeholder={t("assets.search")}
+                                onChange={(event) => {
+                                    setPage(1);
+                                    setKeyword(event.target.value);
+                                }}
+                                onSearch={(value) => {
+                                    setPage(1);
+                                    setKeyword(value);
+                                }}
+                            />
+                        }
+                    />
 
-                    <div className="mx-auto mt-8 w-full max-w-2xl">
-                        <Input.Search
-                            className="w-full"
-                            size="large"
-                            allowClear
-                            prefix={<Search className="size-4 text-stone-400" />}
-                            value={keyword}
-                            placeholder={t("assets.search")}
-                            onChange={(event) => {
-                                setPage(1);
-                                setKeyword(event.target.value);
-                            }}
-                            onSearch={(value) => {
-                                setPage(1);
-                                setKeyword(value);
-                            }}
-                        />
-                    </div>
-
-                    <div className="mx-auto mt-6 grid max-w-6xl gap-3 text-left">
+                    <div className="mt-6 grid gap-3 text-left">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                             <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-center">
                                 <div className="text-xs font-medium text-stone-500 dark:text-stone-400">{t("assets.type")}</div>
@@ -306,7 +305,7 @@ export default function AssetsPage() {
                     </div>
                 </div>
 
-                <div className="mx-auto flex max-w-7xl flex-col gap-5">
+                <div className="mx-auto flex w-full max-w-[1180px] flex-col gap-5">
                     <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {visibleAssets.map((asset) => (
                             <AssetCard key={asset.id} asset={asset} onOpen={() => setPreviewAsset(asset)} onEdit={() => openEdit(asset)} onCopy={copyAssetText} onDownload={downloadImage} onDelete={() => setDeletingAsset(asset)} />

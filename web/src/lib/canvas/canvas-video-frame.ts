@@ -12,7 +12,8 @@ export async function captureVideoFrame(source: string, position: VideoFramePosi
         video.load();
 
         await metadataLoaded;
-        const endTime = Math.max(0, video.duration - 0.001);
+        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        const endTime = Math.max(0, duration - 0.001);
         const time = position === "first" ? 0 : position === "last" ? endTime : Math.min(currentTime, endTime);
         if (time) {
             const seeked = waitForVideo(video, "seeked");

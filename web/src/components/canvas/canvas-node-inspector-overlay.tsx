@@ -35,7 +35,7 @@ export function CanvasNodeInspectorOverlay({
     const left = Math.max(minLeft, Math.min(maxLeft, rawLeft));
 
     // 同一节点的工具栏位于底部时，输入框始终排在工具栏下面；其它情况沿用原来的翻折规则。
-    const titleGap = Math.max(28 * viewport.k, 24) + 8;
+    const titleGap = Math.max(26 * viewport.k, 22) + 4;
     const toolbar = toolbarNode?.id === node.id ? getCanvasNodeToolbarPlacement(toolbarNode, viewport) : null;
     const toolbarBelow = toolbar?.placement === "bottom";
     const requiredBottomSpace = 220;
@@ -47,8 +47,9 @@ export function CanvasNodeInspectorOverlay({
         placement === "top"
             ? nodeTopScreen - titleGap - CANVAS_NODE_TOOLBAR_HEIGHT - 12
             : toolbarBelow ? toolbar.top + CANVAS_NODE_TOOLBAR_HEIGHT + 12 : nodeBottomScreen + 16;
-    // 底部画布操作区：距底部 20px + 高度 56px + 面板间隔 16px。
-    const maxHeight = Math.max(0, placement === "top" ? top - 60 : screenHeight - 92 - top);
+    // 底部画布操作区：距底部 20px + 高度 56px + 面板间隔 16px；面板最大占画布高度 60%。
+    const availableHeight = placement === "top" ? top - 60 : screenHeight - 92 - top;
+    const maxHeight = Math.max(0, Math.min(availableHeight, Math.round(screenHeight * 0.6)));
 
     return (
         <div

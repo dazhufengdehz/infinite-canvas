@@ -1,15 +1,25 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
-import { Camera, Check, ChevronRight, FileText, Image as ImageIcon, Music2, UserRound, Video } from "lucide-react";
+import { Camera, Check, ChevronRight, FileText, Image as ImageIcon, Layers, Music2, UserRound, Video } from "lucide-react";
 
 import { useDeferredOutsideClick } from "./use-deferred-outside-click";
 import { canvasThemes } from "@/lib/canvas-theme";
-import type { CanvasResourceReference, CategorizedCanvasResources } from "@/lib/canvas/canvas-resource-references";
+import type { CanvasResourceKind, CanvasResourceReference, CategorizedCanvasResources } from "@/lib/canvas/canvas-resource-references";
 import { MOTION_PRESETS, type CanvasMotionPreset } from "@/lib/canvas/canvas-motion-presets";
 
 export type MentionMenuHandle = {
     handleKeyDown: (event: ReactKeyboardEvent<HTMLElement> | KeyboardEvent) => boolean;
+};
+
+// 跨画布资产：来自同项目其他画布生成并登记到项目资产库的素材
+export type CrossCanvasAssetItem = {
+    id: string;
+    kind: CanvasResourceKind;
+    title: string;
+    previewUrl?: string;
+    text?: string;
+    canvasTitle: string;
 };
 
 type Props = {
@@ -19,12 +29,14 @@ type Props = {
     theme: (typeof canvasThemes)[keyof typeof canvasThemes];
     activeIndex?: number;
     showMotionPresets?: boolean;
+    crossCanvasAssets?: CrossCanvasAssetItem[];
     onSelect: (reference: CanvasResourceReference) => void;
     onSelectMotion?: (motion: CanvasMotionPreset) => void;
+    onSelectCrossCanvasAsset?: (item: CrossCanvasAssetItem) => void;
     onClose: () => void;
 };
 
-type CategoryKey = "subjects" | "images" | "videos" | "audios" | "texts" | "motions";
+type CategoryKey = "subjects" | "images" | "videos" | "audios" | "texts" | "motions" | "crossCanvas";
 
 export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(function CanvasResourceMentionMenu({
     rect,
@@ -32,8 +44,10 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
     categorized,
     theme,
     showMotionPresets = true,
+    crossCanvasAssets = [],
     onSelect,
     onSelectMotion,
+    onSelectCrossCanvasAsset,
     onClose,
 }, ref) {
     const [nav, setNav] = useState({
@@ -87,15 +101,22 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
         { key: "videos" as const, label: "视频", icon: Video, count: categorized.videos.length },
         { key: "audios" as const, label: "音频", icon: Music2, count: categorized.audios.length },
         { key: "texts" as const, label: "文本", icon: FileText, count: categorized.texts.length },
+        ...(onSelectCrossCanvasAsset ? [{ key: "crossCanvas" as const, label: "跨画布资产", icon: Layers, count: crossCanvasAssets.length }] : []),
         ...(showMotionPresets ? [{ key: "motions" as const, label: "运镜", icon: Camera, badge: "New", count: MOTION_PRESETS.length }] : []),
-    ], [categorized, showMotionPresets]);
+    ], [categorized, showMotionPresets, onSelectCrossCanvasAsset, crossCanvasAssets.length]);
 
     const possibleItems = useMemo(() => categorized.possible.slice(0, 3), [categorized.possible]);
 
     const currentSubmenuItems = useMemo(() => {
-        if (!nav.activeCategory || nav.activeCategory === "motions") return [];
+        if (!nav.activeCategory || nav.activeCategory === "motions" || nav.activeCategory === "crossCanvas") return [];
         return categorized[nav.activeCategory] || [];
     }, [nav.activeCategory, categorized]);
+
+    const submenuCount = (category: CategoryKey | null) => {
+        if (category === "motions") return MOTION_PRESETS.length;
+        if (category === "crossCanvas") return crossCanvasAssets.length;
+        return category ? categorized[category]?.length || 0 : 0;
+    };
 
     const updateNav = (updater: (prev: typeof nav) => typeof nav) => {
         const next = updater(navRef.current);
@@ -182,7 +203,7 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
             if (key === "ArrowDown") {
                 event.preventDefault();
                 if (cur.inSubmenu) {
-                    const subCount = cur.activeCategory === "motions" ? MOTION_PRESETS.length : currentSubmenuItems.length;
+                    const subCount = submenuCount(cur.activeCategory);
                     if (subCount > 0) {
                         updateNav((prev) => {
                             const nextSub = (prev.submenuIndex + 1) % subCount;
@@ -210,7 +231,7 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
             if (key === "ArrowUp") {
                 event.preventDefault();
                 if (cur.inSubmenu) {
-                    const subCount = cur.activeCategory === "motions" ? MOTION_PRESETS.length : currentSubmenuItems.length;
+                    const subCount = submenuCount(cur.activeCategory);
                     if (subCount > 0) {
                         updateNav((prev) => {
                             const nextSub = (prev.submenuIndex - 1 + subCount) % subCount;
@@ -260,6 +281,11 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
                     if (cur.activeCategory === "motions") {
                         const motion = MOTION_PRESETS[cur.submenuIndex];
                         if (motion) onSelectMotion?.(motion);
+                        return true;
+                    }
+                    if (cur.activeCategory === "crossCanvas") {
+                        const asset = crossCanvasAssets[cur.submenuIndex];
+                        if (asset) onSelectCrossCanvasAsset?.(asset);
                         return true;
                     }
                     const item = currentSubmenuItems[cur.submenuIndex];
@@ -450,7 +476,7 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
                                             key={cat.key}
                                             ref={isFocused ? activeItemRef : undefined}
                                             type="button"
-                                            className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left transition hover:bg-black/5 dark:hover:bg-white/10"
+                                            className="flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left transition hover:bg-surface-hover"
                                             style={{
                                                 background: isHighlighted ? theme.toolbar.activeBg : "transparent",
                                                 color: isHighlighted ? theme.toolbar.activeText : theme.node.text,
@@ -541,6 +567,40 @@ export const CanvasResourceMentionMenu = forwardRef<MentionMenuHandle, Props>(fu
                                 })}
                             </div>
                         </>
+                    ) : nav.activeCategory === "crossCanvas" ? (
+                        <>
+                            <div className="mb-1 flex items-center justify-between border-b pb-1.5 px-2 text-[11px] font-semibold opacity-60" style={{ borderColor: theme.toolbar.border, color: theme.node.muted }}>
+                                <span>跨画布资产 ({crossCanvasAssets.length})</span>
+                            </div>
+                            {crossCanvasAssets.length > 0 ? (
+                                <div className="space-y-0.5">
+                                    {crossCanvasAssets.map((asset, idx) => {
+                                        const isSubActive = nav.inSubmenu && idx === nav.submenuIndex;
+                                        return (
+                                            <CrossCanvasAssetRow
+                                                key={asset.id}
+                                                ref={isSubActive ? activeItemRef : undefined}
+                                                item={asset}
+                                                isActive={isSubActive}
+                                                theme={theme}
+                                                onMouseEnter={() => {
+                                                    updateNav((prev) => ({
+                                                        ...prev,
+                                                        inSubmenu: true,
+                                                        submenuIndex: idx,
+                                                    }));
+                                                }}
+                                                onSelect={() => onSelectCrossCanvasAsset?.(asset)}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="px-2 py-6 text-center text-xs leading-5 opacity-50" style={{ color: theme.node.muted }}>
+                                    同项目其他画布暂无可用资产，去其他画布生成后会出现在这里
+                                </div>
+                            )}
+                        </>
                     ) : (
                         <>
                             <div className="mb-1 flex items-center justify-between border-b pb-1.5 px-2 text-[11px] font-semibold opacity-60" style={{ borderColor: theme.toolbar.border, color: theme.node.muted }}>
@@ -611,7 +671,7 @@ const MotionItemRow = forwardRef<
         <button
             ref={ref}
             type="button"
-            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-black/5 dark:hover:bg-white/10"
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-surface-hover"
             style={{
                 background: isHovered ? theme.toolbar.activeBg : "transparent",
                 color: isHovered ? theme.toolbar.activeText : theme.node.text,
@@ -704,6 +764,41 @@ function MotionPreviewCard({
     );
 }
 
+const CrossCanvasAssetRow = forwardRef<
+    HTMLButtonElement,
+    {
+        item: CrossCanvasAssetItem;
+        isActive?: boolean;
+        theme: (typeof canvasThemes)[keyof typeof canvasThemes];
+        onMouseEnter?: () => void;
+        onSelect: () => void;
+    }
+>(function CrossCanvasAssetRow({ item, isActive = false, theme, onMouseEnter, onSelect }, ref) {
+    return (
+        <button
+            ref={ref}
+            type="button"
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-surface-hover"
+            style={{
+                background: isActive ? theme.toolbar.activeBg : "transparent",
+                color: isActive ? theme.toolbar.activeText : theme.node.text,
+            }}
+            onMouseEnter={onMouseEnter}
+            onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onSelect();
+            }}
+        >
+            <ItemThumbnail kind={item.kind} previewUrl={item.previewUrl} />
+            <div className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{item.title}</span>
+                <span className="block truncate text-[10px] opacity-50">来自：{item.canvasTitle}</span>
+            </div>
+        </button>
+    );
+});
+
 const ResourceItemRow = forwardRef<
     HTMLButtonElement,
     {
@@ -718,7 +813,7 @@ const ResourceItemRow = forwardRef<
         <button
             ref={ref}
             type="button"
-            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-black/5 dark:hover:bg-white/10"
+            className="flex w-full items-center gap-2.5 rounded-xl px-2 py-1.5 text-left transition hover:bg-surface-hover"
             style={{
                 background: isActive ? theme.toolbar.activeBg : "transparent",
                 color: isActive ? theme.toolbar.activeText : theme.node.text,
@@ -730,7 +825,7 @@ const ResourceItemRow = forwardRef<
                 onSelect();
             }}
         >
-            <ItemThumbnail item={item} />
+            <ItemThumbnail kind={item.kind} previewUrl={item.previewUrl} />
             <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-1">
                     <span className="truncate font-medium">{item.title || item.label}</span>
@@ -748,14 +843,14 @@ const ResourceItemRow = forwardRef<
     );
 });
 
-function ItemThumbnail({ item }: { item: CanvasResourceReference }) {
-    if (item.kind === "image" && item.previewUrl) {
-        return <img src={item.previewUrl} alt="" className="size-8 rounded-lg object-cover shrink-0" />;
+function ItemThumbnail({ kind, previewUrl }: { kind: CanvasResourceKind; previewUrl?: string }) {
+    if (kind === "image" && previewUrl) {
+        return <img src={previewUrl} alt="" className="size-8 rounded-lg object-cover shrink-0" />;
     }
-    if (item.kind === "video" && item.previewUrl) {
-        return <img src={item.previewUrl} alt="" className="size-8 rounded-lg bg-black object-cover shrink-0" />;
+    if (kind === "video" && previewUrl) {
+        return <img src={previewUrl} alt="" className="size-8 rounded-lg bg-black object-cover shrink-0" />;
     }
-    const Icon = item.kind === "audio" ? Music2 : item.kind === "video" ? Video : item.kind === "image" ? ImageIcon : FileText;
+    const Icon = kind === "audio" ? Music2 : kind === "video" ? Video : kind === "image" ? ImageIcon : FileText;
     return (
         <span className="grid size-8 shrink-0 place-items-center">
             <Icon className="size-4.5 opacity-65" />

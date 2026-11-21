@@ -35,10 +35,10 @@ export function AppTopNav() {
     return (
         <>
             {!hideHeader ? (
-                <header className="sticky top-0 z-20 h-14 shrink-0 border-b border-stone-200 bg-background/90 backdrop-blur-xl dark:border-stone-800">
-                    <div className="mx-auto flex h-full max-w-7xl items-stretch justify-between gap-5 px-6">
+                <header className="sticky top-0 z-20 h-14 shrink-0 border-b border-hairline bg-background/90 backdrop-blur-xl">
+                    <div className="mx-auto flex h-full max-w-[1180px] items-stretch justify-between gap-5 px-8">
                         <div className="flex min-w-0 items-center">
-                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
+                            <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-ink transition hover:text-ink-soft">
                                 <span
                                     className="size-5 shrink-0 bg-current"
                                     style={{
@@ -51,7 +51,7 @@ export function AppTopNav() {
 
                             <button
                                 type="button"
-                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 md:hidden dark:text-stone-300 dark:hover:text-white"
+                                className="ml-3 inline-flex size-8 shrink-0 items-center justify-center text-ink-soft transition hover:text-ink md:hidden"
                                 onClick={() => setMobileNavOpen(true)}
                                 aria-label={t("topNav.openMenu")}
                                 title={t("topNav.menu")}
@@ -69,9 +69,7 @@ export function AppTopNav() {
                                             to={`/${tool.slug}`}
                                             className={cn(
                                                 "relative flex h-14 shrink-0 items-center gap-2 text-sm leading-6 transition after:absolute after:inset-x-0 after:bottom-0 after:h-px",
-                                                active
-                                                    ? "font-medium text-stone-950 after:bg-stone-950 dark:text-stone-100 dark:after:bg-stone-100"
-                                                    : "text-stone-500 after:bg-transparent hover:text-stone-950 dark:text-stone-400 dark:hover:text-stone-100",
+                                                active ? "font-medium text-ink after:bg-action" : "text-ink-soft after:bg-transparent hover:text-ink",
                                             )}
                                         >
                                             <Icon className="size-4" />

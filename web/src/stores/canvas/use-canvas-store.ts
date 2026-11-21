@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import {
+    CANVAS_SCHEMA_VERSION,
     canvasSummary,
     createStoredCanvas,
     createStoredProject,
@@ -19,6 +20,7 @@ import {
     saveStoredCanvas,
     setActiveStoredCanvas,
 } from "@/services/project-storage";
+import { StorageApiError } from "@/services/api/storage";
 import type { CanvasDocument, CanvasDocumentPatch, CanvasDocumentSummary, CanvasNodeData, CanvasNodeMetadata, CanvasProject, CanvasProjectBundle, CanvasProjectSummary, ViewportTransform } from "@/types/canvas";
 import type { Asset } from "@/stores/use-asset-store";
 
@@ -36,8 +38,9 @@ type CanvasStore = {
     activeProject: CanvasProject | null;
     activeCanvas: CanvasDocument | null;
     canvases: CanvasDocumentSummary[];
+    saving: boolean;
     storageError: string | null;
-    createProject: (title?: string, id?: string) => Promise<string>;
+    createProject: (title?: string, id?: string, storagePath?: string) => Promise<string>;
     importProject: (project: Partial<CanvasProjectBundle>, id?: string, storageKeyMap?: Map<string, string>) => Promise<string>;
     openProject: (id: string, canvasId?: string) => Promise<CanvasWorkspace | null>;
     renameProject: (id: string, title: string) => Promise<void>;
@@ -49,6 +52,7 @@ type CanvasStore = {
     deleteCanvas: (projectId: string, canvasId: string) => Promise<string | null>;
     updateCanvas: (projectId: string, canvasId: string, patch: CanvasDocumentPatch) => void;
     setProjectAssetCount: (projectId: string, count: number) => void;
+    hasPendingSaves: () => boolean;
     flushProject: () => Promise<void>;
 };
 
@@ -68,6 +72,7 @@ function canvasKey(projectId: string, canvasId: string) {
 function upsertSummary(projects: CanvasProjectSummary[], project: CanvasProject, canvases: CanvasDocumentSummary[], assetCount?: number) {
     const current = projects.find((item) => item.id === project.id);
     const summary = projectSummary(project, canvases, assetCount ?? current?.assetCount ?? 0);
+    if (current?.storagePath) summary.storagePath = current.storagePath;
     return projects.some((item) => item.id === project.id) ? projects.map((item) => (item.id === project.id ? summary : item)) : [summary, ...projects];
 }
 
@@ -75,6 +80,7 @@ function makeProject(title: string, id = nanoid(), source: Partial<CanvasProject
     const now = new Date().toISOString();
     return {
         id,
+        schemaVersion: CANVAS_SCHEMA_VERSION,
         title,
         createdAt: source.createdAt || now,
         updatedAt: now,
@@ -87,6 +93,7 @@ function makeCanvas(projectId: string, title: string, id = nanoid(), source: Par
     const now = new Date().toISOString();
     return {
         id,
+        schemaVersion: CANVAS_SCHEMA_VERSION,
         projectId,
         title,
         createdAt: source.createdAt || now,
@@ -170,37 +177,72 @@ function remapImportedAsset(asset: Asset, projectId: string, sourceProjectId: st
     return { ...base, kind: "audio", data: { ...asset.data, storageKey: remapImportedMediaValue(asset.data.storageKey, storageKeyMap), url: remapImportedMediaValue(asset.data.url, storageKeyMap) } };
 }
 
+const RETRY_DELAYS = [400, 1200, 3000];
+
+function isRetryable(error: unknown) {
+    return !(error instanceof StorageApiError) || error.status >= 500;
+}
+
+function saveErrorMessage(error: unknown) {
+    if (error instanceof StorageApiError && error.status === 409) return "画布版本冲突，可能另有窗口正在编辑同一画布";
+    return errorMessage(error);
+}
+
+function saveIdle() {
+    return !saveQueues.size && !saveTimers.size && !dirtyCanvases.size;
+}
+
 async function persistCanvas(key: string) {
-    const canvas = dirtyCanvases.get(key);
-    if (!canvas) return;
-    try {
-        const saved = await saveStoredCanvas(canvas, canvas.revision);
-        const latest = dirtyCanvases.get(key);
-        if (latest === canvas) dirtyCanvases.delete(key);
-        else if (latest) dirtyCanvases.set(key, { ...latest, revision: saved.revision });
-        useCanvasStore.setState((state) => {
-            if (state.activeProject?.id !== saved.projectId) return { storageError: null };
-            const activeCanvas = state.activeCanvas?.id === saved.id ? { ...state.activeCanvas, revision: saved.revision } : state.activeCanvas;
-            const current = activeCanvas?.id === saved.id ? activeCanvas : saved;
-            const canvases = state.canvases.map((item) => (item.id === saved.id ? canvasSummary(current) : item));
-            return {
-                activeCanvas,
-                canvases,
-                projects: upsertSummary(state.projects, state.activeProject, canvases),
-                storageError: null,
-            };
-        });
-    } catch (error) {
-        useCanvasStore.setState({ storageError: errorMessage(error) });
+    for (let attempt = 0; ; ) {
+        const canvas = dirtyCanvases.get(key);
+        if (!canvas) return;
+        try {
+            const saved = await saveStoredCanvas(canvas, canvas.revision);
+            const latest = dirtyCanvases.get(key);
+            if (latest === canvas) dirtyCanvases.delete(key);
+            else if (latest) dirtyCanvases.set(key, { ...latest, revision: saved.revision });
+            useCanvasStore.setState((state) => {
+                if (state.activeProject?.id !== saved.projectId) return { storageError: null };
+                const activeCanvas = state.activeCanvas?.id === saved.id ? { ...state.activeCanvas, revision: saved.revision } : state.activeCanvas;
+                const current = activeCanvas?.id === saved.id ? activeCanvas : saved;
+                const canvases = state.canvases.map((item) => (item.id === saved.id ? canvasSummary(current) : item));
+                return {
+                    activeCanvas,
+                    canvases,
+                    projects: upsertSummary(state.projects, state.activeProject, canvases),
+                    storageError: null,
+                };
+            });
+            return;
+        } catch (error) {
+            if (error instanceof StorageApiError && error.status === 409 && attempt === 0) {
+                attempt += 1;
+                const latest = await readStoredCanvas(canvas.projectId, canvas.id).catch(() => null);
+                if (latest) {
+                    dirtyCanvases.set(key, { ...canvas, revision: latest.revision });
+                    continue;
+                }
+            }
+            if (attempt < RETRY_DELAYS.length && isRetryable(error)) {
+                const delay = RETRY_DELAYS[attempt];
+                attempt += 1;
+                await new Promise((resolve) => setTimeout(resolve, delay));
+                continue;
+            }
+            useCanvasStore.setState({ storageError: saveErrorMessage(error) });
+            return;
+        }
     }
 }
 
 function enqueueSave(key: string) {
+    useCanvasStore.setState({ saving: true });
     const previous = saveQueues.get(key) || Promise.resolve();
     const next = previous.catch(() => {}).then(() => persistCanvas(key));
     saveQueues.set(key, next);
     return next.finally(() => {
         if (saveQueues.get(key) === next) saveQueues.delete(key);
+        if (saveIdle()) useCanvasStore.setState({ saving: false });
     });
 }
 
@@ -220,12 +262,14 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
             const [projectId, canvasId] = key.split("/");
             return flushCanvas(projectId, canvasId);
         }));
+        if (saveIdle()) useCanvasStore.setState({ saving: false });
     };
 
     const scheduleSave = (projectId: string, canvasId: string) => {
         const key = canvasKey(projectId, canvasId);
         const timer = saveTimers.get(key);
         if (timer) clearTimeout(timer);
+        useCanvasStore.setState({ saving: true });
         saveTimers.set(key, setTimeout(() => {
             saveTimers.delete(key);
             void enqueueSave(key);
@@ -238,13 +282,20 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
         activeProject: null,
         activeCanvas: null,
         canvases: [],
+        saving: false,
         storageError: null,
-        createProject: async (title = i18n.t("canvas.project.untitled"), id) => {
+        createProject: async (title = i18n.t("canvas.project.untitled"), id, storagePath) => {
             const project = makeProject(title, id);
             const canvas = makeCanvas(project.id, i18n.t("canvas.documents.defaultTitle"));
             project.activeCanvasId = canvas.id;
-            const stored = await createStoredProject(project, [canvas]);
-            set((state) => ({ projects: upsertSummary(state.projects, stored.project, stored.canvases.map(canvasSummary)), storageError: null }));
+            const stored = await createStoredProject(project, [canvas], [], storagePath);
+            set((state) => {
+                const projects = upsertSummary(state.projects, stored.project, stored.canvases.map(canvasSummary));
+                return {
+                    projects: storagePath ? projects.map((item) => (item.id === stored.project.id ? { ...item, storagePath } : item)) : projects,
+                    storageError: null,
+                };
+            });
             return stored.project.id;
         },
         importProject: async (source, id, storageKeyMap = new Map()) => {
@@ -422,9 +473,12 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
             });
             scheduleSave(projectId, canvasId);
         },
+        hasPendingSaves: () => !saveIdle(),
         flushProject,
     };
 });
+
+if (!("__TAURI_INTERNALS__" in window) && navigator.storage?.persist) void navigator.storage.persist().catch(() => {});
 
 void listProjects()
     .then((projects) => useCanvasStore.setState({ projects, hydrated: true }))

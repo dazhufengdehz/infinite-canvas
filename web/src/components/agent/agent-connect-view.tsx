@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { App, Button, Input, Segmented, Tooltip } from "antd";
+import { App, AutoComplete, Button, Input, Segmented, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
-import { Bot, Copy, KeyRound, Link2, PlugZap, RefreshCw, Terminal } from "lucide-react";
+import { Bot, Copy, KeyRound, Link2, PlugZap, RefreshCw, Terminal, Workflow } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { fetchOpenAiConfig, fetchTraeStatus, fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveOpenAiConfig, saveWorkbuddyConfig, type OpenAiConfigResponse, type TraeStatusResponse } from "@/services/api/canvas-agent";
+import { fetchOpenAiConfig, fetchOpenAiModels, fetchTraeStatus, fetchWorkbuddyConfig, fetchWorkbuddyStatus, saveOpenAiConfig, saveWorkbuddyConfig, type OpenAiConfigResponse, type TraeStatusResponse } from "@/services/api/canvas-agent";
 import type { AgentProvider } from "@/stores/use-agent-store";
 
 const LOCAL_AGENT_COMMAND = "npx -y @zhuyichuan/canvas-agent";
@@ -53,6 +53,9 @@ export function AgentConnectView({
     const [openAiApiKey, setOpenAiApiKey] = useState("");
     const [openAiBaseUrl, setOpenAiBaseUrl] = useState("");
     const [openAiModel, setOpenAiModel] = useState("");
+    const [openAiProtocol, setOpenAiProtocol] = useState<"auto" | "chat" | "responses">("auto");
+    const [openAiModels, setOpenAiModels] = useState<string[]>([]);
+    const [openAiFetchingModels, setOpenAiFetchingModels] = useState(false);
     const [openAiChecking, setOpenAiChecking] = useState(false);
     const [openAiSaving, setOpenAiSaving] = useState(false);
 
@@ -84,6 +87,7 @@ export function AgentConnectView({
             setOpenAiConfig(config);
             setOpenAiBaseUrl(config.baseUrl || "");
             setOpenAiModel(config.model || "");
+            setOpenAiProtocol(config.protocol || "auto");
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("agent.connect.openaiLoadFailed"));
         } finally {
@@ -99,6 +103,24 @@ export function AgentConnectView({
         void handleLoadOpenAiConfig();
     }, [connected, handleLoadOpenAiConfig, provider]);
 
+    const handleFetchOpenAiModels = async () => {
+        if (!connected) {
+            message.warning(t("agent.connect.openaiConnectRequired"));
+            return;
+        }
+        setOpenAiFetchingModels(true);
+        try {
+            const models = await fetchOpenAiModels(url, token);
+            setOpenAiModels(models);
+            if (models.length) message.success(t("agent.connect.openaiModelsLoaded", { count: models.length }));
+            else message.warning(t("agent.connect.openaiModelsEmpty"));
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("agent.connect.openaiLoadFailed"));
+        } finally {
+            setOpenAiFetchingModels(false);
+        }
+    };
+
     const handleSaveOpenAiConfig = async () => {
         if (!connected) {
             message.warning(t("agent.connect.openaiConnectRequired"));
@@ -110,6 +132,7 @@ export function AgentConnectView({
             await saveOpenAiConfig(url, token, {
                 baseUrl: openAiBaseUrl.trim(),
                 model: openAiModel.trim(),
+                protocol: openAiProtocol,
                 ...(!apiKey && openAiConfig?.hasApiKey ? {} : { apiKey }),
             });
             setOpenAiApiKey("");
@@ -232,10 +255,46 @@ export function AgentConnectView({
                             </label>
                             <label className="grid gap-1.5">
                                 <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: theme.node.muted }}>
-                                    <Bot className="size-3.5" />
-                                    Model
+                                    <Workflow className="size-3.5" />
+                                    {t("agent.connect.openaiProtocol")}
                                 </span>
-                                <Input size="large" prefix={<Bot className="mr-1 size-4" style={{ color: theme.node.faint }} />} value={openAiModel} onChange={(event) => setOpenAiModel(event.target.value)} placeholder={t("agent.connect.openaiModelPlaceholder")} />
+                                <Segmented
+                                    block
+                                    size="large"
+                                    value={openAiProtocol}
+                                    options={[
+                                        { label: t("agent.connect.openaiProtocolAuto"), value: "auto" },
+                                        { label: t("agent.connect.openaiProtocolChat"), value: "chat" },
+                                        { label: t("agent.connect.openaiProtocolResponses"), value: "responses" },
+                                    ]}
+                                    onChange={(value) => setOpenAiProtocol(value as "auto" | "chat" | "responses")}
+                                />
+                                <span className="text-[11px] leading-4" style={{ color: theme.node.muted }}>{t("agent.connect.openaiProtocolHint")}</span>
+                            </label>
+                            <label className="grid gap-1.5">
+                                <span className="flex items-center justify-between gap-2 text-xs font-medium" style={{ color: theme.node.muted }}>
+                                    <span className="flex items-center gap-1.5">
+                                        <Bot className="size-3.5" />
+                                        Model
+                                    </span>
+                                    <Button
+                                        size="small"
+                                        type="text"
+                                        className="!h-6 !px-1.5 !text-[11px]"
+                                        loading={openAiFetchingModels}
+                                        disabled={!connected || openAiChecking}
+                                        onClick={() => void handleFetchOpenAiModels()}
+                                    >
+                                        {t("agent.connect.openaiFetchModels")}
+                                    </Button>
+                                </span>
+                                <AutoComplete
+                                    size="large"
+                                    value={openAiModel}
+                                    onChange={(value) => setOpenAiModel(value)}
+                                    options={openAiModels.map((id) => ({ value: id }))}
+                                    placeholder={t("agent.connect.openaiModelPlaceholder")}
+                                />
                             </label>
                             <label className="grid gap-1.5">
                                 <span className="flex items-center gap-1.5 text-xs font-medium" style={{ color: theme.node.muted }}>

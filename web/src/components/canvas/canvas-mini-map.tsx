@@ -2,11 +2,14 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { getNodeDefinition } from "@/lib/canvas/node-registry";
+import { useAgentStore } from "@/stores/use-agent-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { type CanvasNodeData, type ViewportTransform } from "@/types/canvas";
 
 export function Minimap({ nodes, viewport, viewportSize, onViewportChange, onViewportCommit }: { nodes: CanvasNodeData[]; viewport: ViewportTransform; viewportSize: { width: number; height: number }; onViewportChange: (viewport: ViewportTransform) => void; onViewportCommit?: (viewport: ViewportTransform) => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const agentPanelOpen = useAgentStore((state) => state.panelOpen);
+    const agentPanelWidth = useAgentStore((state) => state.width);
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
     const width = 240;
@@ -101,7 +104,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange, onVie
     };
 
     return (
-        <div className="absolute bottom-24 left-6 z-50 overflow-hidden rounded-lg border shadow-2xl backdrop-blur-sm" style={{ width, height, background: theme.toolbar.panel, borderColor: theme.toolbar.border }}>
+        <div className="absolute bottom-[52px] z-50 overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl" style={{ width, height, right: agentPanelOpen ? agentPanelWidth + 24 : 18, background: theme.accent.chrome, borderColor: theme.hairline.base }}>
             <div
                 ref={containerRef}
                 className="relative h-full w-full cursor-crosshair"
@@ -135,7 +138,7 @@ export function Minimap({ nodes, viewport, viewportSize, onViewportChange, onVie
                         />
                     );
                 })}
-                <div className="pointer-events-none absolute border" style={{ left: viewportRect.x, top: viewportRect.y, width: viewportRect.w, height: viewportRect.h, borderColor: theme.node.activeStroke, background: `${theme.node.activeStroke}18` }} />
+                <div className="pointer-events-none absolute border" style={{ left: viewportRect.x, top: viewportRect.y, width: viewportRect.w, height: viewportRect.h, borderColor: theme.accent.base, background: `${theme.accent.base}18` }} />
             </div>
         </div>
     );

@@ -79,15 +79,16 @@ function ConnectionPathInner({
     const safeScale = viewport?.k && viewport.k > 0 ? viewport.k : 1;
     const isHovered = Boolean(hoverPoint);
     const isGlowActive = isSelected || isHovered;
-    const highlightBlue = "#0ea5e9";
-    const strokeColor = invalid
-        ? "#ef4444"
-        : isGlowActive || active
-          ? highlightBlue
-          : theme.mode === "dark"
-            ? "#3f3f46"
-            : theme.node.muted;
+    const isReference = connection.kind === "input";
+    // 参考类连线走次强调色，生成血缘连线保持中性；选中与悬停统一走主强调色。
+    const restingColor = isReference ? theme.accent.alt : theme.hairline.strong;
+    const strokeColor = invalid ? theme.state.danger : isGlowActive || active ? theme.accent.base : restingColor;
     const strokeWidth = invalid ? 2.5 : isGlowActive ? 2.5 : active ? 2.2 : 1.8;
+    // 用双层描边替代 svg drop-shadow：整层滤镜栅格化在多连线时直接掉帧。
+    // 两层共用同一虚线节奏，避免底层光晕把断口补齐成实线。
+    const dashPattern = invalid ? "6,4" : "7 7";
+    const haloWidth = strokeWidth * 2.2;
+    const haloOpacity = invalid ? 0.32 : isGlowActive ? 0.45 : active ? 0.3 : 0.12;
 
     const handlePointerMove = (event: ReactPointerEvent<SVGElement>) => {
         const svg = event.currentTarget.ownerSVGElement;
@@ -176,24 +177,16 @@ function ConnectionPathInner({
             >
                 <title>双击断开连线</title>
             </path>
-            {/* Visual rendered path */}
+            {/* Visual rendered path: 底层光晕 + 上层描边，两层都不做 svg 滤镜 */}
+            <path d={pathD} stroke={strokeColor} strokeWidth={haloWidth} strokeDasharray={dashPattern} strokeLinecap="round" strokeOpacity={haloOpacity} fill="none" style={{ pointerEvents: "none" }} />
             <path
                 d={pathD}
                 stroke={strokeColor}
                 strokeWidth={strokeWidth}
-                strokeDasharray={invalid ? "6,4" : undefined}
+                strokeDasharray={dashPattern}
                 strokeOpacity={invalid ? 1 : isGlowActive ? 1 : active ? 0.95 : 0.45}
                 fill="none"
-                style={{
-                    filter: invalid
-                        ? "drop-shadow(0 0 6px rgba(239, 68, 68, 0.6))"
-                        : isGlowActive
-                          ? "drop-shadow(0 0 4px rgba(14, 165, 233, 0.85)) drop-shadow(0 0 8px rgba(14, 165, 233, 0.45))"
-                          : active
-                            ? "drop-shadow(0 0 4px rgba(14, 165, 233, 0.5))"
-                            : undefined,
-                    pointerEvents: "none",
-                }}
+                style={{ pointerEvents: "none" }}
             />
 
             {/* Scissors appears only on hover, with fixed scale regardless of canvas zoom */}
@@ -251,18 +244,10 @@ export function ActiveConnectionPath({
                 const pathD = `M ${snappedStartX} ${snappedStartY} C ${snappedStartX + distance * 0.5} ${snappedStartY}, ${snappedEndX - distance * 0.5} ${snappedEndY}, ${snappedEndX} ${snappedEndY}`;
 
                 return (
-                    <path
-                        key={activeNode.id}
-                        d={pathD}
-                        stroke="#0ea5e9"
-                        strokeWidth="2.2"
-                        fill="none"
-                        strokeDasharray="5,5"
-                        style={{
-                            filter: "drop-shadow(0 0 6px rgba(14, 165, 233, 0.6))",
-                            pointerEvents: "none",
-                        }}
-                    />
+                    <g key={activeNode.id} style={{ pointerEvents: "none" }}>
+                        <path d={pathD} stroke={theme.accent.base} strokeWidth="5" strokeLinecap="round" strokeOpacity={0.35} fill="none" />
+                        <path d={pathD} stroke={theme.accent.base} strokeWidth="2.2" strokeDasharray="5,5" fill="none" />
+                    </g>
                 );
             })}
         </g>

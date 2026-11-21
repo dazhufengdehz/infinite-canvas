@@ -73,9 +73,9 @@ export function CanvasToolbar({
     // Keep extension plugin nodes synchronized with registry changes.
     useNodeRegistryVersion();
     const extensionDefs = listNodeDefinitions().filter((def) => def.showInCreateMenu !== false && getNodePluginId(def.type) !== "builtin");
-    const dockStyle = { background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item, boxShadow: colorTheme === "dark" ? "0 18px 45px rgba(0,0,0,.32)" : "0 16px 40px rgba(28,25,23,.12)" };
-    const hoverStyle = { background: theme.toolbar.itemHover, color: theme.toolbar.activeText };
-    const activeStyle = { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
+    const dockStyle = { color: theme.text.secondary };
+    const hoverStyle = { background: theme.surface.hover, color: theme.text.primary };
+    const activeStyle = { background: theme.accent.soft, color: theme.accent.base };
     const tip = hovered ? toolLabel(hovered, t) : "";
 
     // Close extension-node and canvas-appearance popovers when clicking outside the toolbar and its panels.
@@ -92,9 +92,13 @@ export function CanvasToolbar({
     }, [extensionsOpen, appearanceOpen]);
 
     return (
-        <div ref={rootRef} className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 300, right: 16 }}>
+        <div ref={rootRef} className="pointer-events-none absolute bottom-5 z-50 flex justify-center" style={{ left: 86, right: 232 }}>
             {tip ? <DockTip label={tip} x={tipX} theme={theme} /> : null}
-            <div ref={wrapRef} className="thin-scrollbar pointer-events-auto flex h-14 max-w-full items-center gap-1 overflow-x-auto rounded-xl border px-2 shadow-lg backdrop-blur [&>*]:shrink-0" style={dockStyle}>
+            <div
+                ref={wrapRef}
+                className="thin-scrollbar pointer-events-auto flex h-[46px] max-w-full items-center gap-0.5 overflow-x-auto rounded-full border px-2 shadow-float backdrop-blur-xl [&>*]:shrink-0"
+                style={{ ...dockStyle, background: theme.accent.chrome, borderColor: theme.hairline.base }}
+            >
                 <ToolbarButton id={`tool-${canvasTool}`} label={t(`canvas.toolbar.${canvasTool}`)} active hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={() => onCanvasToolChange(canvasTool === "select" ? "pan" : "select")}>
                     {canvasTool === "select" ? <MousePointer2 className="size-4.5" /> : <Hand className="size-4.5" />}
                 </ToolbarButton>
@@ -198,25 +202,25 @@ export function CanvasToolbar({
 
             {extensionsOpen && extensionDefs.length ? (
                 <div
-                    className="thin-scrollbar pointer-events-auto absolute bottom-[72px] z-30 max-h-[50vh] w-[240px] -translate-x-1/2 overflow-y-auto rounded-xl border p-2 shadow-xl backdrop-blur"
-                    style={{ left: extPanelX || "50%", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
+                    className="thin-scrollbar pointer-events-auto absolute bottom-[52px] z-30 max-h-[50vh] w-[240px] -translate-x-1/2 overflow-y-auto rounded-panel border p-2 shadow-float"
+                    style={{ left: extPanelX || "50%", background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.secondary }}
                 >
-                    <div className="px-1.5 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.extensions")}</div>
+                    <div className="px-1.5 pb-1.5 text-micro font-medium text-ink-faint">{t("canvas.toolbar.extensions")}</div>
                     <div className="grid gap-0.5">
                         {extensionDefs.map((def) => (
                             <button
                                 key={def.type}
                                 type="button"
-                                className="flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left text-sm transition"
-                                style={{ color: theme.toolbar.item }}
-                                onMouseEnter={(event) => (event.currentTarget.style.background = theme.toolbar.itemHover)}
+                                className="flex w-full items-center gap-2.5 rounded-control px-2 py-1.5 text-left text-label transition"
+                                style={{ color: theme.text.secondary }}
+                                onMouseEnter={(event) => (event.currentTarget.style.background = theme.surface.hover)}
                                 onMouseLeave={(event) => (event.currentTarget.style.background = "transparent")}
                                 onClick={() => {
                                     onAddExtensionNode(def.type);
                                     setExtensionsOpen(false);
                                 }}
                             >
-                                <span className="grid size-7 shrink-0 place-items-center rounded-md text-base" style={{ background: theme.toolbar.itemHover }}>
+                                <span className="grid size-7 shrink-0 place-items-center rounded-control text-base" style={{ background: theme.surface.hover }}>
                                     {def.icon}
                                 </span>
                                 <span className="min-w-0 flex-1 truncate">{def.title}</span>
@@ -228,12 +232,12 @@ export function CanvasToolbar({
 
             {appearanceOpen ? (
                 <div
-                    className="pointer-events-auto absolute bottom-[72px] z-30 w-[248px] -translate-x-1/2 rounded-xl border p-2.5 shadow-xl backdrop-blur"
-                    style={{ left: panelX || "50%", background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.item }}
+                    className="pointer-events-auto absolute bottom-[52px] z-30 w-[248px] -translate-x-1/2 rounded-panel border p-2.5 shadow-float"
+                    style={{ left: panelX || "50%", background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.secondary }}
                 >
-                    <div className="px-1 pb-2 text-sm font-medium opacity-65">{t("canvas.toolbar.appearance")}</div>
-                    <div className="px-1 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.themeMode")}</div>
-                    <div className="grid grid-cols-2 gap-1 rounded-lg p-1" style={{ background: theme.toolbar.itemHover }}>
+                    <div className="px-1 pb-2 text-label font-medium text-ink">{t("canvas.toolbar.appearance")}</div>
+                    <div className="px-1 pb-1.5 text-micro font-medium text-ink-faint">{t("canvas.toolbar.themeMode")}</div>
+                    <div className="grid grid-cols-2 gap-1 rounded-control p-1" style={{ background: theme.surface.sunken }}>
                         <CanvasThemeButton colorTheme={colorTheme} targetTheme="light" onThemeChange={setTheme}>
                             <Sun className="size-4" />
                             {t("canvas.toolbar.light")}
@@ -243,7 +247,7 @@ export function CanvasToolbar({
                             {t("canvas.toolbar.dark")}
                         </CanvasThemeButton>
                     </div>
-                    <div className="mt-3 px-1 pb-1.5 text-[11px] font-medium opacity-50">{t("canvas.toolbar.gridStyle")}</div>
+                    <div className="px-1 pb-1.5 text-micro font-medium text-ink-faint">{t("canvas.toolbar.gridStyle")}</div>
                     <Segmented
                         className="w-full !p-1 [&_.ant-segmented-group]:!flex [&_.ant-segmented-item]:!min-h-8 [&_.ant-segmented-item]:!flex-1 [&_.ant-segmented-item-label]:!min-h-8 [&_.ant-segmented-item-label]:!leading-8"
                         value={backgroundMode}
@@ -276,8 +280,8 @@ export function CanvasToolbar({
                             },
                         ]}
                     />
-                    <div className="mt-3 flex items-center justify-between gap-3 rounded-lg px-1.5 py-1">
-                        <span className="inline-flex min-w-0 items-center gap-1.5 text-[11px] font-medium opacity-65">
+                    <div className="mt-3 flex items-center justify-between gap-3 rounded-control px-1.5 py-1">
+                        <span className="inline-flex min-w-0 items-center gap-1.5 text-micro font-medium text-ink-faint">
                             <Info className="size-3.5" />
                             {t("canvas.toolbar.imageInfo")}
                         </span>
@@ -324,9 +328,9 @@ function ToolbarButton({
         <Button
             type="text"
             aria-label={label}
-            className="!h-8 !w-8 !min-w-8 !p-0"
+            className="!h-8.5 !w-8.5 !min-w-8.5 !rounded-full !p-0"
             disabled={disabled}
-            style={active ? activeStyle : hovered === id && !disabled ? hoverStyle : { color: danger ? "#f87171" : theme.toolbar.item, opacity: disabled ? 0.35 : 1 }}
+            style={active ? activeStyle : hovered === id && !disabled ? hoverStyle : { color: danger ? theme.state.danger : theme.text.secondary, opacity: disabled ? 0.35 : 1 }}
             icon={children}
             onMouseEnter={(event) => {
                 onHover(id);
@@ -339,13 +343,13 @@ function ToolbarButton({
 }
 
 function Divider({ theme }: { theme: CanvasTheme }) {
-    return <div className="mx-1 h-6 w-px" style={{ background: theme.toolbar.border }} />;
+    return <div className="mx-1 h-4 w-px" style={{ background: theme.hairline.base }} />;
 }
 
 function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }: { colorTheme: CanvasColorTheme; targetTheme: CanvasColorTheme; onThemeChange: (theme: CanvasColorTheme) => void; children: ReactNode }) {
     const theme = canvasThemes[colorTheme];
     const active = colorTheme === targetTheme;
-    const activeStyle = colorTheme === "light" ? { background: "#111111", color: "#ffffff" } : { background: theme.toolbar.activeBg, color: theme.toolbar.activeText };
+    const activeStyle = { background: theme.text.primary, color: theme.text.inverse };
     const { t } = useTranslation();
     const label = targetTheme === "dark" ? t("topNav.darkTheme") : t("topNav.lightTheme");
 
@@ -354,8 +358,8 @@ function CanvasThemeButton({ colorTheme, targetTheme, onThemeChange, children }:
             theme={colorTheme}
             targetTheme={targetTheme}
             onThemeChange={onThemeChange}
-            className="inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-sm transition"
-            style={active ? activeStyle : { color: theme.toolbar.item }}
+            className="inline-flex h-8 min-w-0 items-center justify-center gap-1.5 rounded-control px-2 text-label transition"
+            style={active ? activeStyle : { color: theme.text.secondary }}
             aria-label={label}
             title={label}
         >

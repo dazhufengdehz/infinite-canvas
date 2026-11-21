@@ -9,44 +9,82 @@ description: 画布本地存储、节点结构、媒体文件与清理机制
 
 ## 当前存储位置
 
-当前画布项目主要保存在浏览器本地：
+画布数据按运行形态保存在两套互不相通的后端：
 
-- 画布项目 JSON：`localForage`，数据库名 `infinite-canvas`，storeName `app_state`，key 为 `infinite-canvas:canvas_store`。
-- 我的素材 JSON：`localForage`，数据库名 `infinite-canvas`，storeName `app_state`，key 为 `infinite-canvas:asset_store`。
-- 图片 Blob：单独存到 `localForage` 实例，数据库名 `infinite-canvas`，storeName `image_files`。
-- 视频等媒体 Blob：单独存到 `localForage` 实例，数据库名 `infinite-canvas`，storeName `media_files`。
+- 浏览器（`bun run dev`、Docker/静态部署）：`localForage`（IndexedDB），数据库名 `infinite-canvas`。
+  - 项目索引：`infinite-canvas:canvas_project_index`
+  - 项目元数据：`infinite-canvas:canvas_project:{projectId}`
+  - 画布索引：`infinite-canvas:canvas_index:{projectId}`
+  - 单张画布：`infinite-canvas:canvas_document:{projectId}:{canvasId}`
+  - 项目资产：`infinite-canvas:project_assets:{projectId}`
+  - 我的素材：`infinite-canvas:asset_store`
+  - 图片 Blob：`image_files`；视频等媒体 Blob：`media_files`
+- 桌面版（Tauri）：前端直连本机 Node Sidecar（`127.0.0.1:18080`），写入系统应用数据目录下的 `storage/`：
+
+```
+storage/
+  projects/index.json                 # 项目摘要列表
+  project-paths.json                  # 自选项目目录映射 { 项目ID: 绝对路径 }
+  projects/<项目ID>/project.json      # 仅项目元数据
+  projects/<项目ID>/canvases/index.json
+  projects/<项目ID>/canvases/<画布ID>.json
+  projects/<项目ID>/assets.json
+  projects/<项目ID>/media/<媒体ID>(+.mime)
+  assets/assets.json
+  assets/media/...
+```
+
+桌面版新建项目时可以选择本地文件夹作为该项目存放位置。选择后该项目不再写入 `storage/projects/<项目ID>/`，而是直接写入所选目录，布局与上面单项目目录一致（`project.json`、`canvases/`、`assets.json`、`media/`、`posters/`）；映射记录在 `storage/project-paths.json`。从项目列表删除这类项目只会移除索引和映射，不会删除用户所选文件夹。浏览器模式无法自选磁盘目录，仍使用 IndexedDB。
 
 画布 JSON 不直接长期保存大体积 base64 图片或视频。图片节点、视频节点、助手图片和素材媒体只保存展示 URL、`storageKey` 和元信息，真实 Blob 通过 `storageKey` 读取。
 
-## 画布项目结构
+## 项目与画布结构
 
-每个画布项目是一个 `CanvasProject`：
+一个项目（`CanvasProject`）只保存元数据，画布内容独立存放在 `CanvasDocument` 中：
 
 ```ts
 type CanvasProject = {
   id: string;
+  schemaVersion: number;
   title: string;
   createdAt: string;
   updatedAt: string;
+  revision: number;
+  activeCanvasId: string | null;
+};
+
+type CanvasDocument = {
+  id: string;
+  schemaVersion: number;
+  projectId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  revision: number;
   nodes: CanvasNodeData[];
   connections: CanvasConnection[];
   chatSessions: CanvasAssistantSession[];
   activeChatId: string | null;
   backgroundMode: "lines" | "dots" | "blank";
+  showImageInfo: boolean;
   viewport: { x: number; y: number; k: number };
 };
 ```
 
 字段说明：
 
-- `id`：画布项目 ID，当前前端生成。
-- `title`：画布名称。
+- `id`：项目或画布 ID，当前前端生成。
+- `schemaVersion`：持久化数据结构版本，当前为 `2`（项目 + 多画布）。读取时不匹配会显式报错，不做静默兼容或自动转换。
+- `title`：项目或画布名称。
 - `createdAt` / `updatedAt`：ISO 字符串。
+- `revision`：保存版本号，Sidecar 写入时按 `baseRevision` 校验，冲突返回 409。
+- `activeCanvasId`：项目当前打开的画布。
 - `nodes`：画布节点列表。
 - `connections`：节点连线列表。
 - `chatSessions`：右侧画布助手会话。
 - `activeChatId`：当前选中的助手会话 ID。
 - `backgroundMode`：画布背景模式。
+- `showImageInfo`：是否显示图片信息。
 - `viewport`：视口变换，`x/y` 是屏幕平移，`k` 是缩放比例。
 
 ## 节点结构
@@ -56,7 +94,7 @@ type CanvasProject = {
 ```ts
 type CanvasNodeData = {
   id: string;
-  type: "image" | "text" | "config" | "video";
+  type: "image" | "text" | "config" | "video" | "audio" | "group";
   title: string;
   position: { x: number; y: number };
   width: number;
@@ -68,7 +106,7 @@ type CanvasNodeData = {
 通用字段：
 
 - `id`：节点 ID。
-- `type`：节点类型，当前有图片、文本、生成配置、视频四类。
+- `type`：节点类型，当前有图片、文本、生成配置、视频、音频、组节点六类。
 - `title`：节点标题。
 - `position`：画布世界坐标，不是屏幕坐标。
 - `width` / `height`：画布世界坐标下的节点尺寸。

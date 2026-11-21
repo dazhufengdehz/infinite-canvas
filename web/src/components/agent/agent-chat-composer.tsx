@@ -60,14 +60,14 @@ export function AgentChatComposer({
     const canSubmit = !disabled && !sending && Boolean(prompt.trim() || attachments.length || canvasReferences.length);
     return (
         <div className="px-2 pb-2 pt-2" onWheelCapture={(event) => event.stopPropagation()}>
-            <div className="rounded-[24px] border px-3 pb-3 pt-3 shadow-lg" style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke }}>
+            <div className="rounded-[10px] border px-3 pb-3 pt-3" style={{ background: theme.surface.base, borderColor: theme.hairline.base }}>
                 {attachments.length ? (
                     <div className="thin-scrollbar mb-2 flex gap-2 overflow-x-auto pb-1">
                         {attachments.map((item) => (
-                            <div key={item.id} className="group relative size-14 shrink-0 overflow-hidden rounded-xl border" style={{ borderColor: theme.node.stroke }} title={item.name}>
+                            <div key={item.id} className="group relative size-14 shrink-0 overflow-hidden rounded-lg border" style={{ borderColor: theme.hairline.base }} title={item.name}>
                                 <img src={item.url} alt={item.name} className="size-full object-cover" />
                                 {onRemoveAttachment ? (
-                                    <button type="button" className="absolute right-1 top-1 grid size-5 place-items-center rounded-full border opacity-0 shadow-sm transition group-hover:opacity-100" style={{ background: theme.toolbar.panel, borderColor: theme.node.stroke, color: theme.node.text }} onClick={() => onRemoveAttachment(item.id)} aria-label={t("agent.composer.removeImage")}>
+                                    <button type="button" className="absolute right-1 top-1 grid size-5 place-items-center rounded-full border opacity-0 shadow-sm transition group-hover:opacity-100" style={{ background: theme.surface.base, borderColor: theme.hairline.base, color: theme.text.primary }} onClick={() => onRemoveAttachment(item.id)} aria-label={t("agent.composer.removeImage")}>
                                         <X className="size-3" />
                                     </button>
                                 ) : null}
@@ -85,7 +85,7 @@ export function AgentChatComposer({
                                     event.target.value = "";
                                 }} />
                                 <Tooltip title={t("agent.composer.uploadImage")}>
-                                    <Button type="text" shape="circle" className="!h-9 !w-9 !min-w-9" disabled={disabled || sending} style={{ color: theme.node.muted }} icon={<ImagePlus className="size-4" />} onClick={() => fileInputRef.current?.click()} aria-label={t("agent.composer.uploadImage")} />
+                                    <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" disabled={disabled || sending} style={{ color: theme.text.secondary }} icon={<ImagePlus className="size-4" />} onClick={() => fileInputRef.current?.click()} aria-label={t("agent.composer.uploadImage")} />
                                 </Tooltip>
                             </>
                         ) : null}
@@ -96,9 +96,9 @@ export function AgentChatComposer({
                     </div>
                     <div className="flex shrink-0 items-center gap-1.5">
                         {sending && onStop ? (
-                            <Tooltip title={t("agent.composer.stop")} placement="top"><Button danger shape="circle" className="!h-10 !w-10 !min-w-10" icon={<Square className="size-4" />} onClick={() => void onStop()} aria-label={t("agent.composer.stop")} /></Tooltip>
+                            <Tooltip title={t("agent.composer.stop")} placement="top"><Button danger shape="circle" className="!h-[26px] !w-[26px] !min-w-[26px]" icon={<Square className="size-3.5" />} onClick={() => void onStop()} aria-label={t("agent.composer.stop")} /></Tooltip>
                         ) : (
-                            <Tooltip title={t("agent.composer.send")} placement="top"><Button type="primary" shape="circle" className="!h-10 !w-10 !min-w-10" disabled={!canSubmit} icon={sending ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowUp className="size-4" />} onClick={() => void onSubmit()} aria-label={t("agent.composer.send")} /></Tooltip>
+                            <Tooltip title={t("agent.composer.send")} placement="top"><Button type="primary" shape="circle" className="!h-[26px] !w-[26px] !min-w-[26px]" disabled={!canSubmit} style={canSubmit ? { background: theme.accent.base, color: theme.node.fill } : undefined} icon={sending ? <LoaderCircle className="size-3.5 animate-spin" /> : <ArrowUp className="size-3.5" />} onClick={() => void onSubmit()} aria-label={t("agent.composer.send")} /></Tooltip>
                         )}
                     </div>
                 </div>

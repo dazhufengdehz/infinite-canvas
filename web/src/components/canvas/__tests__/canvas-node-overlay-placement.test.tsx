@@ -31,7 +31,7 @@ let container: HTMLDivElement;
 // happy-dom has no layout engine. Supply only the CSS sizing/translation used by
 // these real overlays; placement remains entirely in the production components.
 function elementHeight(element: HTMLElement): number {
-    const natural = Number.parseFloat(element.style.height) || (element.classList.contains("h-12") ? 48 : Math.max(0, ...Array.from(element.children, (child) => elementHeight(child as HTMLElement))));
+    const natural = Number.parseFloat(element.style.height) || (element.classList.contains("h-10") ? 40 : Math.max(0, ...Array.from(element.children, (child) => elementHeight(child as HTMLElement))));
     return element.style.maxHeight ? Math.min(natural, Number.parseFloat(element.style.maxHeight)) : natural;
 }
 
@@ -97,7 +97,7 @@ for (const type of [CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.A
     it(`${type}: preserves the bottom toolbar and places the prompt underneath`, async () => {
         const { toolbar, inspector } = await renderOverlays({ type });
         expect(toolbar!.top).toBe(526);
-        expect(toolbar!.height).toBe(48);
+        expect(toolbar!.height).toBe(40);
         expect(inspector.top).toBeGreaterThanOrEqual(toolbar!.bottom + 12);
     });
 }
@@ -105,7 +105,7 @@ for (const type of [CanvasNodeType.Image, CanvasNodeType.Video, CanvasNodeType.A
 it("keeps the prompt below the toolbar in a short canvas instead of moving it above", async () => {
     const { toolbar, inspector, inspectorElement } = await renderOverlays({ canvasSize: { width: 1208, height: 720 } });
     expect(toolbar!.top).toBe(526);
-    expect(inspector.top).toBe(586);
+    expect(inspector.top).toBe(578);
     expect(inspector.bottom).toBe(720 - 92);
     expect(inspectorElement.classList.contains("overflow-y-auto")).toBe(true);
 });
@@ -162,7 +162,7 @@ it("shares its available height with the actual panel rather than only clipping 
 for (const k of [0.2, 1, 3]) {
     it(`keeps the toolbar height and bottom gap at 1:1 scale when the canvas zoom is ${k}`, async () => {
         const { toolbar, inspector } = await renderOverlays({ nodeHeight: 100, viewport: { x: 0, y: 95 - 95 * k, k } });
-        expect(toolbar!.height).toBe(48);
+        expect(toolbar!.height).toBe(40);
         expect(inspector.top).toBe(toolbar!.bottom + 12);
     });
 }

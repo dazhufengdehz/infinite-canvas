@@ -1453,7 +1453,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
     };
 
     const connectionStatus = t(connectError ? "agent.status.failed" : connected ? "agent.status.connected" : enabled ? "agent.status.connecting" : "agent.status.disconnected");
-    const connectionStatusColor = connectError ? "#dc2626" : connected ? "#16a34a" : enabled ? "#d97706" : theme.node.muted;
+    const connectionStatusColor = connectError ? theme.state.danger : connected ? theme.state.success : enabled ? theme.state.warning : theme.text.secondary;
     const content = (
         <>
             <AgentPanelTabs
@@ -1493,7 +1493,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                             </Tooltip>
                         ) : null}
                         <Tooltip title={t("agent.panel.collapse")}>
-                            <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" aria-label={t("agent.panel.collapseLabel")} style={{ color: theme.node.muted }} icon={<PanelRightClose className="size-4" />} onClick={closePanel} />
+                            <Button type="text" shape="circle" className="!h-8 !w-8 !min-w-8" aria-label={t("agent.panel.collapseLabel")} style={{ color: theme.text.secondary }} icon={<PanelRightClose className="size-4" />} onClick={closePanel} />
                         </Tooltip>
                     </>
                 }

@@ -243,7 +243,7 @@ export function CanvasNodeMaskEditDialog({
                 <div
                     ref={viewport.viewportRef}
                     {...viewport.panHandlers}
-                    className={`relative h-[min(68vh,720px)] min-h-[360px] rounded-xl border border-black/10 bg-transparent dark:border-white/10 ${viewport.scrollClassName} ${viewport.isPanning ? "cursor-grabbing" : viewport.spacePressed ? "cursor-grab" : ""}`}
+                    className={`relative h-[min(68vh,720px)] min-h-[360px] rounded-xl border border-hairline bg-transparent ${viewport.scrollClassName} ${viewport.isPanning ? "cursor-grabbing" : viewport.spacePressed ? "cursor-grab" : ""}`}
                 >
                     <div className="relative" style={viewport.contentStyle}>
                         <div ref={viewport.stageRef} className="absolute isolate overflow-hidden rounded-lg bg-transparent select-none [backface-visibility:hidden] [contain:layout_paint] [transform:translateZ(0)]" style={viewport.stageStyle}>
@@ -276,7 +276,7 @@ export function CanvasNodeMaskEditDialog({
                 {brushPreview
                     ? createPortal(
                           <div
-                              className={`pointer-events-none fixed z-[1100] rounded-full border-2 ${brushPreview.adjusting ? "border-[#fbbf24] bg-black/10" : "border-white/90 bg-black/5"} shadow-[0_0_0_1px_rgba(0,0,0,.8)]`}
+                              className={`pointer-events-none fixed z-[1100] rounded-full border-2 ${brushPreview.adjusting ? "border-warn bg-black/10" : "border-white/90 bg-black/5"} shadow-[0_0_0_1px_rgba(0,0,0,.8)]`}
                               style={{ left: brushPreview.x, top: brushPreview.y, width: Math.max(4, brushPreview.size * viewport.imageScale), aspectRatio: 1, transform: "translate(-50%, -50%)" }}
                           >
                               {brushPreview.adjusting ? <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded bg-black/75 px-1.5 py-0.5 text-xs font-semibold text-white">{brushSize}px</span> : null}
@@ -301,7 +301,7 @@ export function CanvasNodeMaskEditDialog({
                         </Button>
                     </div>
 
-                    <div className="flex items-center justify-between rounded-lg border border-black/10 px-2 py-1 dark:border-white/10">
+                    <div className="flex items-center justify-between rounded-lg border border-hairline px-2 py-1">
                         <Tooltip title={t("canvas.editors.undoMaskTitle")}>
                             <Button type="text" icon={<Undo2 className="size-4" />} disabled={!historySize} aria-label={t("canvas.editors.undoMask")} onClick={undoMask} />
                         </Tooltip>
@@ -354,7 +354,7 @@ export function CanvasNodeMaskEditDialog({
                                 setError("");
                             }}
                         />
-                        {error ? <div className="text-xs font-medium text-[#ef4444]">{error}</div> : null}
+                        {error ? <div className="text-xs font-medium text-danger">{error}</div> : null}
                     </div>
 
                     <div className="mt-auto flex items-center justify-between gap-2">
@@ -412,8 +412,8 @@ function configureStrokeContext(context: CanvasRenderingContext2D, stroke: MaskS
     context.lineJoin = "round";
     context.lineWidth = stroke.size;
     context.globalCompositeOperation = stroke.mode === "paint" ? "source-over" : "destination-out";
-    context.strokeStyle = "#000";
-    context.fillStyle = "#000";
+    context.strokeStyle = "black";
+    context.fillStyle = "black";
 }
 
 function configurePreviewStrokeContext(context: CanvasRenderingContext2D, stroke: MaskStroke) {
@@ -459,7 +459,7 @@ function buildEditMask(selectionCanvas: HTMLCanvasElement) {
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return selectionCanvas.toDataURL("image/png");
     const selectionContext = selectionCanvas.getContext("2d", { willReadFrequently: true });
-    context.fillStyle = "#fff";
+    context.fillStyle = "white";
     context.fillRect(0, 0, canvas.width, canvas.height);
     if (!selectionContext) return canvas.toDataURL("image/png");
     const selection = selectionContext.getImageData(0, 0, canvas.width, canvas.height);

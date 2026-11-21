@@ -28,7 +28,7 @@ export function CanvasGenerationError({ node, errorDetails, onRetry }: { node?: 
                 {node && onRetry ? (
                 <button
                     type="button"
-                    className="inline-flex shrink-0 items-center gap-1 rounded px-1 text-xs font-normal transition hover:bg-black/5 dark:hover:bg-white/10"
+                    className="inline-flex shrink-0 items-center gap-1 rounded px-1 text-xs font-normal transition hover:bg-surface-hover"
                     onClick={(event) => {
                         event.stopPropagation();
                         onRetry(node);

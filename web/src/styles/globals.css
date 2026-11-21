@@ -5,6 +5,31 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+    --font-sans:
+        ui-sans-serif, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+
+    --text-display: 2rem;
+    --text-display--line-height: 2.375rem;
+    --text-display--letter-spacing: -0.026em;
+    --text-title: 1.25rem;
+    --text-title--line-height: 1.75rem;
+    --text-title--letter-spacing: -0.02em;
+    --text-heading: 1rem;
+    --text-heading--line-height: 1.5rem;
+    --text-heading--letter-spacing: -0.01em;
+    --text-body: 0.875rem;
+    --text-body--line-height: 1.375rem;
+    --text-label: 0.8125rem;
+    --text-label--line-height: 1.1875rem;
+    --text-meta: 0.75rem;
+    --text-meta--line-height: 1.0625rem;
+    --text-micro: 0.65625rem;
+    --text-micro--line-height: 0.875rem;
+    --text-micro--letter-spacing: 0.14em;
+}
+
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
@@ -15,7 +40,28 @@
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) + 4px);
     --font-heading: var(--font-sans);
-    --font-sans: var(--font-sans);
+    --color-surface: var(--surface-base);
+    --color-surface-sunken: var(--surface-sunken);
+    --color-surface-hover: var(--surface-hover);
+    --color-surface-active: var(--surface-active);
+    --color-hairline: var(--hairline-base);
+    --color-hairline-strong: var(--hairline-strong);
+    --color-ink: var(--ink-primary);
+    --color-ink-soft: var(--ink-secondary);
+    --color-ink-faint: var(--ink-tertiary);
+    --color-ink-inverse: var(--ink-inverse);
+    --color-action: var(--action-primary);
+    --color-action-ink: var(--action-ink);
+    --color-ok: var(--state-success);
+    --color-warn: var(--state-warning);
+    --color-danger: var(--state-danger);
+    --color-focus: var(--focus-ring);
+    --radius-control: 8px;
+    --radius-panel: 12px;
+    --radius-popover: 14px;
+    --ease-quiet: cubic-bezier(0.22, 1, 0.36, 1);
+    --shadow-float: var(--elevation-float);
+    --shadow-modal: var(--elevation-modal);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,8 +98,8 @@
     --radius: 0.625rem;
     --border: oklch(0.922 0 0);
     --ring: oklch(0.708 0 0);
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
+    --background: #f4f2ed;
+    --foreground: #1c1917;
     --card: oklch(1 0 0);
     --card-foreground: oklch(0.145 0 0);
     --popover: oklch(1 0 0);
@@ -81,11 +127,34 @@
     --sidebar-accent-foreground: oklch(0.205 0 0);
     --sidebar-border: oklch(0.922 0 0);
     --sidebar-ring: oklch(0.708 0 0);
+
+    --motion-hover: 120ms;
+    --motion-panel: 280ms;
+
+    --elevation-float: 0 12px 32px rgba(28, 25, 23, 0.1);
+    --elevation-modal: 0 18px 54px rgba(28, 25, 23, 0.14);
+
+    --surface-base: #fbfaf7;
+    --surface-sunken: #e9e5dc;
+    --surface-hover: rgba(28, 25, 23, 0.05);
+    --surface-active: rgba(28, 25, 23, 0.09);
+    --hairline-base: rgba(68, 64, 60, 0.14);
+    --hairline-strong: rgba(68, 64, 60, 0.26);
+    --ink-primary: #1c1917;
+    --ink-secondary: #57534e;
+    --ink-tertiary: #8a8479;
+    --ink-inverse: #fafaf9;
+    --action-primary: #1c1917;
+    --action-ink: #fafaf9;
+    --state-success: #15803d;
+    --state-warning: #b45309;
+    --state-danger: #b91c1c;
+    --focus-ring: rgba(28, 25, 23, 0.3);
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
+    --background: #181715;
+    --foreground: #f5f5f4;
     --border: oklch(1 0 0 / 10%);
     --ring: oklch(0.556 0 0);
     --card: oklch(0.205 0 0);
@@ -115,6 +184,25 @@
     --sidebar-accent-foreground: oklch(0.985 0 0);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.556 0 0);
+
+    --surface-base: #1f1d1a;
+    --surface-sunken: #2a2723;
+    --surface-hover: rgba(255, 255, 255, 0.06);
+    --surface-active: rgba(255, 255, 255, 0.11);
+    --hairline-base: rgba(245, 245, 244, 0.1);
+    --hairline-strong: rgba(245, 245, 244, 0.2);
+    --ink-primary: #f5f5f4;
+    --ink-secondary: #d6d3d1;
+    --ink-tertiary: #a8a29e;
+    --ink-inverse: #181715;
+    --action-primary: #f5f5f4;
+    --action-ink: #181715;
+    --state-success: #4ade80;
+    --state-warning: #fbbf24;
+    --state-danger: #f87171;
+    --focus-ring: rgba(245, 245, 244, 0.4);
+    --elevation-float: 0 12px 32px rgba(0, 0, 0, 0.42);
+    --elevation-modal: 0 18px 54px rgba(0, 0, 0, 0.5);
 }
 
 @layer base {
@@ -401,8 +489,8 @@
     }
 
     .canvas-image-settings-popover .ant-popover-inner {
-        border-radius: 18px;
-        box-shadow: 0 18px 54px rgba(28, 25, 23, 0.16);
+        border-radius: 14px;
+        box-shadow: var(--elevation-modal);
         padding: 18px;
     }
 

@@ -7,7 +7,7 @@ const AGENT_MESSAGE_ASSET_PATTERN = /^agent-asset:([a-f0-9]{64})\/([a-f0-9]{64}\
 
 export class AgentApiError<T = unknown> extends Error {
     constructor(readonly status: number, readonly response: T & { code?: string; error?: string; msg?: string }) {
-        super(response.error || response.msg || i18n.t("agent.state.requestFailed"));
+        super(response.error || response.msg || i18n.t(status === 404 ? "agent.state.endpointMissing" : "agent.state.requestFailed"));
         this.name = "AgentApiError";
     }
 }
@@ -148,14 +148,31 @@ export function interruptTraeTurn(endpoint: string, token: string, threadId?: st
     return fetchAgentJson<{ ok?: boolean }>(endpoint, token, "/agent/trae/interrupt", jsonPost({ threadId }));
 }
 
-export type OpenAiConfigResponse = { ok?: boolean; hasApiKey?: boolean; baseUrl?: string; model?: string; busy?: boolean; threadId?: string; turnId?: string };
+export type OpenAiProtocol = "auto" | "chat" | "responses";
+export type OpenAiConfigResponse = { ok?: boolean; hasApiKey?: boolean; baseUrl?: string; model?: string; protocol?: OpenAiProtocol; busy?: boolean; threadId?: string; turnId?: string };
 
 export function fetchOpenAiConfig(endpoint: string, token: string) {
     return fetchAgentJson<OpenAiConfigResponse>(endpoint, token, "/agent/openai/config");
 }
 
-export function saveOpenAiConfig(endpoint: string, token: string, config: { apiKey?: string; baseUrl?: string; model?: string }) {
+export function saveOpenAiConfig(endpoint: string, token: string, config: { apiKey?: string; baseUrl?: string; model?: string; protocol?: OpenAiProtocol }) {
     return fetchAgentJson<OpenAiConfigResponse>(endpoint, token, "/agent/openai/config", jsonPost(config));
+}
+
+export async function fetchOpenAiModels(endpoint: string, token: string) {
+    const result = await fetchAgentJson<{ ok?: boolean; data?: string[] }>(endpoint, token, "/agent/openai/models");
+    return result.data || [];
+}
+
+export type ScriptStage = "setting" | "outline" | "script" | "assets" | "storyboard" | "shot" | "condense";
+export type ScriptAdaptOptions = { episodes?: number; duration?: number; genre?: string; audience?: string; orientation?: "vertical" | "horizontal"; keep?: string; change?: string };
+export type ScriptAdaptRequest = { stage: ScriptStage; source: string; options?: ScriptAdaptOptions; setting?: string; outline?: string; script?: string; assets?: string; shot?: string; preamble?: string; feedback?: string; episode?: number; episodeTotal?: number; episodeOutline?: string };
+
+export async function generateScriptStage(endpoint: string, token: string, payload: ScriptAdaptRequest) {
+    const result = await fetchAgentJson<{ ok?: boolean; content?: string }>(endpoint, token, "/agent/script/generate", jsonPost(payload));
+    const content = result.content || "";
+    if (!content.trim()) throw new AgentApiError(502, { error: i18n.t("canvas.script.emptyResponse") });
+    return content;
 }
 
 export function runOpenAiTurn(endpoint: string, token: string, body: { prompt: string; clientId: string; attachments?: Array<{ id?: string; name?: string; type?: string; size?: number; width?: number; height?: number; dataUrl?: string }> }) {

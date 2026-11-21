@@ -6,7 +6,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { runClaudeTurn } from "../agent/claude.js";
 import { checkWorkbuddyStatus, replyWorkbuddyPermission, runWorkbuddyTurn, updateWorkbuddyConfig } from "../agent/workbuddy.js";
 import { checkTraeStatus, interruptTraeTurn, startTraeTurn, TRAE_THREAD_ID, TraeTurnError } from "../agent/trae.js";
-import { getOpenAiStatus, interruptOpenAiTurn, OpenAiTurnError, startOpenAiTurn, updateOpenAiConfig } from "../agent/openai.js";
+import { getOpenAiStatus, interruptOpenAiTurn, listOpenAiModels, OpenAiTurnError, startOpenAiTurn, updateOpenAiConfig } from "../agent/openai.js";
+import { generateScriptStage } from "../agent/script.js";
 import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -180,8 +181,27 @@ export function startHttpServer() {
             apiKey: req.body?.apiKey !== undefined ? String(req.body.apiKey).trim() : undefined,
             baseUrl: req.body?.baseUrl !== undefined ? String(req.body.baseUrl).trim() : undefined,
             model: req.body?.model !== undefined ? String(req.body.model).trim() : undefined,
+            protocol: req.body?.protocol !== undefined ? openAiProtocol(req.body.protocol) : undefined,
         });
         res.json(getOpenAiStatus(config));
+    }));
+    app.get("/agent/openai/models", route(async (_req, res) => res.json({ ok: true, data: await listOpenAiModels(config) })));
+    app.post("/agent/script/generate", route(async (req, res) => {
+        const result = await generateScriptStage(config, {
+            stage: req.body?.stage,
+            source: String(req.body?.source || ""),
+            options: req.body?.options || {},
+            setting: req.body?.setting ? String(req.body.setting) : undefined,
+            outline: req.body?.outline ? String(req.body.outline) : undefined,
+            script: req.body?.script ? String(req.body.script) : undefined,
+            assets: req.body?.assets ? String(req.body.assets) : undefined,
+            preamble: req.body?.preamble ? String(req.body.preamble) : undefined,
+            feedback: req.body?.feedback ? String(req.body.feedback) : undefined,
+            episode: req.body?.episode ? Number(req.body.episode) : undefined,
+            episodeTotal: req.body?.episodeTotal ? Number(req.body.episodeTotal) : undefined,
+            episodeOutline: req.body?.episodeOutline ? String(req.body.episodeOutline) : undefined,
+        });
+        res.json({ ok: true, content: result.content });
     }));
     app.post("/agent/openai/turn", route(async (req, res) => {
         const prompt = String(req.body?.prompt || "");
@@ -586,6 +606,10 @@ function routeParam(value: string | string[]) {
 
 function permissionMode(value: unknown): AgentPermissionMode {
     return value === "automatic" || value === "full" ? value : "request";
+}
+
+function openAiProtocol(value: unknown): "auto" | "chat" | "responses" {
+    return value === "chat" || value === "responses" ? value : "auto";
 }
 
 function reasoningEffort(value: unknown): CodexReasoningEffort | undefined {

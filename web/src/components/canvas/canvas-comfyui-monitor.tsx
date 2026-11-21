@@ -364,12 +364,12 @@ export function CanvasComfyuiMonitor() {
     const dotColor = !isOnline
         ? theme.node.muted
         : vramPercent >= 90
-        ? "#ef4444"
+        ? theme.state.danger
         : vramPercent >= 70
-        ? "#f59e0b"
-        : "#22c55e";
+        ? theme.state.warning
+        : theme.state.success;
 
-    const vramStatusStroke = vramPercent >= 90 ? "#ef4444" : vramPercent >= 70 ? "#f59e0b" : "#10b981";
+    const vramStatusStroke = vramPercent >= 90 ? theme.state.danger : vramPercent >= 70 ? theme.state.warning : theme.state.success;
 
     const hasRunningTasks = (queueStats?.runningCount || 0) > 0;
     const hasPendingTasks = (queueStats?.pendingCount || 0) > 0;
@@ -429,12 +429,12 @@ export function CanvasComfyuiMonitor() {
                                                     background: sum
                                                         ? sum.online
                                                             ? runCount > 0
-                                                                ? "#3b82f6"
-                                                                : "#22c55e"
-                                                            : "#a8a29e"
+                                                                ? theme.text.primary
+                                                                : theme.state.success
+                                                            : theme.node.faint
                                                         : c.id === activeChannel.id && isOnline
-                                                        ? "#22c55e"
-                                                        : "#a8a29e",
+                                                        ? theme.state.success
+                                                        : theme.node.faint,
                                                 }}
                                             />
                                             <span className="truncate max-w-[125px] font-medium">{c.name || t("canvas.monitor.defaultHost")}</span>
@@ -466,7 +466,7 @@ export function CanvasComfyuiMonitor() {
                     </div>
                     <button
                         type="button"
-                        className="rounded px-1 py-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+                        className="rounded px-1 py-0.5 hover:bg-surface-hover"
                         onClick={() => {
                             const channel = offlineChannels.find((item) => item.id === activeChannel?.id) || offlineChannels[0];
                             notifyMixedContentBlocked(channel.comfyuiProxyUrl || channel.baseUrl || baseUrl);
@@ -499,7 +499,7 @@ export function CanvasComfyuiMonitor() {
                                 setCleanConfirmTarget("single");
                             }}
                             disabled={isCleaning || !isOnline}
-                            className="grid size-6 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="grid size-6 place-items-center rounded transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
                             style={{ color: theme.node.muted }}
                         >
                             {isCleaning ? (
@@ -514,7 +514,7 @@ export function CanvasComfyuiMonitor() {
                             type="button"
                             onClick={() => refreshCurrent(false)}
                             disabled={isRefreshing}
-                            className="grid size-6 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10"
+                            className="grid size-6 place-items-center rounded transition hover:bg-surface-hover"
                             style={{ color: theme.node.muted }}
                         >
                             <RefreshCw className={`size-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -526,7 +526,7 @@ export function CanvasComfyuiMonitor() {
                                 href={baseUrl}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="grid size-6 place-items-center rounded transition hover:bg-black/5 dark:hover:bg-white/10"
+                                className="grid size-6 place-items-center rounded transition hover:bg-surface-hover"
                                 style={{ color: theme.node.muted }}
                             >
                                 <ExternalLink className="size-3.5" />
@@ -544,7 +544,7 @@ export function CanvasComfyuiMonitor() {
                         <span>{t("canvas.monitor.taskQueue")}</span>
                     </span>
                     {hasRunningTasks ? (
-                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                        <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-medium text-ink">
                             <Loader2 className="size-2.5 animate-spin" />
                             <span>{t("canvas.monitor.processing")}</span>
                         </span>
@@ -555,13 +555,13 @@ export function CanvasComfyuiMonitor() {
                 <div className="grid grid-cols-2 gap-2 text-[11px]">
                     <div className="flex flex-col rounded p-1.5" style={{ background: theme.mode === "dark" ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
                         <span className="opacity-60 text-[10px]">{t("canvas.monitor.runningTasks")}</span>
-                        <span className="text-sm font-semibold mt-0.5 font-mono" style={{ color: hasRunningTasks ? "#3b82f6" : theme.node.text }}>
+                        <span className="text-sm font-semibold mt-0.5 font-mono" style={{ color: hasRunningTasks ? theme.text.primary : theme.node.text }}>
                             {queueStats?.runningCount ?? 0}
                         </span>
                     </div>
                     <div className="flex flex-col rounded p-1.5" style={{ background: theme.mode === "dark" ? "rgba(255,255,255,0.03)" : "rgba(0,0,0,0.02)" }}>
                         <span className="opacity-60 text-[10px]">{t("canvas.monitor.queuedTasks")}</span>
-                        <span className="text-sm font-semibold mt-0.5 font-mono" style={{ color: hasPendingTasks ? "#f59e0b" : theme.node.text }}>
+                        <span className="text-sm font-semibold mt-0.5 font-mono" style={{ color: hasPendingTasks ? theme.state.warning : theme.node.text }}>
                             {queueStats?.pendingCount ?? 0}
                         </span>
                     </div>
@@ -617,7 +617,7 @@ export function CanvasComfyuiMonitor() {
                 <Progress
                     percent={ramPercent}
                     size="small"
-                    strokeColor={ramPercent >= 90 ? "#ef4444" : "#10b981"}
+                    strokeColor={ramPercent >= 90 ? theme.state.danger : theme.state.success}
                     showInfo={false}
                     className="!m-0"
                 />
@@ -665,7 +665,7 @@ export function CanvasComfyuiMonitor() {
                         setCleanConfirmTarget("single");
                     }}
                     disabled={isCleaning || !isOnline}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition hover:bg-black/5 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-medium transition hover:bg-surface-hover disabled:cursor-not-allowed disabled:opacity-40"
                     style={{
                         background: theme.mode === "dark" ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.05)",
                         color: theme.node.text,
@@ -683,7 +683,7 @@ export function CanvasComfyuiMonitor() {
                             setCleanConfirmTarget("all");
                         }}
                         disabled={isCleaningAll}
-                        className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs opacity-75 transition hover:bg-black/5 hover:opacity-100 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                        className="flex w-full items-center justify-center gap-1.5 rounded-lg py-1.5 text-xs opacity-75 transition hover:bg-surface-hover hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-40"
                         style={{ color: theme.node.text }}
                     >
                         <Sparkles className="size-3 text-amber-500" />
@@ -707,7 +707,7 @@ export function CanvasComfyuiMonitor() {
             >
                 <button
                     type="button"
-                    className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition hover:bg-black/5 dark:hover:bg-white/10"
+                    className="flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs font-medium transition hover:bg-surface-hover"
                     style={{ color: theme.node.text }}
                     title={t("canvas.monitor.buttonTitle")}
                 >
@@ -717,10 +717,10 @@ export function CanvasComfyuiMonitor() {
                         ) : null}
                         <span
                             className="relative inline-flex size-2 rounded-full"
-                            style={{ background: hasRunningTasks ? "#3b82f6" : dotColor }}
+                            style={{ background: hasRunningTasks ? theme.text.primary : dotColor }}
                         />
                     </span>
-                    <span className="max-w-[260px] truncate opacity-90">{topBarText}</span>
+                    <span className="max-w-[150px] truncate opacity-90">{topBarText}</span>
                 </button>
             </Popover>
 
@@ -784,14 +784,14 @@ export function CanvasComfyuiMonitor() {
                         <div className="mt-1 font-semibold" style={{ color: theme.node.text }}>
                             {cleanConfirmTarget === "all" ? (
                                 <div className="space-y-1">
-                                    <div className="text-amber-600 dark:text-amber-400 font-medium">
+                                    <div className="text-warn font-medium">
                                         {t("canvas.monitor.sendAllCommandHint", { count: comfyChannels.length })}
                                     </div>
                                     <div className="flex flex-wrap gap-1.5 pt-1">
                                         {comfyChannels.map((c) => (
                                             <span
                                                 key={c.id}
-                                                className="inline-flex items-center gap-1 rounded bg-black/5 px-2 py-0.5 text-[11px] dark:bg-white/10"
+                                                className="inline-flex items-center gap-1 rounded bg-surface-hover px-2 py-0.5 text-[11px]"
                                             >
                                                 <Server className="size-3 opacity-60" />
                                                 <span>{c.name || "ComfyUI"}</span>
@@ -814,8 +814,8 @@ export function CanvasComfyuiMonitor() {
                         <div className="flex items-start gap-2.5">
                             <Zap className="size-4 shrink-0 text-emerald-500 mt-0.5" />
                             <div>
-                                <strong className="text-stone-800 dark:text-stone-200">{t("canvas.monitor.guide1Title")}</strong>
-                                <div className="mt-0.5 text-stone-500 dark:text-stone-400">
+                                <strong className="text-ink">{t("canvas.monitor.guide1Title")}</strong>
+                                <div className="mt-0.5 text-ink-faint">
                                     {t("canvas.monitor.guide1Desc")}
                                 </div>
                             </div>
@@ -824,8 +824,8 @@ export function CanvasComfyuiMonitor() {
                         <div className="flex items-start gap-2.5">
                             <Clock className="size-4 shrink-0 text-amber-500 mt-0.5" />
                             <div>
-                                <strong className="text-stone-800 dark:text-stone-200">{t("canvas.monitor.guide2Title")}</strong>
-                                <div className="mt-0.5 text-stone-500 dark:text-stone-400">
+                                <strong className="text-ink">{t("canvas.monitor.guide2Title")}</strong>
+                                <div className="mt-0.5 text-ink-faint">
                                     {t("canvas.monitor.guide2Desc")}
                                 </div>
                             </div>
@@ -834,8 +834,8 @@ export function CanvasComfyuiMonitor() {
                         <div className="flex items-start gap-2.5">
                             <ShieldCheck className="size-4 shrink-0 text-blue-500 mt-0.5" />
                             <div>
-                                <strong className="text-stone-800 dark:text-stone-200">{t("canvas.monitor.guide3Title")}</strong>
-                                <div className="mt-0.5 text-stone-500 dark:text-stone-400">
+                                <strong className="text-ink">{t("canvas.monitor.guide3Title")}</strong>
+                                <div className="mt-0.5 text-ink-faint">
                                     {t("canvas.monitor.guide3Desc")}
                                 </div>
                             </div>
@@ -844,8 +844,8 @@ export function CanvasComfyuiMonitor() {
                         <div className="flex items-start gap-2.5">
                             <AlertTriangle className="size-4 shrink-0 text-orange-500 mt-0.5" />
                             <div>
-                                <strong className="text-stone-800 dark:text-stone-200">{t("canvas.monitor.guide4Title")}</strong>
-                                <div className="mt-0.5 text-stone-500 dark:text-stone-400">
+                                <strong className="text-ink">{t("canvas.monitor.guide4Title")}</strong>
+                                <div className="mt-0.5 text-ink-faint">
                                     {t("canvas.monitor.guide4Desc")}
                                 </div>
                             </div>

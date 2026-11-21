@@ -2,17 +2,85 @@ import type { ModelSupportedTools } from "@/services/api/models/types";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { Asset } from "@/stores/use-asset-store";
 
+export type CanvasScriptOptions = {
+    episodes?: number;
+    duration?: number;
+    genre?: string;
+    audience?: string;
+    orientation?: "vertical" | "horizontal";
+    keep?: string;
+    change?: string;
+};
+
+export type ScriptAssetKind = "character" | "scene" | "prop" | "video" | "audio";
+
+/** 剧本资产：图片类为 character/scene/prop，参考类为 video/audio。 */
+export type ScriptAsset = {
+    id: string;
+    kind: ScriptAssetKind;
+    name: string;
+    description: string;
+    prompt: string;
+};
+
+/** 单个 H3 镜头提示词的六段结构。 */
+export type ScriptH3Prompt = {
+    subject_definitions: string;
+    summary: string;
+    retention_analysis: string;
+    detailed_description: string;
+    overall_soundscape: string;
+    non_diegetic_music: string;
+};
+
+/** 结构化镜头：参数与有序引用随镜头保存，画布节点由 script-node 派生。 */
+export type ScriptShot = {
+    id: string;
+    number: number;
+    title: string;
+    duration: number;
+    size: string;
+    imageAssetIds: string[];
+    videoAssetIds: string[];
+    audioAssetIds: string[];
+    h3: ScriptH3Prompt;
+};
+
+export type ScriptStoryboardEpisode = {
+    id: string;
+    number: number;
+    title: string;
+    shots: ScriptShot[];
+};
+
+/** 项目级剧本数据：原文/设定/大纲/正文为 Markdown，资产与分镜为唯一权威结构化数据。 */
+export type CanvasScriptState = {
+    version: 2;
+    updatedAt: string;
+    source: string;
+    condensed: string;
+    options: CanvasScriptOptions;
+    setting: string;
+    outline: string;
+    script: string;
+    assets: ScriptAsset[];
+    storyboard: ScriptStoryboardEpisode[];
+};
+
 export type CanvasProject = {
     id: string;
+    schemaVersion: number;
     title: string;
     createdAt: string;
     updatedAt: string;
     revision: number;
     activeCanvasId: string | null;
+    script?: CanvasScriptState;
 };
 
 export type CanvasDocument = {
     id: string;
+    schemaVersion: number;
     projectId: string;
     title: string;
     createdAt: string;
@@ -50,6 +118,7 @@ export type CanvasProjectSummary = {
     nodeCount: number;
     connectionCount: number;
     assetCount: number;
+    storagePath?: string;
 };
 
 export type CanvasProjectBundle = CanvasProject & {
@@ -183,6 +252,11 @@ export type CanvasNodeMetadata = {
     images?: CanvasNodeImage[];
     primaryImageId?: string;
     assetId?: string;
+    // 剧本实体与画布节点之间的稳定映射，例如 asset:角色:林昭、shot:第1集:镜3
+    scriptKey?: string;
+    // 跨画布引用来源，仅从其他画布资产创建引用节点时写入
+    sourceAssetId?: string;
+    sourceCanvasId?: string;
     storageKey?: string;
     posterUrl?: string;
     posterStorageKey?: string;

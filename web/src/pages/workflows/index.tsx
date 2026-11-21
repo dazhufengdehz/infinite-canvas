@@ -397,22 +397,21 @@ export default function WorkflowsPage() {
         message.success(t("workflowsPage.copySuccess"));
     };
 
-    const isCustom = activeWorkflow && !activeWorkflow.isBuiltin;
     const jsonString = JSON.stringify(currentJson, null, 2);
 
     return (
         <main className="flex h-full flex-col overflow-hidden bg-background text-foreground">
             {/* 顶栏信息与分类导航条 */}
-            <div className="shrink-0 border-b border-stone-200 bg-background/95 px-6 pt-4 pb-3 backdrop-blur-md dark:border-stone-800">
+            <div className="shrink-0 border-b border-hairline bg-background/95 px-6 pt-4 pb-3 backdrop-blur-md">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                         <div className="flex items-center gap-2">
                             <WorkflowIcon className="size-5 text-blue-500" />
-                            <h1 className="text-lg font-semibold text-stone-950 dark:text-stone-100">
+                            <h1 className="text-heading font-semibold text-ink">
                                 {t("workflowsPage.title")}
                             </h1>
                         </div>
-                        <p className="mt-0.5 text-xs text-stone-500">
+                        <p className="mt-0.5 text-meta text-ink-soft">
                             {t("workflowsPage.description")}
                         </p>
                     </div>
@@ -432,8 +431,8 @@ export default function WorkflowsPage() {
                         <Button size="small" icon={<Upload className="size-3.5" />} title={t("workflowsPage.uploadHint")} onClick={() => uploadInputRef.current?.click()}>
                             {t("workflowsPage.uploadWorkflow")}
                         </Button>
-                        <span className="text-stone-400">{t("workflowsPage.instance")}</span>
-                        <code className="rounded bg-stone-100 px-2 py-0.5 font-mono text-[11px] text-stone-700 dark:bg-stone-800 dark:text-stone-300">
+                        <span className="text-ink-faint">{t("workflowsPage.instance")}</span>
+                        <code className="rounded bg-surface-sunken px-2 py-0.5 font-mono text-[11px] text-ink-soft">
                             {comfyEndpoint}
                         </code>
                     </div>
@@ -504,7 +503,6 @@ export default function WorkflowsPage() {
                     <div className="space-y-1.5">
                         {filteredWorkflows.map((wf) => {
                             const isSelected = wf.id === activeWorkflowId;
-                            const custom = !wf.isBuiltin;
                             return (
                                 <button
                                     key={wf.id}
@@ -547,18 +545,6 @@ export default function WorkflowsPage() {
                                                     {t("workflowsPage.default")}
                                                 </span>
                                             )}
-                                            <span
-                                                className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-medium"
-                                                style={
-                                                    isSelected
-                                                        ? custom
-                                                            ? { backgroundColor: "rgba(245, 158, 11, 0.2)", color: "#fcd34d", border: "1px solid rgba(245, 158, 11, 0.3)" }
-                                                            : { backgroundColor: "rgba(59, 130, 246, 0.2)", color: "#93c5fd", border: "1px solid rgba(59, 130, 246, 0.3)" }
-                                                        : undefined
-                                                }
-                                            >
-                                                {custom ? t("workflowsPage.custom") : t("workflowsPage.builtin")}
-                                            </span>
                                         </div>
                                     </div>
                                     <div
@@ -582,15 +568,6 @@ export default function WorkflowsPage() {
                                 <h2 className="text-sm font-semibold text-stone-950 dark:text-stone-100">
                                     {currentName}
                                 </h2>
-                                <span
-                                    className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${
-                                        isCustom
-                                            ? "bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300"
-                                            : "bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-300"
-                                    }`}
-                                >
-                                    {isCustom ? t("workflowsPage.customized") : t("workflowsPage.factoryBuiltin")}
-                                </span>
                                 <Tag className="m-0 text-xs">{activeWorkflow.category}</Tag>
                             </div>
 

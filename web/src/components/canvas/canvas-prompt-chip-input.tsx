@@ -12,7 +12,7 @@ import { isImeComposing, isPlainEnterKey } from "@/lib/keyboard-event";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasResourceReference, CategorizedCanvasResources } from "@/lib/canvas/canvas-resource-references";
 import { getMotionPreset, type CanvasMotionPreset } from "@/lib/canvas/canvas-motion-presets";
-import { CanvasResourceMentionMenu, type MentionMenuHandle } from "./canvas-resource-mention-menu";
+import { CanvasResourceMentionMenu, type CrossCanvasAssetItem, type MentionMenuHandle } from "./canvas-resource-mention-menu";
 
 type Props = {
     value: string;
@@ -27,6 +27,8 @@ type Props = {
     onClear?: () => void;
     categorizedResources?: CategorizedCanvasResources;
     showMotionPresets?: boolean;
+    crossCanvasAssets?: CrossCanvasAssetItem[];
+    onReferenceCrossCanvasAsset?: (item: CrossCanvasAssetItem) => CanvasResourceReference | null | Promise<CanvasResourceReference | null>;
     onConnectResource?: (sourceNodeId: string) => boolean | Promise<boolean>;
     triggerMentionRef?: React.MutableRefObject<(() => void) | null>;
 };
@@ -58,6 +60,8 @@ export function CanvasPromptChipInput({
     onClear,
     categorizedResources,
     showMotionPresets = true,
+    crossCanvasAssets,
+    onReferenceCrossCanvasAsset,
     onConnectResource,
     triggerMentionRef,
 }: Props) {
@@ -283,6 +287,12 @@ export function CanvasPromptChipInput({
         finishInsertion(activeRange);
     };
 
+    // 选中跨画布资产后，先由上层在当前画布创建并连线引用节点，再把引用 chip 插入提示词
+    const referenceCrossCanvasAsset = async (item: CrossCanvasAssetItem) => {
+        const reference = await onReferenceCrossCanvasAsset?.(item);
+        if (reference) insertReference(reference);
+    };
+
     const handleClear = () => {
         emit("");
         const editor = editorRef.current;
@@ -389,7 +399,7 @@ export function CanvasPromptChipInput({
                 >
                     <button
                         type="button"
-                        className="absolute right-2.5 top-2.5 z-10 flex size-5 cursor-pointer items-center justify-center rounded-full bg-transparent text-stone-400 opacity-70 transition hover:bg-black/5 hover:text-stone-700 hover:opacity-100 dark:hover:bg-white/10 dark:hover:text-stone-200"
+                        className="absolute right-2.5 top-2.5 z-10 flex size-5 cursor-pointer items-center justify-center rounded-full bg-transparent text-ink-faint opacity-70 transition hover:bg-surface-hover hover:text-ink hover:opacity-100"
                         title={t("canvas.promptPanel.clearPrompt")}
                         aria-label={t("canvas.promptPanel.clearPrompt")}
                         onClick={(event) => event.stopPropagation()}
@@ -408,8 +418,10 @@ export function CanvasPromptChipInput({
                     categorized={categorizedResources}
                     theme={theme}
                     showMotionPresets={showMotionPresets}
+                    crossCanvasAssets={crossCanvasAssets}
                     onSelect={insertReference}
                     onSelectMotion={insertMotionPreset}
+                    onSelectCrossCanvasAsset={onReferenceCrossCanvasAsset ? referenceCrossCanvasAsset : undefined}
                     onClose={closeMention}
                 />
             ) : mention && candidates.length ? (

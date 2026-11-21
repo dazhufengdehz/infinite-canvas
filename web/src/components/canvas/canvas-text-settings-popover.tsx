@@ -89,7 +89,7 @@ export function CanvasTextSettingsPopover({
     return (
         <>
             <span ref={buttonRef} className="inline-flex min-w-0" onMouseDown={(event) => event.stopPropagation()} onPointerDown={(event) => event.stopPropagation()}>
-                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[170px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.node.text }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
+                <Button size="small" type="text" className={buttonClassName || "!h-8 !max-w-[170px] !justify-start !rounded-lg !px-2.5"} style={{ background: "transparent", color: theme.text.primary }} icon={<Settings2 className="size-3.5" />} onClick={() => updateOpen(!open)}>
                     <span className="truncate">{currentMaxLength} 词{currentThinking ? " · 思考" : ""}{onCountChange ? ` · ${t("canvas.controls.generations", { count })}` : ""}</span>
                 </Button>
             </span>
@@ -126,7 +126,7 @@ function TextSettingsPortal({
     onCountChange?: (count: number) => void;
 }) {
     const { t } = useTranslation();
-    const width = 356;
+    const width = 380;
     const gap = 8;
     const margin = 12;
     const spaceAbove = buttonRect.top - gap - margin;
@@ -144,13 +144,13 @@ function TextSettingsPortal({
         ...(isTop
             ? { bottom: window.innerHeight - buttonRect.top + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceAbove)) }
             : { top: buttonRect.bottom + gap, maxHeight: Math.max(200, Math.min(window.innerHeight - margin * 2, spaceBelow)) }),
-        background: theme.toolbar.panel,
-        border: `1px solid ${theme.toolbar.border}`,
-        borderRadius: 12,
-        boxShadow: "0 8px 24px rgba(28, 25, 23, 0.10)",
-        padding: 12,
+        background: theme.surface.base,
+        border: `1px solid ${theme.hairline.base}`,
+        borderRadius: 14,
+        boxShadow: "var(--elevation-float)",
+        padding: 18,
         overflowY: "auto",
-        color: theme.node.text,
+        color: theme.text.primary,
     } as const;
 
     return createPortal(
@@ -174,7 +174,7 @@ function TextSettingsPortal({
             />
             {onCountChange ? (
                 <div className="mt-3 space-y-2">
-                    <div className="text-sm font-medium" style={{ color: theme.node.muted }}>{t("settingsPanels.text.count")}</div>
+                    <div className="text-sm font-medium" style={{ color: theme.text.secondary }}>{t("settingsPanels.text.count")}</div>
                     <InputNumber className="w-full" min={1} max={15} precision={0} value={count} onChange={(value) => onCountChange(value || 1)} />
                 </div>
             ) : null}

@@ -29,6 +29,9 @@ export const AGENT_PROTOCOL_VERSION = 6;
 const SITE_TOOLS = new Set<ToolName>([
     "site_navigate",
     "canvas_list_projects",
+    "canvas_create_project",
+    "canvas_update_project",
+    "canvas_delete_projects",
     "workbench_image_get_config",
     "workbench_image_generate",
     "workbench_video_get_config",

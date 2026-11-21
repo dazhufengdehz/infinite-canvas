@@ -64,7 +64,7 @@ function toStrictSchema(schema: JsonSchema, optional = false): JsonSchema {
     return next;
 }
 
-function allowsNull(schema: JsonSchema) {
+function allowsNull(schema: JsonSchema): boolean {
     if (schema.type === "null" || Array.isArray(schema.type) && schema.type.includes("null")) return true;
     return Array.isArray(schema.anyOf) && schema.anyOf.some((item) => allowsNull(item as JsonSchema));
 }

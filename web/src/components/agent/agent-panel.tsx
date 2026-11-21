@@ -24,7 +24,7 @@ export function AgentPanel() {
         const startWidth = width;
         let nextWidth = startWidth;
         const onMove = (moveEvent: PointerEvent) => {
-            nextWidth = Math.min(760, Math.max(360, startWidth + startX - moveEvent.clientX));
+            nextWidth = Math.min(520, Math.max(320, startWidth + startX - moveEvent.clientX));
             setAgentState({ width: nextWidth });
         };
         const onUp = () => {
@@ -42,19 +42,19 @@ export function AgentPanel() {
 
     return (
         <motion.div
-            className="relative z-[70] flex h-full shrink-0"
+            className="pointer-events-none absolute right-4 top-[76px] bottom-4 z-[70] flex justify-end"
             initial={{ width: 0, opacity: 0 }}
-            animate={{ width: panelOpen ? width + 1 : 0, opacity: panelOpen ? 1 : 0 }}
+            animate={{ width: panelOpen ? width + 13 : 0, opacity: panelOpen ? 1 : 0 }}
             transition={{ duration: resizing ? 0 : PANEL_MOTION_SECONDS, ease: [0.22, 1, 0.36, 1] }}
             style={{ overflow: "clip", pointerEvents: panelOpen && !panelClosing ? undefined : "none" }}
         >
             <motion.aside
-                className="relative flex h-full shrink-0 flex-col border-l"
+                className="pointer-events-auto relative flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border shadow-float backdrop-blur-xl"
                 data-canvas-shortcuts-ignore
                 initial={{ x: 48 }}
                 animate={{ x: panelClosing ? 28 : 0 }}
                 transition={{ duration: resizing ? 0 : PANEL_MOTION_SECONDS, ease: [0.22, 1, 0.36, 1] }}
-                style={{ width, background: theme.node.panel, borderColor: theme.node.stroke, color: theme.node.text }}
+                style={{ width, background: theme.accent.chrome, borderColor: theme.hairline.base, color: theme.text.primary }}
             >
                 <button type="button" className="absolute inset-y-0 left-0 z-40 w-4 -translate-x-1/2 cursor-col-resize" onPointerDown={startResize} aria-label={t("agent.panel.resize")} />
                 <LocalAgentPanel embedded />
