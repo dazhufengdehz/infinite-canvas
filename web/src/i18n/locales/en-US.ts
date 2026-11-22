@@ -510,6 +510,9 @@ export default {
             "vertical": "Vertical",
             "horizontal": "Horizontal",
             "genre": "Genre",
+            "audience": "Target audience",
+            "mustKeep": "Must keep",
+            "allowChange": "Allowed changes",
             "chapters": "Chapters",
             "useChapters": "Use selected chapters",
             "generateSetting": "Generate story setting",
@@ -585,6 +588,11 @@ export default {
             "generateBlocked": "Shot validation failed, fix the highlighted fields first",
             "noNode": "Not synced to canvas",
             "resize": "Resize width",
+            "creativeRules": "Creative rules",
+            "creativeRulesCount": "{{count}} enabled",
+            "creativeRulesNone": "None enabled",
+            "creativeRulesUnnamed": "Untitled rule",
+            "creativeRulesHint": "Edit rule content under Settings → Creative rules. Enabled rules are injected into the agent system prompt for every production stage.",
             "subtitle": "Subtitles",
             "bgm": "BGM",
             "batchSettings": "Batch generation settings",
@@ -1555,6 +1563,7 @@ export default {
             "toolbar": "Toolbar",
             "preferences": "Preferences",
             "promptSources": "Prompt sources",
+            "creativeRules": "Creative rules",
             "localStorage": "Local storage"
         },
         "localStorage": {
@@ -1580,6 +1589,24 @@ export default {
                 "agentMessages": "Agent messages",
                 "promptCache": "Prompt cache"
             }
+        },
+        "creativeRules": {
+            "description": "Enabled creative rules are injected into the production workspace agent system prompt as project-level creation rules, covering every stage (setting, outline, script, assets, storyboard). {{count}} rule(s) are currently enabled.",
+            "add": "New rule",
+            "saved": "Rule saved",
+            "deleted": "Rule deleted",
+            "builtIn": "Built-in",
+            "unnamed": "Untitled rule",
+            "emptyContent": "Rule content is empty",
+            "contentRequired": "Please enter the rule content",
+            "nameLabel": "Rule name",
+            "namePlaceholder": "For example: Cinematic realism",
+            "contentLabel": "Rule content",
+            "contentHint": "Free text. You can describe visual style, character tone, directing style, and more. It is injected into the agent as a creation rule for every production stage.",
+            "contentPlaceholder": "Visual style: cinematic realism, desaturated teal-and-orange palette, soft natural light;\nCharacters: realistic proportions and skin texture, avoid influencer looks;\nDirecting style: 35mm primarily, medium close-ups, slow lateral moves.",
+            "previewTitle": "Injection preview",
+            "previewDescription": "This is exactly what gets injected into the agent system prompt from the enabled rules.",
+            "previewEmpty": "No rules are enabled, so nothing will be injected."
         },
         "promptSources": {
             "add": "Add source",

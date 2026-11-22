@@ -9,6 +9,7 @@ import { ModelPicker } from "@/components/model-picker";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ComfyuiWorkflowEditor } from "@/components/layout/comfyui-workflow-editor";
 import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
+import { ConfigCreativeRules } from "@/components/layout/config-creative-rules";
 import { ConfigLocalStorage } from "@/components/layout/config-local-storage";
 import { ConfigToolbar } from "@/components/layout/config-toolbar";
 import type { AppLocale } from "@/i18n";
@@ -524,6 +525,11 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         key: "prompt-sources",
                         label: t("config.tabs.promptSources"),
                         children: <ConfigPromptSources />,
+                    },
+                    {
+                        key: "creative-rules",
+                        label: t("config.tabs.creativeRules"),
+                        children: <ConfigCreativeRules />,
                     },
                     {
                         key: "webdav",

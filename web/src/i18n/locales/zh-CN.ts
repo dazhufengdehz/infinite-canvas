@@ -510,6 +510,9 @@ export default {
             "vertical": "竖屏",
             "horizontal": "横屏",
             "genre": "题材",
+            "audience": "目标受众",
+            "mustKeep": "必须保留",
+            "allowChange": "允许调整",
             "chapters": "章节",
             "useChapters": "使用所选章节",
             "generateSetting": "生成故事设定",
@@ -585,6 +588,11 @@ export default {
             "generateBlocked": "镜头参数校验未通过，请先修正标红项",
             "noNode": "未同步到画布",
             "resize": "调整宽度",
+            "creativeRules": "创作规则",
+            "creativeRulesCount": "已启用 {{count}} 条",
+            "creativeRulesNone": "未启用",
+            "creativeRulesUnnamed": "未命名规则",
+            "creativeRulesHint": "在设置 → 创作规则中编辑规则内容。启用的规则会注入 Agent 系统提示词，对全部生产阶段生效。",
             "subtitle": "字幕",
             "bgm": "配乐",
             "batchSettings": "批量生成设置",
@@ -1555,6 +1563,7 @@ export default {
             "toolbar": "工具栏",
             "preferences": "偏好设置",
             "promptSources": "提示词来源",
+            "creativeRules": "创作规则",
             "localStorage": "本地存储"
         },
         "localStorage": {
@@ -1580,6 +1589,24 @@ export default {
                 "agentMessages": "Agent 消息",
                 "promptCache": "提示词缓存"
             }
+        },
+        "creativeRules": {
+            "description": "启用的创作规则会作为项目级创作规则注入生产工作台的 Agent 系统提示词，对设定、大纲、剧本、资产、分镜等全部阶段生效。当前已启用 {{count}} 条。",
+            "add": "新建规则",
+            "saved": "规则已保存",
+            "deleted": "规则已删除",
+            "builtIn": "内置",
+            "unnamed": "未命名规则",
+            "emptyContent": "规则内容为空",
+            "contentRequired": "请输入规则内容",
+            "nameLabel": "规则名称",
+            "namePlaceholder": "例如：电影感写实",
+            "contentLabel": "规则内容",
+            "contentHint": "自由文本。可写画风、人物基调、导演风格等，作为创作规则注入 Agent，全部生产阶段生效。",
+            "contentPlaceholder": "视觉风格：写实电影质感，低饱和青橙色调，柔和自然光；\n人物：写实比例与肤质，避免网红脸；\n导演风格：以 35mm 为主，中近景为主，缓慢横移。",
+            "previewTitle": "注入预览",
+            "previewDescription": "以下是启用规则拼装后、实际注入 Agent 系统提示词的内容。",
+            "previewEmpty": "当前没有启用的规则，不会注入任何内容。"
         },
         "promptSources": {
             "add": "新增来源",

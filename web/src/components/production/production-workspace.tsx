@@ -27,6 +27,7 @@ import { productionVariantKey } from "@/lib/production/production-nodes";
 import { generateAssets, generateEpisodeScript, generateEpisodeStoryboard, generateAllStoryboards, generateOutline, generateSetting, generateShot, type ProductionCaller } from "@/lib/production/production-generation";
 import { generateScriptStage, type ScriptAdaptRequest } from "@/services/api/canvas-agent";
 import { useProductionStore } from "@/stores/canvas/use-production-store";
+import { buildCreativeRulePrompt, useCreativeRuleStore } from "@/stores/use-creative-rule-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { getChannelWorkflows, useEffectiveConfig, type WorkflowCategory } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -170,6 +171,8 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
         const agent = useAgentStore.getState();
         if (!agent.connected || !agent.url.trim() || !agent.token.trim()) throw new Error(t("canvas.script.needAgent"));
         const current = useProductionStore.getState().data;
+        // 创作规则卡作为项目级创作规则注入 Agent 的 system prompt，对所有生产阶段生效。
+        const preamble = buildCreativeRulePrompt(useCreativeRuleStore.getState().rules);
         return generateScriptStage(agent.url.trim(), agent.token.trim(), {
             stage: nextStage,
             source: text,
@@ -179,6 +182,8 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
             script: current ? current.episodes.map((episode) => episode.script).filter(Boolean).join("\n\n") : "",
             assets: current ? formatAssetList(current.assets) : "",
             ...(extra as Partial<ScriptAdaptRequest>),
+            // 创作规则最后拼装，确保始终生效。
+            ...(preamble ? { preamble } : {}),
         });
     };
 
@@ -489,6 +494,8 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
 
                 <BatchSettings data={data} open={batchOpen} onToggle={() => setBatchOpen((value) => !value)} onChange={(value) => data && patch({ batch: value }, true)} />
 
+                <CreativeRuleBar />
+
                 <div className="min-h-0 flex-1 overflow-y-auto">
                     {!data ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={loading ? t("canvas.production.loading") : t("canvas.production.empty")} /> : null}
                     {data ? (
@@ -768,6 +775,37 @@ function AssetGrid({ data, kind, nodeByKey, onSelect, onAddAsset }: {
     );
 }
 
+/** 创作规则快捷面板：在抽屉内直接开关已启用的规则卡，跳转到设置页做完整编辑。 */
+function CreativeRuleBar() {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const rules = useCreativeRuleStore((state) => state.rules);
+    const toggleRule = useCreativeRuleStore((state) => state.toggleRule);
+    const [open, setOpen] = useState(false);
+    const enabled = rules.filter((rule) => rule.enabled);
+    return (
+        <div className="shrink-0 border-b px-3 py-2" style={{ borderColor: theme.hairline.base }}>
+            <button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setOpen((value) => !value)}>
+                <Sparkles className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium">{t("canvas.production.creativeRules")}</span>
+                <span className="shrink-0 text-[11px]" style={{ color: theme.node.muted }}>{enabled.length ? t("canvas.production.creativeRulesCount", { count: enabled.length }) : t("canvas.production.creativeRulesNone")}</span>
+                {open ? <ChevronUp className="size-3.5 shrink-0" style={{ color: theme.node.muted }} /> : <ChevronDown className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />}
+            </button>
+            {open ? (
+                <div className="mt-2 space-y-1">
+                    {rules.map((rule) => (
+                        <label key={rule.id} className="flex items-center gap-2 text-xs">
+                            <Switch size="small" checked={rule.enabled} onChange={(checked) => toggleRule(rule.id, checked)} />
+                            <span className="min-w-0 flex-1 truncate">{rule.name || t("canvas.production.creativeRulesUnnamed")}</span>
+                        </label>
+                    ))}
+                    <div className="pt-1 text-[10px]" style={{ color: theme.node.muted }}>{t("canvas.production.creativeRulesHint")}</div>
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
 function SourceStage({ data, chapters, onChapters, onApplyChapters, onChange, onOptions, onGenerate, busy }: {
     data: ProductionState;
     chapters: Set<number>;
@@ -791,6 +829,11 @@ function SourceStage({ data, chapters, onChapters, onApplyChapters, onChange, on
                 <Field label={t("canvas.production.duration")}><InputNumber className="w-full" min={15} max={600} value={data.options.duration} onChange={(value) => onOptions({ duration: Number(value) || 60 })} /></Field>
                 <Field label={t("canvas.production.orientation")}><Select className="w-full" value={data.options.orientation} options={[{ value: "vertical", label: t("canvas.production.vertical") }, { value: "horizontal", label: t("canvas.production.horizontal") }]} onChange={(value) => onOptions({ orientation: value })} /></Field>
                 <Field label={t("canvas.production.genre")}><Input value={data.options.genre} onChange={(event) => onOptions({ genre: event.target.value })} /></Field>
+                <Field label={t("canvas.production.audience")}><Input value={data.options.audience || ""} onChange={(event) => onOptions({ audience: event.target.value })} /></Field>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+                <Field label={t("canvas.production.mustKeep")}><Input value={data.options.keep || ""} onChange={(event) => onOptions({ keep: event.target.value })} /></Field>
+                <Field label={t("canvas.production.allowChange")}><Input value={data.options.change || ""} onChange={(event) => onOptions({ change: event.target.value })} /></Field>
             </div>
             <div className="flex flex-wrap items-center gap-3 rounded-lg border p-2" style={{ borderColor: theme.node.stroke }}>
                 <label className="flex items-center gap-1.5 text-xs">
