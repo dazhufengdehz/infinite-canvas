@@ -871,6 +871,7 @@ function OutlineStage({ data, onChange, onSelect, onRemove, onAdd, onGenerate, o
 
 function ScriptStage({ data, episode, onChange, onBlur, onGenerate, busy }: { data: ProductionState; episode?: ProductionEpisode; onChange: (value: string) => void; onBlur: () => void; onGenerate: (episode: ProductionEpisode) => void; busy: boolean }) {
     const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
     if (!episode) return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.production.selectEpisode")} />;
     return (
         <div className="space-y-2">

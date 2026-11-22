@@ -503,9 +503,12 @@ export function parseGeneratedBlocking(value: unknown, assets: ScriptAsset[]): S
     for (const [key, text] of Object.entries(rawPositions)) {
         const description = String(text || "").trim();
         if (!description) continue;
-        const found = findVariant(assets, key) || assets.find((asset) => asset.id === key);
-        if (!found) continue;
-        positions[found.variant ? found.variant.id : found.asset.id] = description;
+        // 形态 ID 优先；只有资产 ID 时回落到该资产的第一个形态。
+        const variant = findVariant(assets, key);
+        const asset = variant ? null : assets.find((item) => item.id === key);
+        if (!variant && !asset) continue;
+        const variantId = variant ? variant.variant.id : assetVariants(asset!)[0].id;
+        positions[variantId] = description;
     }
     const characterIds = Object.keys(positions);
     if (!characterIds.length) return undefined;

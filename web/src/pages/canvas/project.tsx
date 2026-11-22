@@ -5864,7 +5864,7 @@ function InfiniteCanvasPage() {
                         onBackgroundModeChange={setBackgroundMode}
                         onShowImageInfoChange={setShowImageInfo}
                     />
-                ) : null}
+                )}
 
                 {contextMenu ? (
                     <CanvasNodeContextMenu
