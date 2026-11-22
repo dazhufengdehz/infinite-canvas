@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>生产工作台 V2 · 全链路与 Agent 提示词可视化</title>
+<style>
+:root{
+  --bg:#f4f6f8; --bg2:#fff; --bg3:#fafbfc; --ink:#141a22; --ink2:#3d4855; --muted:#6b7787;
+  --rule:#e2e7ee; --rule2:#eef1f5;
+  --accent:#0f766e; --accent2:#2563eb; --accent3:#b45309;
+  --ok:#15803d; --okbg:#ecf8f0; --warnbg:#fff7e8; --warn:#92400e; --errbg:#fef2f2; --err:#b91c1c;
+  --code-bg:#0f141b; --code-ink:#d7e0ea;
+  --mono:ui-monospace,'Cascadia Mono','JetBrains Mono',Consolas,monospace;
+}
+html[data-theme="dark"]{
+  --bg:#0b0e13; --bg2:#12171e; --bg3:#161c25; --ink:#e6ecf3; --ink2:#b8c3d0; --muted:#8b98a8;
+  --rule:#242d39; --rule2:#1c232c;
+  --accent:#2dd4bf; --accent2:#60a5fa; --accent3:#fbbf24;
+  --ok:#4ade80; --okbg:#0f2419; --warn:#fbbf24; --warnbg:#241b0c; --err:#f87171; --errbg:#2a1416;
+  --code-bg:#080b10; --code-ink:#cbd5e1;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Inter','Instrument Sans','Segoe UI',system-ui,-apple-system,'Microsoft YaHei',sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1500px;margin:0 auto;padding:0 24px 80px}
+header.top{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px);border-bottom:1px solid var(--rule)}
+.topin{max-width:1500px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.brand{display:flex;flex-direction:column;line-height:1.25}
+.brand b{font-size:15px;letter-spacing:-.01em}
+.brand span{font-size:11.5px;color:var(--muted)}
+.spacer{flex:1}
+.tgl{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--ink2);background:var(--bg2);border:1px solid var(--rule);border-radius:999px;padding:5px 11px;cursor:pointer;user-select:none;transition:.15s}
+.tgl:hover{border-color:var(--accent)}
+.tgl.on{background:var(--accent);border-color:var(--accent);color:#fff}
+html[data-theme="dark"] .tgl.on{color:#05221f}
+.tgl .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.55}
+.tgl.on .dot{opacity:1}
+button.btn{font:inherit;font-size:12px;background:var(--bg2);color:var(--ink2);border:1px solid var(--rule);border-radius:8px;padding:6px 12px;cursor:pointer;transition:.15s}
+button.btn:hover{border-color:var(--accent);color:var(--accent)}
+
+h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.11em;color:var(--muted);font-weight:600;margin:44px 0 16px;display:flex;align-items:center;gap:10px}
+h2.sec::after{content:'';flex:1;height:1px;background:var(--rule)}
+
+/* pipeline */
+.pipe{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:6px}
+@media(max-width:1100px){.pipe{grid-template-columns:repeat(4,1fr)}}
+@media(max-width:700px){.pipe{grid-template-columns:repeat(2,1fr)}}
+.stage{position:relative;background:var(--bg2);border:1px solid var(--rule);border-radius:12px;padding:12px 12px 11px;cursor:pointer;transition:.16s;text-align:left;display:flex;flex-direction:column;gap:5px;min-height:104px}
+.stage:hover{border-color:var(--accent);transform:translateY(-2px)}
+.stage.active{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 15%,transparent)}
+.stage .num{font-family:var(--mono);font-size:10px;color:var(--muted);letter-spacing:.06em}
+.stage .nm{font-size:13px;font-weight:600;color:var(--ink)}
+.stage .ag{font-family:var(--mono);font-size:10.5px;color:var(--accent);background:color-mix(in srgb,var(--accent) 11%,transparent);padding:1.5px 6px;border-radius:5px;align-self:flex-start}
+.stage .io{font-size:10.5px;color:var(--muted);margin-top:auto;line-height:1.45}
+.stage .badge{position:absolute;top:9px;right:10px;font-size:9.5px;padding:1px 6px;border-radius:5px;font-weight:600}
+.badge.auto{background:var(--okbg);color:var(--ok)}
+.badge.cond{background:var(--warnbg);color:var(--warn)}
+
+/* layout */
+.grid{display:grid;grid-template-columns:1fr 380px;gap:18px;align-items:start}
+@media(max-width:1080px){.grid{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.card>.hd{padding:13px 16px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:var(--bg3)}
+.card>.hd h3{margin:0;font-size:14px;font-weight:650}
+.card>.bd{padding:16px}
+.tabs{display:flex;gap:3px;background:var(--rule2);padding:3px;border-radius:9px}
+.tabs button{font:inherit;font-size:11.5px;border:0;background:transparent;color:var(--muted);padding:5px 11px;border-radius:7px;cursor:pointer;transition:.13s;white-space:nowrap}
+.tabs button:hover{color:var(--ink2)}
+.tabs button.on{background:var(--bg2);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+/* code */
+pre{background:var(--code-bg);color:var(--code-ink);border-radius:11px;padding:14px 16px;overflow:auto;font-family:var(--mono);font-size:11.5px;line-height:1.72;margin:0;white-space:pre-wrap;word-break:break-word;max-height:600px}
+pre .c{color:#7d8fa6}
+pre .k{color:#7dd3fc}
+pre .v{color:#fbbf24}
+pre .hl{background:rgba(45,212,191,.14);border-radius:3px;padding:0 2px}
+pre .off{opacity:.35;text-decoration:line-through}
+code.inl{font-family:var(--mono);font-size:11.5px;background:var(--rule2);padding:1.5px 5px;border-radius:5px;color:var(--ink2)}
+
+/* info lists */
+dl.kv{margin:0;display:grid;grid-template-columns:88px 1fr;gap:7px 12px;font-size:12.5px}
+dl.kv dt{color:var(--muted);font-size:11.5px}
+dl.kv dd{margin:0;color:var(--ink2)}
+.flowline{font-family:var(--mono);font-size:11.5px;color:var(--ink2);background:var(--bg3);border:1px solid var(--rule2);border-radius:9px;padding:9px 12px;margin:0 0 10px;line-height:1.8}
+.flowline b{color:var(--accent);font-weight:600}
+.arrow{color:var(--muted);padding:0 5px}
+.tagrow{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px}
+.tag{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:6px;background:var(--rule2);color:var(--ink2);border:1px solid var(--rule)}
+.tag.a{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--accent);border-color:transparent}
+.tag.b{background:color-mix(in srgb,var(--accent2) 12%,transparent);color:var(--accent2);border-color:transparent}
+.tag.w{background:var(--warnbg);color:var(--warn);border-color:transparent}
+.tag.e{background:var(--errbg);color:var(--err);border-color:transparent}
+
+/* pipeline detail diagram */
+.diagram{display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin-bottom:16px}
+.dbox{flex:1;min-width:150px;background:var(--bg3);border:1px solid var(--rule);border-radius:11px;padding:11px 13px}
+.dbox h4{margin:0 0 6px;font-size:11.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:650}
+.dbox ul{margin:0;padding-left:15px;font-size:11.5px;color:var(--ink2);line-height:1.75}
+.dsep{display:flex;align-items:center;padding:0 8px;color:var(--accent);font-size:17px;font-weight:300}
+
+.note{border-radius:10px;padding:10px 13px;font-size:12.5px;margin-top:12px;line-height:1.65}
+.note.i{background:var(--okbg);color:var(--ok);border:1px solid color-mix(in srgb,var(--ok) 25%,transparent)}
+.note.w{background:var(--warnbg);color:var(--warn);border:1px solid color-mix(in srgb,var(--warn) 25%,transparent)}
+.note.e{background:var(--errbg);color:var(--err);border:1px solid color-mix(in srgb,var(--err) 25%,transparent)}
+.note b{font-weight:650}
+
+table.t{width:100%;border-collapse:collapse;font-size:12.5px}
+table.t th,table.t td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--rule2);vertical-align:top}
+table.t th{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:650;background:var(--bg3)}
+table.t td code{font-family:var(--mono);font-size:11px}
+table.t tr:last-child td{border-bottom:0}
+.scrollx{overflow-x:auto}
+
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:10px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.hidden{display:none!important}
+.mini{font-size:11.5px;color:var(--muted);line-height:1.7}
+.pill{display:inline-block;font-family:var(--mono);font-size:10px;padding:1.5px 6px;border-radius:5px;background:var(--rule2);color:var(--ink2)}
+</style>
+</head>
+<body data-theme="light">
+<header class="top">
+  <div class="topin">
+    <div class="brand">
+      <b>生产工作台 V2 · 全链路与 Agent 提示词可视化</b>
+      <span>小说 → 设定 → 大纲 → 剧本 → 资产 → 分镜 → 成片 ｜ 每一环的系统提示词、输出契约、解析函数与写回位置</span>
+    </div>
+    <div class="spacer"></div>
+    <button class="tgl" id="tgSub" title="切换后各阶段提示词与校验规则实时变化"><i class="dot"></i>字幕</button>
+    <button class="tgl on" id="tgBgm" title="切换后各阶段提示词与校验规则实时变化"><i class="dot"></i>BGM</button>
+    <button class="tgl" id="tgCont" title="控制站位继承是否注入提示词"><i class="dot"></i>连续镜头</button>
+    <button class="btn" id="themeBtn">暗色</button>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <h2 class="sec">一、七阶段流水线</h2>
+  <div class="pipe" id="pipe"></div>
+  <div class="legend">
+    <span><i style="background:var(--ok)"></i>系统提示词与用户提示词分离</span>
+    <span><i style="background:var(--accent2)"></i>输出为严格 JSON</span>
+    <span><i style="background:var(--accent3)"></i>输出为 Markdown</span>
+    <span>点击任意阶段卡片查看该环节完整提示词与写回链路</span>
+  </div>
+
+  <h2 class="sec">二、当前环节详情</h2>
+  <div class="grid">
+    <div class="card">
+      <div class="hd">
+        <h3 id="stTitle">—</h3>
+        <div class="spacer"></div>
+        <div class="tabs" id="tabs">
+          <button data-t="sys" class="on">系统提示词</button>
+          <button data-t="usr">用户提示词</button>
+          <button data-t="out">输出契约</button>
+          <button data-t="parse">解析 & 写回</button>
+        </div>
+      </div>
+      <div class="bd">
+        <div id="pane-sys"></div>
+        <div id="pane-usr" class="hidden"></div>
+        <div id="pane-out" class="hidden"></div>
+        <div id="pane-parse" class="hidden"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd"><h3>环节元信息</h3></div>
+      <div class="bd" id="metaBox"></div>
+    </div>
+  </div>
+
+  <h2 class="sec">三、阶段间数据传递</h2>
+  <div class="card"><div class="bd">
+    <div class="diagram" id="diag"></div>
+    <div class="scrollx"><table class="t" id="flowTable"></table></div>
+  </div></div>
+
+  <h2 class="sec">四、H3 六段提示词合并（镜头提示词的最终形态）</h2>
+  <div class="card"><div class="bd">
+    <div class="diagram" id="diag2"></div>
+    <div class="scrollx"><table class="t">
+      <thead><tr><th>字段</th><th>资产贡献（按 kind）</th><th>镜头自写</th><th>站位/字幕BGM 影响</th></tr></thead>
+      <tbody>
+        <tr><td><code>subject_definitions</code></td><td>角色/场景/道具</td><td>是（<code>&lt;Subject N&gt; is &lt;Picture N&gt;</code>）</td><td>连续镜头追加「&lt;Subject N&gt; 站位：…」</td></tr>
+        <tr><td><code>summary</code></td><td>仅角色</td><td>是</td><td>关字幕时剥离台词</td></tr>
+        <tr><td><code>retention_analysis</code></td><td>角色/场景/道具</td><td>是</td><td>追加「保持与上一镜头一致的站位」+ consistency.notes</td></tr>
+        <tr><td><code>detailed_description</code></td><td>无</td><td>是（<code>[Shot N]</code> + <code>from … to …</code> 时间轴）</td><td>关字幕时剥离 <code>&lt;d&gt;…&lt;/d&gt;</code>；视频引用追加 <code>&lt;Video N&gt;</code></td></tr>
+        <tr><td><code>overall_soundscape</code></td><td>角色/场景</td><td>是</td><td>关字幕时剥离台词；音频引用追加 <code>&lt;Audio N&gt;</code></td></tr>
+        <tr><td><code>non_diegetic_music</code></td><td>无</td><td>是</td><td><b>关 BGM 时整段清空且不再必填</b></td></tr>
+      </tbody>
+    </table></div>
+    <div class="note i"><b>合并优先级：</b>镜头文本优先 —— 镜头已写过的参考对象（按 <code>&lt;Subject N&gt;</code> / <code>&lt;Picture N&gt;</code> 命中）不再重复追加，资产只补齐镜头未覆盖的部分，避免外观描述重复。</div>
+  </div></div>
+
+  <h2 class="sec">五、一致性校验（只警告，不阻断生成）</h2>
+  <div class="card"><div class="bd">
+    <div class="scrollx"><table class="t">
+      <thead><tr><th>类型</th><th>判定条件</th><th>提示文案</th><th>严重级别</th></tr></thead>
+      <tbody>
+        <tr><td>站位冲突</td><td>相邻镜头同一角色站位描述完全不同，且本镜头未声明 <code>continuous</code></td><td>「站位冲突：上一镜头为「X」，本镜头为「Y」，如需衔接请勾选「与上一镜头衔接」」</td><td><span class="tag w">警告</span></td></tr>
+        <tr><td>继承缺失</td><td><code>consistency.carryOverAssetIds</code> 指向的资产不在本镜头 <code>imageVariantIds</code> 中</td><td>「继承一致性缺失：「名称」声明要与上一镜头保持一致，但本镜头没有引用它」</td><td><span class="tag w">警告</span></td></tr>
+        <tr><td>形态漂移</td><td>同一资产在相邻镜头被引用了不同形态</td><td>「形态漂移：「名称」在相邻镜头引用了不同形态，画面一致性可能受影响」</td><td><span class="tag w">警告</span></td></tr>
+        <tr><td>H3 缺段</td><td>六段中任一段为空（<code>non_diegetic_music</code> 在关 BGM 时豁免）</td><td>红色错误，禁用生成</td><td><span class="tag e">错误</span></td></tr>
+        <tr><td>引用越界/重复</td><td>图片 &gt;9、视频 &gt;3、音频 &gt;3，或同桶内重复 ID</td><td>红色错误，禁用生成</td><td><span class="tag e">错误</span></td></tr>
+      </tbody>
+    </table></div>
+  </div></div>
+
+  <h2 class="sec">六、批量生成参数写入链路</h2>
+  <div class="card"><div class="bd">
+    <div class="diagram" id="diag3"></div>
+    <div class="note w"><b>注意：</b>切换工作流会使节点 <code>metadata.workflowId</code> 变化，<code>syncProductionNodes</code> 的 <code>generationChanged</code> 判定会清空节点已生成内容并置为 <code>idle</code>，需要重新生成。</div>
+  </div></div>
+
+</div>
+
+<script>
+/* ============ 全局开关状态 ============ */
+const S = { subtitle:true, bgm:true, continuous:false, stage:'setting', tab:'sys' };
+/* 模板占位符：与 agent 端运行时替换的变量同名，此处仅作示意 */
+const episode = '{episode}', episodeTotal = '{episodeTotal}';
+
+/* ============ 提示词模板（与 canvas-agent/src/agent/script.ts 保持一致） ============ */
+const META = () => [
+  '目标集数：12 集',
+  '单集时长：60 秒',
+  '题材：由原文提炼',
+  '受众：短剧平台泛用户',
+  '画幅：竖屏',
+  '',
+  `字幕：${S.subtitle ? '开启' : '关闭'}`,
+  `BGM：${S.bgm ? '开启' : '关闭'}`,
+].filter(Boolean).join('\n');
+
+const SUB_RULE = () => S.subtitle
+  ? '- 台词保留剧情关键句并标说话人，中文台词写成 <d>[Chinese] Speaker (voice and emotion):「台词」</d>。'
+  : '- 字幕已关闭：不要输出任何 <d>...</d> 台词片段，也不要在 detailed_description 里写对白内容。';
+const BGM_RULE = () => S.bgm
+  ? '- non_diegetic_music 写本镜头的非叙事配乐（情绪、乐器、节奏、进入与退出点），没有配乐时留空字符串。'
+  : '- BGM 已关闭：non_diegetic_music 必须留空字符串。';
+
+const SYS_MARKDOWN = `你是短剧剧本改编专家，熟悉短剧结构、节奏和平台受众。你的任务是把用户提供的小说或故事改编成可拍摄的短剧剧本。
+
+创作原则：
+1. 保留原作的核心设定、人物关系和情感主线，除非用户明确要求修改。
+2. 短剧化：开篇尽快建立核心冲突；每集都有推进、反转或情绪回报；集尾留下悬念。
+3. 台词口语化、有张力，避免书面解释；用动作、冲突和选择传递信息。
+4. 严格只输出当前阶段要求的内容，不要提前写下一阶段。
+5. 使用简体中文 Markdown，标题层级清晰，不要输出多余寒暄。`;
+
+const SYS_JSON = `你是短剧资产与分镜结构化专家，输出必须严格符合要求的 JSON 结构，供程序直接解析。
+
+硬性规则：
+1. 只输出一个合法 JSON 对象，不要输出 Markdown 代码块标记、注释、解释或任何多余文字。
+2. 所有字段名、枚举值必须与要求完全一致，不得新增、改名或省略必填字段。
+3. 引用资产只能使用给定的 id 或「类型：名称」，不得编造不存在的资产。
+4. 严格只输出当前阶段要求的内容，不要提前写下一阶段。`;
+
+const SYS_CONDENSE = `你是资深小说编辑，负责把长篇小说提炼成可用于短剧改编的故事素材。保留人物、关系、主线事件、关键场景、冲突和标志性台词，删除重复描写与无关支线。只输出结果，不要寒暄。`;
+
+/* ============ 七个阶段定义 ============ */
+const STAGES = [
+{
+  id:'source', name:'原文', agent:'—', badge:'auto', badgeText:'输入',
+  io:'粘贴小说正文 / 勾选章节',
+  meta:[['前端入口','生产工作台「原文」阶段'],['Agent 调用','无（用户输入）'],['上限','60,000 字，超出先走 condense'],['回填','production.source.text / .condensed']],
+  sys:()=>SYS_MARKDOWN,
+  usr:()=>`原文：（用户直接粘贴，可勾选章节）
+若超过 20000 字，前端先调用 condense 阶段提炼，再把提炼结果作为 source 传入。`,
+  out:()=>`（本阶段无模型输出）
+
+用户粘贴的原始小说正文，经 splitNovelChapters() 按「第X章 / 第X节 / 第X回」切分为可选章节。`,
+  parse:()=>[
+    ['解析函数','splitNovelChapters(text) → ProductionChapter[]'],
+    ['写回位置','production.source.text（原文）、production.source.condensed（提炼稿）'],
+    ['画布节点','无（原文不进画布）'],
+    ['要点','勾选章节后 applyChapters() 按章序拼接写回 source.text']
+  ]
+},
+{
+  id:'condense', name:'长文提炼', agent:'condense', badge:'cond', badgeText:'自动触发',
+  io:'长原文 → 素材',
+  meta:[['前端入口','doGenerateSetting() 内部自动触发'],['Agent 调用','POST /agent/script/generate { stage:"condense" }'],['分块','6000 字/块，上限 30 块'],['回填','production.source.condensed']],
+  sys:()=>SYS_CONDENSE,
+  usr:()=>`这是原文第 {index+1}/{chunks.length} 段。请提炼为 1800 字以内的剧情素材，保留人物、关系、主线事件、关键场景、冲突、标志性台词和可用于画面的细节（外貌、服装、陈设）。
+
+{chunk}
+
+--- 合并轮（当合并结果 > 18000 字时，每 4 段一组再合并一次） ---
+请把以下分段摘要合并成一份完整故事素材，不超过 12000 字，保留人物关系、主线因果、关键场景和冲突。
+
+{group.join("\\n\\n")}`,
+  out:()=>`纯 Markdown 故事素材（无 JSON 契约）。
+
+分段提炼 → 逐组合并 → 最终不超过 18000 字。`,
+  parse:()=>[
+    ['解析函数','无结构解析，直接取 content'],
+    ['写回位置','production.source.condensed'],
+    ['用途','作为后续 setting / outline 阶段真正送进模型的 source'],
+    ['失败','超过 30 块直接报错「超过自动提炼上限，请减少章节后再试」']
+  ]
+},
+{
+  id:'setting', name:'故事设定', agent:'setting', badge:'auto', badgeText:'阶段一',
+  io:'原文 → 设定',
+  meta:[['前端入口','doGenerateSetting()'],['Agent 调用','POST /agent/script/generate { stage:"setting" }'],['输出','Markdown'],['回填','production.setting']],
+  sys:()=>SYS_MARKDOWN,
+  usr:()=>`阶段一：故事设定。
+
+${META()}
+
+原文：
+{source}
+
+请输出：
+## 一句话故事
+## 题材与受众
+## 核心冲突
+## 人物小传（每人包含：目标、动机、阻力、关系、人物变化）
+## 世界观与主要场景
+## 情绪价值与爽点
+## 视觉风格与色彩（写实/动画、时代、镜头质感、光线与色彩的统一规则）
+## 表演与声音基调（对白语言、表演风格、环境声与配乐原则）
+## 短剧化策略（开场钩子、反转节点、节奏控制）`,
+  out:()=>`固定 9 个 Markdown 小节，顺序不可变：
+
+## 一句话故事 / ## 题材与受众 / ## 核心冲突 / ## 人物小传 / ## 世界观与主要场景 / ## 情绪价值与爽点 / ## 视觉风格与色彩 / ## 表演与声音基调 / ## 短剧化策略
+
+不解析结构，整段存为 setting。`,
+  parse:()=>[
+    ['解析函数','无（原 generateSetting 现在返回 { setting }，整段保留）'],
+    ['写回位置','production.setting'],
+    ['画布节点','PRODUCTION_SETTING_KEY → 一个只读 Text 节点'],
+    ['下游','setting 会带入 outline / script / assets / storyboard 每个阶段']
+  ]
+},
+{
+  id:'outline', name:'分集大纲', agent:'outline', badge:'auto', badgeText:'阶段二',
+  io:'设定 → N 集大纲',
+  meta:[['前端入口','doGenerateOutline()'],['Agent 调用','{ stage:"outline", setting }'],['输出','Markdown'],['回填','episode.title + episode.synopsis']],
+  sys:()=>SYS_MARKDOWN,
+  usr:()=>`阶段二：分集大纲。
+
+${META()}
+
+已确认的故事设定：
+{setting}
+
+原文（用于核对细节）：
+{source}
+
+请按 12 集输出分集大纲，每集格式：
+### 第X集 集名
+- 核心事件：
+- 开场钩子：
+- 节拍（3-5 条）：
+- 集尾悬念：
+
+要求：主线清晰、冲突逐集升级、每集有独立爽点或反转，集与集之间因果成立。`,
+  out:()=>`按「### 第X集 集名」标题切分，每集下面自由写 4 行 Markdown：
+
+### 第1集 集名
+- 核心事件：
+- 开场钩子：
+- 节拍：
+- 集尾悬念：`,
+  parse:()=>[
+    ['解析函数','parseOutlineMarkdown(text) → { title, synopsis }[]'],
+    ['写回位置','episode.title + episode.synopsis（两处都写）'],
+    ['画布节点','PRODUCTION_OUTLINE_KEY → serializeOutline(episodes) 生成的 Text 节点'],
+    ['★ 修复','旧实现 createProductionEpisode(index+1, item.title) 丢掉 synopsis，现已改为 createProductionEpisode(index+1, item.title, item.synopsis)']
+  ]
+},
+{
+  id:'script', name:'剧本正文', agent:'script', badge:'auto', badgeText:'阶段三',
+  io:'大纲 → 每集正文',
+  meta:[['前端入口','doGenerateScript(episode) / 「下一步」按钮'],['Agent 调用','{ stage:"script", setting, outline, episode, episodeTotal, episodeOutline }'],['输出','Markdown'],['回填','episode.title + episode.script']],
+  sys:()=>SYS_MARKDOWN,
+  usr:()=>`阶段三：剧本正文（第 ${episode}/${episodeTotal} 集）。
+
+${META()}
+
+已确认的故事设定：
+{setting}
+
+完整分集大纲（用于保持前后连贯，不要重复其他集内容）：
+{outline}
+
+本集大纲：
+{episodeOutline}
+
+原文或素材（用于核对人物、台词与细节）：
+{source}
+
+请只写第 ${episode} 集的剧本正文，不要写其他集，也不要复述前情。格式：
+### 第${episode}集 集名
+#### 第X场 地点 时间 内景/外景
+- 人物：
+- 画面与动作：
+- 对白：
+- 镜头提示：
+
+要求：
+1. 台词口语化，避免解释性独白，用冲突和动作推进。
+2. 每场戏有明确目的，删掉不推动剧情的过场。
+3. 本集内容量匹配 60 秒时长。
+4. 严格按本集大纲展开，不新增偏离主线的支线。
+5. 人物称呼、地名、关键道具必须与故事设定和大纲一致。`,
+  out:()=>`固定 Markdown 层级：
+
+### 第X集 集名
+#### 第X场 地点 时间 内景/外景
+- 人物：
+- 画面与动作：
+- 对白：
+- 镜头提示：`,
+  parse:()=>[
+    ['解析函数','parseEpisodeScriptTitle(script) → 标题；正文去掉标题行'],
+    ['写回位置','episode.title（标题行）+ episode.script（正文）'],
+    ['画布节点','productionEpisodeKey(episode.id) → 每集一个只读 Text 节点'],
+    ['★ 修复','旧实现只写 episode.script，模型返回的集标题被丢弃，现已一并回写']
+  ]
+},
+{
+  id:'assets', name:'资产拆解', agent:'assets', badge:'auto', badgeText:'阶段四',
+  io:'剧本 → 角色/场景/道具',
+  meta:[['前端入口','doGenerateAssets()'],['Agent 调用','{ stage:"assets", setting, outline, script }'],['输出','严格 JSON'],['回填','production.assets（分配稳定 ID）']],
+  sys:()=>SYS_JSON,
+  usr:()=>`阶段四：资产拆解。
+
+${META()}
+
+故事设定：
+{setting}
+
+完整分集大纲（用于保持资产命名一致）：
+{outline}
+
+完整剧本正文：
+{script}
+
+请拆解完整剧本实际需要的角色、场景与道具。参考视频与参考音频不属于资产，由用户在画布上自行上传，不要生成这两类资产。
+
+输出契约（必须严格遵守）：
+- 只输出一个 JSON 对象，不要输出 Markdown、代码块标记、解释或任何多余文字。
+- 结构：{"assets":[{"kind":"character","name":"姓名","description":"定位/外貌/服装/性格概述","prompt":"图像生成提示词","h3":{...六段...},"variants":[{"name":"形态名","description":"…","prompt":"…","h3":{...}}]}]}
+- kind 只能是 character、scene、prop 之一；name 与大纲、正文保持一致，同一资产只出现一次，跨集信息合并到同一条。
+- variants 是该资产下的不同形态…没有多个形态时给一个形态，其 name 留空即可。
+- h3 是该资产在 MiniMax H3 视频提示词中的参考字段模板…按 kind 只填以下这些：
+  - character：subject_definitions / retention_analysis / summary / overall_soundscape
+  - scene：subject_definitions / retention_analysis / overall_soundscape
+  - prop：subject_definitions / retention_analysis
+- h3 正文使用英文…绝对不要写 <Picture N> / <Subject N> / <Video N> / <Audio N>，编号由画布连线顺序自动注入。
+
+要求：
+1. 角色 prompt 包含年龄、外貌、发型、服装、气质和统一视觉风格…
+2. 场景参考图尽量无主要人物…
+3. 道具参考图突出单个物体、轮廓和材质…
+4. 形态之间只在真正影响一致性的维度上区分…
+5. 不要生成参考视频或参考音频条目。`,
+  out:()=>`{
+  "assets": [
+    {
+      "kind": "character | scene | prop",
+      "name": "姓名",
+      "description": "定位/外貌/服装/性格概述",
+      "prompt": "图像生成提示词",
+      "h3": {
+        "subject_definitions": "...",
+        "retention_analysis": "...",
+        "summary": "...",
+        "overall_soundscape": "...",
+        "non_diegetic_music": "...",
+        "detailed_description": "..."
+      },
+      "variants": [
+        { "name": "形态名", "description": "与基础形象的差异", "prompt": "…", "h3": { "subject_definitions": "...", "retention_analysis": "..." } }
+      ]
+    }
+  ]
+}`,
+  parse:()=>[
+    ['解析函数','parseGeneratedAssets(content) → ScriptAsset[]（客户端分配稳定 ID 与形态 ID）'],
+    ['写回位置','production.assets'],
+    ['画布节点','每个形态一个 Image 节点（key = productionVariantKey(variant.id)）'],
+    ['h3 缺字段','回落为空对象，不会崩；未标 <Picture N>/<Subject N>'],
+    ['锁定','已有镜头时不允许重新生成资产（assetsLocked）']
+  ]
+},
+{
+  id:'storyboard', name:'分镜脚本', agent:'storyboard', badge:'auto', badgeText:'阶段五',
+  io:'资产+正文 → 每集镜头',
+  meta:[['前端入口','doGenerateEpisodeStoryboard() / doGenerateAllStoryboards()'],['Agent 调用','{ stage:"storyboard", setting, outline, episode, episodeOutline, script, assets }'],['输出','严格 JSON'],['回填','episode.title + episode.shots（先写回再校验）']],
+  sys:()=>SYS_JSON,
+  usr:()=>`阶段五：分镜脚本（第 ${episode}/${episodeTotal} 集）。
+
+${META()}
+
+故事设定：
+{setting}
+
+完整分集大纲（用于保持前后连贯）：
+{outline}
+
+本集大纲：
+{episodeOutline}
+
+本集剧本正文：
+{script}
+
+资产清单（引用时必须与下面完全一致）：
+{assets}
+
+请只把第 ${episode} 集拆成可直接交给 ComfyUI MiniMax H3 的视频生成段，不要输出其他集。
+
+输出契约（必须严格遵守）：
+- 只输出一个 JSON 对象，不要输出 Markdown、代码块标记、解释或任何多余文字。
+- 结构：{"episode":{"title":"第${episode}集 集名","shots":[{"number":1,"title":"镜头标题","duration":5,"size":"768x1344","imageAssets":["资产id或类型：名称"],"blocking":{"characterIds":["形态id"],"positions":{"形态id":"画面左侧，背对镜头"},"continuous":true},"consistency":{"carryOverAssetIds":["形态id"],"notes":"需与上一镜头保持一致的说明"},"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}]}}
+- duration 为 1-15 的整数秒；本集各段时长合计约 60 秒。
+- size 只能取以下值之一（当前画幅预设）：864x480、960x544、1056x608、1152x640、1216x672、1280x736、1344x768、1504x832、1664x928、1824x1024
+- imageAssets 只能引用资产清单里的角色、场景与道具，最多 9 个。
+- 引用顺序即编号顺序：第 N 个参考图片对应 <Picture N>；编号从 1 连续开始，不得跳号。
+- h3 六个字段都必须非空；subject_definitions 用 <Subject N> 定义第 N 张图片主体并通过 <Picture N> 绑定。
+${SUB_RULE()}
+${BGM_RULE()}
+- blocking 是空间站位声明：characterIds 写参与站位的角色形态 ID（必须来自 imageAssets），positions 为每个角色写一句站位描述；当本镜头与上一镜头存在剧情衔接时 continuous 写 true。
+- consistency 是一致性声明：carryOverAssetIds 写必须与上一镜头保持一致的形态 ID，notes 用一句话说明需要保持一致的视觉特征。
+- 严格按本集大纲与正文，不新增剧情。`,
+  out:()=>`{
+  "episode": {
+    "title": "第1集 集名",
+    "shots": [
+      {
+        "number": 1,
+        "title": "镜头标题",
+        "duration": 5,
+        "size": "768x1344",
+        "imageAssets": ["资产id:形态名"],
+        "blocking": {
+          "characterIds": ["形态id"],
+          "positions": { "形态id": "画面左侧，背对镜头" },
+          "continuous": true
+        },
+        "consistency": {
+          "carryOverAssetIds": ["形态id"],
+          "notes": "李明仍穿同一件灰色风衣"
+        },
+        "h3": {
+          "subject_definitions": "...",
+          "summary": "...",
+          "retention_analysis": "...",
+          "detailed_description": "[Shot 1] from 0.0s to 5.0s …",
+          "overall_soundscape": "...",
+          "non_diegetic_music": "..."
+        }
+      }
+    ]
+  }
+}`,
+  parse:()=>[
+    ['解析函数','parseGeneratedEpisode(content, assets, orientation) → normalizeShot()'],
+    ['★ 先写回','onPartial(parsed.shots) 先把已解析镜头写进生产态，再跑 validateShot'],
+    ['降级','校验失败只收集进 issues 警告列表并保留已生成内容，不再整集抛错作废'],
+    ['写回位置','episode.title + episode.shots'],
+    ['画布节点','productionShotKey(shot.id) → Video 节点，prompt = formatH3Prompt(mergeAssetH3(shot, assets, { previous, options }))'],
+    ['站位','normalizeShot 内 parseGeneratedBlocking / parseGeneratedConsistency 解析并按 ID 校验存在性']
+  ]
+},
+{
+  id:'shot', name:'单镜头重写', agent:'shot', badge:'auto', badgeText:'阶段五·变体',
+  io:'单个镜头 → 重写',
+  meta:[['前端入口','doRegenerateShot(shot)'],['Agent 调用','{ stage:"shot", shot: JSON.stringify(shot), … }'],['输出','严格 JSON（单个 shot）'],['回填','episode.shots 中对应镜头']],
+  sys:()=>SYS_JSON,
+  usr:()=>`阶段五：单镜头重写（第 ${episode}/${episodeTotal} 集）。
+
+${META()}
+
+故事设定：
+{setting}
+
+本集大纲：
+{episodeOutline}
+
+本集剧本正文：
+{script}
+
+资产清单（引用时必须与下面完全一致）：
+{assets}
+
+需要重写的镜头：
+{shot}
+
+请只重写这一个镜头，其余镜头保持不变。
+
+输出契约（必须严格遵守）：
+- 只输出一个 JSON 对象：{"shot":{"number":原序号,"title":"镜头标题","duration":5,"size":"768x1344","imageAssets":["资产id:类型：名称"],"blocking":{...},"consistency":{...},"h3":{...}}}
+- 保持 number 与原来一致；duration 为 1-15 的整数秒；size 只能取当前画幅预设。
+- 引用与 h3 的编号规则、英文正文与时间轴要求同分镜阶段；只引用资产清单中已存在的资产。
+${SUB_RULE()}
+${BGM_RULE()}
+- blocking 与 consistency 的写法同分镜阶段；需要保持与上一镜头一致的空间站位时必须写 continuous 为 true。`,
+  out:()=>`{
+  "shot": {
+    "number": 3,
+    "title": "镜头标题",
+    "duration": 5,
+    "size": "768x1344",
+    "imageAssets": ["资产id:形态名"],
+    "blocking": { "characterIds": ["形态id"], "positions": { "形态id": "…" }, "continuous": true },
+    "consistency": { "carryOverAssetIds": ["形态id"], "notes": "…" },
+    "h3": { "subject_definitions": "…", "summary": "…", "retention_analysis": "…", "detailed_description": "…", "overall_soundscape": "…", "non_diegetic_music": "…" }
+  }
+}`,
+  parse:()=>[
+    ['解析函数','parseGeneratedShot(content, shot, assets, orientation) → 保留原 shot.id 与 number'],
+    ['校验','validateShot(next, assets, orientation, media)；此处仍为硬错误，失败保留旧镜头'],
+    ['写回位置','episode.shots 中对应镜头（updateShot）'],
+    ['注意','单镜头重写的连续性以「本镜头声明 continuous」为准，上一镜头由同集顺序推导']
+  ]
+}
+];
+
+/* ============ 渲染 ============ */
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+/* 高亮：<> 标签、键名、值 */
+function hl(text){
+  let s = esc(text);
+  s = s.replace(/(&lt;\/?[A-Za-z][^&]*?&gt;)/g, '<span class="hl">$1</span>');
+  s = s.replace(/^(\s*)([A-Za-z_][A-Za-z0-9_]*)(:)/gm, '$1<span class="k">$2</span><span class="c">$3</span>');
+  s = s.replace(/^(\s*)("[^"]+")/gm, '$1<span class="v">$2</span>');
+  return s;
+}
+
+function renderPipe(){
+  $('#pipe').innerHTML = STAGES.map((s,i)=>`
+    <button class="stage ${s.id===S.stage?'active':''}" data-id="${s.id}">
+      ${s.badge?`<span class="badge ${s.badge}">${s.badgeText}</span>`:''}
+      <span class="num">${String(i).padStart(2,'0')}</span>
+      <span class="nm">${esc(s.name)}</span>
+      <span class="ag">${esc(s.agent)}</span>
+      <span class="io">${esc(s.io)}</span>
+    </button>`).join('');
+  $('#pipe').querySelectorAll('.stage').forEach(b=>b.onclick=()=>{ S.stage=b.dataset.id; renderAll(); });
+}
+
+function renderDetail(){
+  const s = STAGES.find(x=>x.id===S.stage);
+  $('#stTitle').textContent = `${String(STAGES.indexOf(s)).padStart(2,'0')} · ${s.name}`;
+  const pane = { sys:s.sys(), usr:s.usr(), out:s.out(), parse:s.parse() };
+  $('#pane-sys').innerHTML = `<pre>${hl(pane.sys)}</pre>`;
+  $('#pane-usr').innerHTML = `<pre>${hl(pane.usr)}</pre>`;
+  $('#pane-out').innerHTML = `<pre>${hl(pane.out)}</pre>`;
+  $('#pane-parse').innerHTML = `<table class="t"><tbody>${pane.parse.map(([k,v])=>
+    `<tr><td style="width:110px;color:var(--muted);font-size:11.5px">${esc(k)}</td><td>${esc(v).replace(/→/g,' → ')}</td></tr>`).join('')}</tbody></table>
+    <div class="note i" style="margin-top:14px"><b>提示：</b>切换顶部的「字幕 / BGM / 连续镜头」开关，上方提示词与输出契约会实时变化，与 canvas-agent/src/agent/script.ts 的 subtitleRule() / bgmRule() 逻辑一致。</div>`;
+  $('#metaBox').innerHTML = `<dl class="kv">${s.meta.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>`;
+  document.querySelectorAll('#tabs button').forEach(b=>{
+    b.classList.toggle('on', b.dataset.t===S.tab);
+    b.onclick=()=>{ S.tab=b.dataset.t; ['sys','usr','out','parse'].forEach(t=>$('#pane-'+t).classList.toggle('hidden', t!==S.tab)); };
+  });
+}
+
+function renderDiag(){
+  const box = (h,items)=>`<div class="dbox"><h4>${esc(h)}</h4><ul>${items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`;
+  const sep=`<div class="dsep">→</div>`;
+  $('#diag').innerHTML = [
+    box('前端 · 生产工作台',['<code>stage</code> / <code>source</code> / <code>setting</code> / <code>outline</code> / <code>script</code> / <code>assets</code> / <code>episodeOutline</code> / <code>assets</code>']),
+    sep,
+    box('HTTP',['<code>POST /agent/script/generate</code>','body: stage / source / options / setting / outline / script / assets / shot / episode']),
+    sep,
+    box('canvas-agent',['<code>generateScriptStage()</code>','system = SCRIPT_SYSTEM_PROMPT 或 SCRIPT_JSON_SYSTEM_PROMPT','user = buildStagePrompt(input, source)','POST {baseUrl}/chat/completions']),
+    sep,
+    box('模型输出',['Markdown（setting / outline / script）','JSON（assets / storyboard / shot）','content 直接回传前端']),
+    sep,
+    box('前端解析 & 写回',['<code>parseOutlineMarkdown / parseGeneratedAssets / parseGeneratedEpisode</code>','写回 episode / assets / shots','<code>onSync()</code> → <code>syncProductionNodes()</code>']),
+    sep,
+    box('画布',['Text 节点：设定 / 大纲 / 每集正文','Image 节点：每个资产形态','Video 节点：每个镜头（H3 提示词）','连线 = 镜头引用的唯一权威'])
+  ].join('');
+
+  $('#diag2').innerHTML = [
+    box('① 镜头自身',['shot.h3 六段（模型写的内容）','shot.blocking（站位）','shot.consistency（一致性）']),
+    sep,
+    box('② 资产贡献',['按 imageVariantIds 顺序找形态','kind → 贡献字段（ASSET_H3_FIELDS）','前缀 <Subject N> is <Picture N>']),
+    sep,
+    box('③ 合并去重',['镜头已含 <Subject N>/<Picture N> → 不重复追加','只补镜头未覆盖的部分']),
+    sep,
+    box('④ 站位注入',['continuous=true → 注入上一镜头站位','<Subject N> 站位：…','retention_analysis 追加「保持与上一镜头一致的站位」']),
+    sep,
+    box('⑤ 媒体收口',['applyMediaOptions()','关字幕 → 剥离 <d>…</d>','关 BGM → non_diegetic_music = ""']),
+    sep,
+    box('⑥ 最终提示词',['formatH3Prompt(h3)','六段拼成一段文本','写入 Video 节点 metadata.prompt'])
+  ].join('');
+
+  $('#diag3').innerHTML = [
+    box('抽屉「批量生成设置」',['assetWorkflowId（t2i / i2i）','shotWorkflowId（omniVideo / frameVideo）','assetSize / shotSeconds / seed']),
+    sep,
+    box('production.batch',['随生产态持久化到项目','normalizeProduction 补齐缺字段']),
+    sep,
+    box('planProductionNodes',['节点计划携带 workflowId / seed / size / seconds','镜头 prompt 带上 previous 与 options']),
+    sep,
+    box('syncProductionNodes',['findWorkflowById 跨渠道查工作流','覆盖 metadata.workflowId / modelId / videoMode','generationChanged → 清空内容置 idle']),
+    sep,
+    box('runProductionGeneration',['生成前先 syncStoredProduction()','validateShot 带 options（字幕/BGM）','按实际连线校验参考数量与顺序'])
+  ].join('');
+}
+
+function renderFlowTable(){
+  const rows = [
+    ['setting','source.condensed 或 source.text','—','production.setting','Text 节点（setting）'],
+    ['outline','source + setting','—','episode.title / episode.synopsis','Text 节点（outline）'],
+    ['script','source + setting + serializeOutline(episodes)','episode, episodeTotal, episodeOutline','episode.title / episode.script','Text 节点（每集一个）'],
+    ['assets','source + setting + outline + 全部正文','—','production.assets（分配稳定 ID）','Image 节点（每形态一个）'],
+    ['storyboard','source + setting + outline + 本集正文 + formatAssetList(assets)','episode, episodeTotal, episodeOutline','episode.title / episode.shots','Video 节点（每镜头一个）'],
+    ['shot','同上 + JSON.stringify(shot)','同上','episode.shots 中对应镜头','Video 节点（原地更新）'],
+  ];
+  $('#flowTable').innerHTML = `<thead><tr><th>阶段</th><th>送入模型的 source 与上下文</th><th>额外参数</th><th>写回生产态</th><th>画布节点</th></tr></thead><tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody>`;
+}
+
+function renderAll(){ renderPipe(); renderDetail(); renderDiag(); renderFlowTable(); }
+
+/* ============ 交互 ============ */
+function syncToggles(){
+  $('#tgSub').classList.toggle('on', S.subtitle);
+  $('#tgBgm').classList.toggle('on', S.bgm);
+  $('#tgCont').classList.toggle('on', S.continuous);
+}
+$('#tgSub').onclick = () => { S.subtitle=!S.subtitle; syncToggles(); renderDetail(); };
+$('#tgBgm').onclick  = () => { S.bgm=!S.bgm; syncToggles(); renderDetail(); };
+$('#tgCont').onclick = () => { S.continuous=!S.continuous; syncToggles(); renderDetail(); };
+$('#themeBtn').onclick = () => {
+  const dark = document.body.dataset.theme==='dark';
+  document.body.dataset.theme = dark?'light':'dark';
+  $('#themeBtn').textContent = dark?'暗色':'亮色';
+};
+
+syncToggles(); renderAll();
+</script>
+</body>
+</html>
