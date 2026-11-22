@@ -9,18 +9,16 @@ import type {
     ProductionState,
     ScriptAsset,
     ScriptAssetKind,
+    ScriptAssetVariant,
     ScriptH3Prompt,
     ScriptShot,
 } from "@/types/canvas";
 
-export const PRODUCTION_ASSET_KINDS: ScriptAssetKind[] = ["character", "scene", "prop", "video", "audio"];
-export const PRODUCTION_IMAGE_KINDS: ScriptAssetKind[] = ["character", "scene", "prop"];
+export const PRODUCTION_ASSET_KINDS: ScriptAssetKind[] = ["character", "scene", "prop"];
 export const PRODUCTION_ASSET_KIND_LABEL: Record<ScriptAssetKind, string> = {
     character: "角色",
     scene: "场景",
     prop: "道具",
-    video: "参考视频",
-    audio: "参考音频",
 };
 export const PRODUCTION_H3_SECTIONS = [
     "subject_definitions",
@@ -34,9 +32,15 @@ export const PRODUCTION_H3_SECTIONS = [
 export const PRODUCTION_SHOT_LIMITS = { image: 9, video: 3, audio: 3 };
 export const PRODUCTION_SHOT_DURATION = { min: 1, max: 15 };
 
-const KIND_BY_LABEL: Record<string, ScriptAssetKind> = { 角色: "character", 场景: "scene", 道具: "prop", 视频: "video", 音频: "audio" };
+/** 每类资产向 H3 提示词贡献的字段：资产负责「这个参考对象是什么、必须保留什么」。 */
+export const ASSET_H3_FIELDS: Record<ScriptAssetKind, (keyof ScriptH3Prompt)[]> = {
+    character: ["subject_definitions", "retention_analysis", "summary", "overall_soundscape"],
+    scene: ["subject_definitions", "retention_analysis", "overall_soundscape"],
+    prop: ["subject_definitions", "retention_analysis"],
+};
 
-export const productionAssetKey = (id: string) => `asset:${id}`;
+const KIND_BY_LABEL: Record<string, ScriptAssetKind> = { 角色: "character", 场景: "scene", 道具: "prop" };
+
 export const productionShotKey = (id: string) => `shot:${id}`;
 export const productionEpisodeKey = (id: string) => `episode:${id}`;
 export const PRODUCTION_SETTING_KEY = "setting";
@@ -62,10 +66,44 @@ export function assetLabel(asset: ScriptAsset) {
     return `${t(`canvas.production.kind.${asset.kind}`)} · ${asset.name || t("canvas.production.untitled")} · ${asset.id.slice(0, 4)}`;
 }
 
+/** 形态显示名：资产名 · 形态名。 */
+export function variantLabel(asset: ScriptAsset, variant: ScriptAssetVariant) {
+    return `${asset.name || t("canvas.production.untitled")} · ${variant.name || t("canvas.production.untitled")}`;
+}
+
+/** 资产的全部形态；没有形态时返回一个继承资产的默认形态。 */
+export function assetVariants(asset: ScriptAsset): ScriptAssetVariant[] {
+    return asset.variants?.length ? asset.variants : [{ id: asset.id, name: "", description: "", prompt: "", h3: {} }];
+}
+
+/** 形态的有效图像生成提示词：形态为空时继承资产自身的。 */
+export function variantPrompt(asset: ScriptAsset, variant: ScriptAssetVariant) {
+    return variant.prompt?.trim() || asset.prompt;
+}
+
+/** 形态的有效 H3 字段：形态自己的优先，缺省时回落到资产级基线。 */
+export function variantH3(asset: ScriptAsset, variant: ScriptAssetVariant): Partial<ScriptH3Prompt> {
+    const merged: Partial<ScriptH3Prompt> = { ...asset.h3 };
+    for (const field of PRODUCTION_H3_SECTIONS) {
+        const text = variant.h3?.[field]?.trim();
+        if (text) merged[field] = text;
+    }
+    return merged;
+}
+
 /** 资产清单序列化给模型：保持稳定中文提示词，不随界面语言变化。 */
 export function formatAssetList(assets: ScriptAsset[]) {
     return assets
-        .map((asset) => `${PRODUCTION_ASSET_KIND_LABEL[asset.kind]}：${asset.name}｜id=${asset.id}｜${asset.description}｜参考提示词：${asset.prompt}`)
+        .map((asset) => {
+            const variantText = assetVariants(asset)
+                .map((variant) => {
+                    const merged = variantH3(asset, variant);
+                    const h3 = PRODUCTION_H3_SECTIONS.map((field) => (merged[field]?.trim() ? `${field}：${merged[field]!.trim()}` : "")).filter(Boolean).join("｜");
+                    return `形态「${variant.name || "默认"}」：${variant.description || "同基础形象"}｜提示词：${variantPrompt(asset, variant)}${h3 ? `｜H3参考字段：${h3}` : ""}`;
+                })
+                .join("；");
+            return `${PRODUCTION_ASSET_KIND_LABEL[asset.kind]}：${asset.name}｜id=${asset.id}｜${asset.description}｜基础提示词：${asset.prompt}｜形态：${variantText}`;
+        })
         .join("\n");
 }
 
@@ -74,7 +112,12 @@ export function defaultShotSize(orientation?: ProductionOptions["orientation"]) 
 }
 
 export function createProductionAsset(kind: ScriptAssetKind): ScriptAsset {
-    return { id: nanoid(), kind, name: "", description: "", prompt: "" };
+    return { id: nanoid(), kind, name: "", description: "", prompt: "", variants: [], h3: {} };
+}
+
+/** 新建一个资产形态，继承资产的名称与提示词作为起点。 */
+export function createAssetVariant(asset: ScriptAsset): ScriptAssetVariant {
+    return { id: nanoid(), name: "", description: "", prompt: asset.prompt || "", h3: {} };
 }
 
 export function createProductionShot(orientation?: ProductionOptions["orientation"]): ScriptShot {
@@ -84,7 +127,7 @@ export function createProductionShot(orientation?: ProductionOptions["orientatio
         title: "",
         duration: 5,
         size: defaultShotSize(orientation),
-        imageAssetIds: [],
+        imageVariantIds: [],
         videoAssetIds: [],
         audioAssetIds: [],
         h3: emptyH3Prompt(),
@@ -158,8 +201,95 @@ export function listShots(production: Pick<ProductionState, "episodes">): Produc
     return allShots(production).map((shot) => ({ ...shot, key: productionShotKey(shot.id) }));
 }
 
-export function assetUsages(production: Pick<ProductionState, "episodes">, assetId: string) {
-    return listShots(production).filter((shot) => [...shot.imageAssetIds, ...shot.videoAssetIds, ...shot.audioAssetIds].includes(assetId));
+export function assetUsages(production: Pick<ProductionState, "episodes" | "assets">, assetId: string) {
+    const variantIds = new Set(variantIdsOfAsset(production.assets, assetId));
+    return listShots(production).filter((shot) => shot.imageVariantIds.some((id) => variantIds.has(id)));
+}
+
+/** 某个资产下所有形态的 ID。 */
+export function variantIdsOfAsset(assets: ScriptAsset[], assetId: string) {
+    const asset = assets.find((item) => item.id === assetId);
+    return asset ? assetVariants(asset).map((variant) => variant.id) : [];
+}
+
+/** 按形态 ID 找到所属资产与形态本身。 */
+export function findVariant(assets: ScriptAsset[], variantId: string) {
+    for (const asset of assets) {
+        const variant = assetVariants(asset).find((item) => item.id === variantId);
+        if (variant) return { asset, variant };
+    }
+    return null;
+}
+
+/** 资产在某字段上的贡献前缀：主体定义用 <Subject N> is <Picture N>，其余只带编号标签。 */
+function assetContributionPrefix(field: keyof ScriptH3Prompt, bucket: "image" | "video" | "audio", index: number) {
+    const n = index + 1;
+    if (field === "subject_definitions" && bucket === "image") return `<Subject ${n}> is <Picture ${n}>`;
+    if (bucket === "image") return `<Subject ${n}>`;
+    return `<${bucket === "video" ? "Video" : "Audio"} ${n}>`;
+}
+
+/** 该资产在镜头文本中的覆盖标记：命中即表示镜头已经写过这个参考对象。 */
+function assetCoverageTags(bucket: "image" | "video" | "audio", index: number) {
+    const n = index + 1;
+    if (bucket === "image") return [`<Subject ${n}>`, `<Picture ${n}>`];
+    return [`<${bucket === "video" ? "Video" : "Audio"} ${n}>`];
+}
+
+/**
+ * 按连线顺序把已连接形态的 H3 贡献合并进镜头六段。
+ * 镜头优先：镜头文本里已经写过该参考对象的字段保持原样，
+ * 资产只补充镜头尚未覆盖的部分，因此每个参考对象都会保留自己的绑定。
+ */
+export function mergeAssetH3(shot: ScriptShot, assets: ScriptAsset[]): ScriptH3Prompt {
+    const buckets = [
+        { bucket: "image" as const, ids: shot.imageVariantIds },
+        { bucket: "video" as const, ids: shot.videoAssetIds },
+        { bucket: "audio" as const, ids: shot.audioAssetIds },
+    ];
+
+    // 每个字段记录「镜头已覆盖的参考对象」与「形态待补充的条目」。
+    const blocks = new Map<keyof ScriptH3Prompt, { prefix: string; text: string; tags: string[] }[]>();
+    for (const { bucket, ids } of buckets) {
+        ids.forEach((id, index) => {
+            const found = findVariant(assets, id);
+            if (!found) return;
+            const h3 = variantH3(found.asset, found.variant);
+            const tags = assetCoverageTags(bucket, index);
+            for (const field of ASSET_H3_FIELDS[found.asset.kind]) {
+                const text = h3[field]?.trim();
+                if (!text) continue;
+                const list = blocks.get(field) ?? [];
+                list.push({ prefix: assetContributionPrefix(field, bucket, index), text, tags });
+                blocks.set(field, list);
+            }
+        });
+    }
+
+    const merged = { ...shot.h3 };
+    for (const field of PRODUCTION_H3_SECTIONS) {
+        const own = shot.h3[field]?.trim() ?? "";
+        const extra = blocks.get(field) ?? [];
+        // 镜头已经写过的参考对象不再重复追加，只补齐镜头未覆盖的部分。
+        const missing = extra.filter((item) => !item.tags.some((tag) => own.includes(tag)));
+        merged[field] = [own, ...missing.map((item) => `${item.prefix}: ${item.text}`)].filter(Boolean).join("\n\n");
+    }
+    // 参考视频与参考音频是用户上传的节点，没有 H3 文本可合并，但仍要保留编号绑定。
+    const tagBlocks: { field: keyof ScriptH3Prompt; tag: string }[] = [];
+    shot.videoAssetIds.forEach((_, index) => tagBlocks.push({ field: "detailed_description", tag: `<Video ${index + 1}>` }));
+    shot.audioAssetIds.forEach((_, index) => tagBlocks.push({ field: "overall_soundscape", tag: `<Audio ${index + 1}>` }));
+    for (const { field, tag } of tagBlocks) {
+        const own = merged[field] ?? "";
+        if (own.includes(tag)) continue;
+        merged[field] = [own, tag].filter(Boolean).join("\n\n");
+    }
+    return merged;
+}
+
+
+/** 镜头用于生成的最终 H3 文本：镜头内容优先，资产贡献补齐空字段。 */
+export function resolveShotH3(shot: ScriptShot, assets: ScriptAsset[]) {
+    return mergeAssetH3(shot, assets);
 }
 
 
@@ -175,18 +305,7 @@ function checkTags(errors: string[], prompt: string, tag: string, count: number)
     }
 }
 
-function checkReferences(errors: string[], label: string, ids: string[], limit: number, allowed: ScriptAssetKind[], assets: ScriptAsset[]) {
-    if (ids.length > limit) errors.push(t("canvas.production.error.refLimit", { label, count: ids.length, limit }));
-    if (new Set(ids).size !== ids.length) errors.push(t("canvas.production.error.refDuplicate", { label }));
-    const byId = new Map(assets.map((asset) => [asset.id, asset]));
-    for (const id of ids) {
-        const asset = byId.get(id);
-        if (!asset) errors.push(t("canvas.production.error.refNotFound", { label, id }));
-        else if (!allowed.includes(asset.kind)) errors.push(t("canvas.production.error.refKindWrong", { label, name: asset.name || id }));
-    }
-}
-
-/** 校验镜头参数、六段 H3 文本与三类有序引用；媒体是否就绪由画布节点另行检查。 */
+/** 校验镜头参数、六段 H3 文本与有序引用；媒体是否就绪由画布节点另行检查。 */
 export function validateShot(shot: ScriptShot, assets: ScriptAsset[], orientation?: ProductionOptions["orientation"]) {
     const errors: string[] = [];
     if (!shot.title.trim()) errors.push(t("canvas.production.error.titleEmpty"));
@@ -200,15 +319,21 @@ export function validateShot(shot: ScriptShot, assets: ScriptAsset[], orientatio
         if (orientation === "vertical" && !isVertical) errors.push(t("canvas.production.error.sizeVertical", { size: shot.size }));
         if (orientation === "horizontal" && isVertical) errors.push(t("canvas.production.error.sizeHorizontal", { size: shot.size }));
     }
-    for (const section of PRODUCTION_H3_SECTIONS) if (!shot.h3[section]?.trim()) errors.push(t("canvas.production.error.h3Missing", { section }));
-    checkReferences(errors, t("canvas.production.referenceLabel.image"), shot.imageAssetIds, PRODUCTION_SHOT_LIMITS.image, PRODUCTION_IMAGE_KINDS, assets);
-    checkReferences(errors, t("canvas.production.referenceLabel.video"), shot.videoAssetIds, PRODUCTION_SHOT_LIMITS.video, ["video"], assets);
-    checkReferences(errors, t("canvas.production.referenceLabel.audio"), shot.audioAssetIds, PRODUCTION_SHOT_LIMITS.audio, ["audio"], assets);
-    const prompt = formatH3Prompt(shot.h3);
-    checkTags(errors, prompt, "Picture", shot.imageAssetIds.length);
+    const merged = mergeAssetH3(shot, assets);
+    for (const section of PRODUCTION_H3_SECTIONS) if (!merged[section]?.trim()) errors.push(t("canvas.production.error.h3Missing", { section }));
+    // 图片引用必须指向真实存在的形态。
+    if (shot.imageVariantIds.length > PRODUCTION_SHOT_LIMITS.image) errors.push(t("canvas.production.error.refLimit", { label: t("canvas.production.referenceLabel.image"), count: shot.imageVariantIds.length, limit: PRODUCTION_SHOT_LIMITS.image }));
+    if (new Set(shot.imageVariantIds).size !== shot.imageVariantIds.length) errors.push(t("canvas.production.error.refDuplicate", { label: t("canvas.production.referenceLabel.image") }));
+    for (const id of shot.imageVariantIds) {
+        if (!findVariant(assets, id)) errors.push(t("canvas.production.error.refNotFound", { label: t("canvas.production.referenceLabel.image"), id }));
+    }
+    if (shot.videoAssetIds.length > PRODUCTION_SHOT_LIMITS.video) errors.push(t("canvas.production.error.refLimit", { label: t("canvas.production.referenceLabel.video"), count: shot.videoAssetIds.length, limit: PRODUCTION_SHOT_LIMITS.video }));
+    if (shot.audioAssetIds.length > PRODUCTION_SHOT_LIMITS.audio) errors.push(t("canvas.production.error.refLimit", { label: t("canvas.production.referenceLabel.audio"), count: shot.audioAssetIds.length, limit: PRODUCTION_SHOT_LIMITS.audio }));
+    const prompt = formatH3Prompt(merged);
+    checkTags(errors, prompt, "Picture", shot.imageVariantIds.length);
+    checkTags(errors, prompt, "Subject", shot.imageVariantIds.length);
     checkTags(errors, prompt, "Video", shot.videoAssetIds.length);
     checkTags(errors, prompt, "Audio", shot.audioAssetIds.length);
-    checkTags(errors, prompt, "Subject", shot.imageAssetIds.length);
     return errors;
 }
 
@@ -226,24 +351,31 @@ function parseJson(content: string): Record<string, unknown> {
     }
 }
 
-function readAssetRefs(value: unknown, allowed: ScriptAssetKind[], assets: ScriptAsset[], label: string) {
+function readAssetRefs(value: unknown, assets: ScriptAsset[], label: string): string[] {
     if (value === undefined || value === null) return [];
     if (!Array.isArray(value)) throw new Error(t("canvas.production.error.refMustBeArray", { label }));
     return value.map((token) => {
         const raw = String(token).trim();
-        const byId = assets.find((asset) => asset.id === raw);
-        if (byId) {
-            if (!allowed.includes(byId.kind)) throw new Error(t("canvas.production.error.refKindMismatch", { label, value: raw }));
-            return byId.id;
+        // 直接给形态 ID。
+        if (findVariant(assets, raw)) return raw;
+        // 给资产 ID：解析到该资产的第一个形态。
+        const byAsset = assets.find((asset) => asset.id === raw);
+        if (byAsset) {
+            const first = assetVariants(byAsset)[0];
+            if (!first) throw new Error(t("canvas.production.error.refAssetMissing", { value: raw }));
+            return first.id;
         }
+        // 「类型：名称」或纯名称：解析到同名资产的第一个形态。
         const normalized = raw.replace("：", ":");
         const parts = normalized.split(":");
         const kindLabel = parts.length > 1 ? parts[0].trim() : "";
         const name = (parts.length > 1 ? parts.slice(1).join(":") : normalized).trim();
         const kind = KIND_BY_LABEL[kindLabel];
-        const found = assets.find((asset) => asset.name === name && allowed.includes(asset.kind) && (!kind || asset.kind === kind));
+        const found = assets.find((asset) => asset.name === name && (!kind || asset.kind === kind));
         if (!found) throw new Error(t("canvas.production.error.refAssetMissing", { value: raw }));
-        return found.id;
+        const first = assetVariants(found)[0];
+        if (!first) throw new Error(t("canvas.production.error.refAssetMissing", { value: raw }));
+        return first.id;
     });
 }
 
@@ -257,14 +389,14 @@ function normalizeShot(value: unknown, assets: ScriptAsset[], orientation: Produ
         title: String(raw.title || "").trim(),
         duration: Number(raw.duration) || 0,
         size: String(raw.size || "").trim() || defaultShotSize(orientation),
-        imageAssetIds: readAssetRefs(raw.imageAssets, PRODUCTION_IMAGE_KINDS, assets, t("canvas.production.referenceLabel.image")),
-        videoAssetIds: readAssetRefs(raw.videoAssets, ["video"], assets, t("canvas.production.referenceLabel.video")),
-        audioAssetIds: readAssetRefs(raw.audioAssets, ["audio"], assets, t("canvas.production.referenceLabel.audio")),
+        imageVariantIds: readAssetRefs(raw.imageAssets, assets, t("canvas.production.referenceLabel.image")),
+        videoAssetIds: [],
+        audioAssetIds: [],
         h3: PRODUCTION_H3_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: String(h3[section] || "").trim() }), {} as ScriptH3Prompt),
     };
 }
 
-/** 解析资产阶段 JSON，客户端为每个资产分配稳定 ID。 */
+/** 解析资产阶段 JSON，客户端为每个资产与形态分配稳定 ID。 */
 export function parseGeneratedAssets(content: string): ScriptAsset[] {
     const json = parseJson(content);
     const list = json.assets;
@@ -276,8 +408,49 @@ export function parseGeneratedAssets(content: string): ScriptAsset[] {
         const name = String(raw.name || "").trim();
         if (!PRODUCTION_ASSET_KINDS.includes(kind)) throw new Error(t("canvas.production.error.assetKindInvalid", { kind: kind || t("canvas.production.error.assetKindEmpty") }));
         if (!name) throw new Error(t("canvas.production.error.assetNameEmpty"));
-        return { id: nanoid(), kind, name, description: String(raw.description || "").trim(), prompt: String(raw.prompt || "").trim() };
+        const asset: ScriptAsset = {
+            id: nanoid(),
+            kind,
+            name,
+            description: String(raw.description || "").trim(),
+            prompt: String(raw.prompt || "").trim(),
+            variants: [],
+            h3: parseAssetH3(raw.h3),
+        };
+        asset.variants = parseGeneratedVariants(raw.variants, asset);
+        // 资产没有形态时，用资产自身作为默认形态。
+        if (!asset.variants.length) {
+            asset.variants.push({ id: nanoid(), name: "", description: "", prompt: asset.prompt, h3: {} });
+        }
+        return asset;
     });
+}
+
+/** 解析资产的形态列表：形态缺省 H3 时继承资产级字段。 */
+function parseGeneratedVariants(value: unknown, asset: ScriptAsset): ScriptAssetVariant[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((item) => {
+        const raw = (item && typeof item === "object" ? item : {}) as Record<string, unknown>;
+        return {
+            id: nanoid(),
+            name: String(raw.name || "").trim(),
+            description: String(raw.description || "").trim(),
+            prompt: String(raw.prompt || "").trim() || asset.prompt,
+            h3: parseAssetH3(raw.h3),
+        };
+    });
+}
+
+/** 解析资产的 H3 参考字段模板：只保留该资产类型允许贡献的字段。 */
+function parseAssetH3(value: unknown): Partial<ScriptH3Prompt> {
+    if (!value || typeof value !== "object") return {};
+    const raw = value as Record<string, unknown>;
+    const result: Partial<ScriptH3Prompt> = {};
+    for (const field of PRODUCTION_H3_SECTIONS) {
+        const text = String(raw[field] || "").trim();
+        if (text) result[field] = text;
+    }
+    return result;
 }
 
 /** 解析分镜阶段单集 JSON，引用按资产 ID 或「类型：名称」解析为稳定 ID。 */
@@ -317,7 +490,15 @@ export function normalizeProduction(raw: unknown, canvasId: string): ProductionS
         options: { ...base.options, ...value.options },
         source: { ...base.source, ...value.source },
         setting: value.setting || "",
-        assets: Array.isArray(value.assets) ? value.assets : [],
+        assets: Array.isArray(value.assets)
+            ? value.assets.map((asset) => ({
+                  ...asset,
+                  h3: asset.h3 && typeof asset.h3 === "object" ? asset.h3 : {},
+                  variants: Array.isArray(asset.variants)
+                      ? asset.variants.map((variant) => ({ ...variant, h3: variant.h3 && typeof variant.h3 === "object" ? variant.h3 : {} }))
+                      : [],
+              }))
+            : [],
         episodes: Array.isArray(value.episodes)
             ? value.episodes.map((episode) => ({
                   ...createProductionEpisode(episode.number || 1, episode.title || ""),

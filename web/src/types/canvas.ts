@@ -2,15 +2,42 @@ import type { ModelSupportedTools } from "@/services/api/models/types";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { Asset } from "@/stores/use-asset-store";
 
-export type ScriptAssetKind = "character" | "scene" | "prop" | "video" | "audio";
+/** 资产大类：只有角色、场景、道具三类，参考视频与参考音频不再作为资产存在。 */
+export type ScriptAssetKind = "character" | "scene" | "prop";
 
-/** 剧本资产：图片类为 character/scene/prop，参考类为 video/audio。 */
+/**
+ * 资产形态：同一资产（角色/场景/道具）下的一个具体形象。
+ * 每个形态独立对应一个画布节点，镜头引用的是形态 ID。
+ */
+export type ScriptAssetVariant = {
+    id: string;
+    /** 形态名，如「常服」「雨夜造型」「破损状态」。 */
+    name: string;
+    /** 形态描述：与原形态的差异。 */
+    description: string;
+    /** 图像生成提示词；为空时继承资产自身的 prompt。 */
+    prompt: string;
+    /** 该形态的 H3 参考字段模板，不含任何编号。 */
+    h3: Partial<ScriptH3Prompt>;
+};
+
+/**
+ * 剧本资产：一个角色/场景/道具，可包含多个形态。
+ * 参考音频已移除；角色的音色参考由用户在画布上手动上传音频节点并连线。
+ */
 export type ScriptAsset = {
     id: string;
     kind: ScriptAssetKind;
     name: string;
     description: string;
+    /** 资产的基础图像生成提示词。 */
     prompt: string;
+    /** 该资产的形态列表；至少保留一个默认形态。 */
+    variants: ScriptAssetVariant[];
+    /** 资产级别的 H3 参考字段模板，作为所有形态的公共基线。 */
+    h3: Partial<ScriptH3Prompt>;
+    /** 角色音色参考：指向画布上的音频节点 ID，由用户上传，非必填。 */
+    voiceNodeId?: string;
 };
 
 /** 单个 H3 镜头提示词的六段结构。 */
@@ -30,8 +57,11 @@ export type ScriptShot = {
     title: string;
     duration: number;
     size: string;
-    imageAssetIds: string[];
+    /** 有序引用：第一个对应 <Picture 1>，引用的是形态 ID。 */
+    imageVariantIds: string[];
+    /** 参考视频节点 ID，由用户手动连线产生。 */
     videoAssetIds: string[];
+    /** 参考音频节点 ID：角色的音色参考，由用户手动连线产生。 */
     audioAssetIds: string[];
     h3: ScriptH3Prompt;
 };

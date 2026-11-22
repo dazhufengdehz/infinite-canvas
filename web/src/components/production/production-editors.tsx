@@ -1,26 +1,28 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Button, Input, InputNumber, Select, Tooltip } from "antd";
-import { ChevronDown, ChevronUp, Copy, Image as ImageIcon, MapPin, Music, Sparkles, Trash2, Upload, Users, Video, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Image as ImageIcon, MapPin, Music, Plus, Sparkles, Trash2, Upload, Users, Video, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { MINIMAX_H3_SIZES } from "@/services/api/models/video-minimax-h3-omni";
 import {
     assetLabel,
+    ASSET_H3_FIELDS,
     PRODUCTION_H3_SECTIONS,
     PRODUCTION_SHOT_LIMITS,
+    variantLabel,
     validateShot,
     type ProductionShotView,
 } from "@/lib/production/production-model";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { CanvasNodeType, type CanvasNodeData, type ProductionOptions, type ScriptAsset, type ScriptAssetKind, type ScriptShot } from "@/types/canvas";
+import { CanvasNodeType, type CanvasNodeData, type ProductionOptions, type ScriptAsset, type ScriptAssetKind, type ScriptAssetVariant, type ScriptShot } from "@/types/canvas";
 
-export function MediaPreview({ node, kind }: { node?: CanvasNodeData; kind: ScriptAssetKind | "shot" }) {
+export function MediaPreview({ node, kind }: { node?: CanvasNodeData; kind: ScriptAssetKind | "shot" | "voice" }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const content = node?.metadata?.content;
-    const type = kind === "shot" ? CanvasNodeType.Video : kind === "audio" ? CanvasNodeType.Audio : kind === "video" ? CanvasNodeType.Video : CanvasNodeType.Image;
+    const type = kind === "shot" ? CanvasNodeType.Video : kind === "voice" ? CanvasNodeType.Audio : CanvasNodeType.Image;
     if (!content) {
         return (
             <div className="grid h-full w-full place-items-center rounded-lg border" style={{ borderColor: theme.node.stroke, color: theme.node.muted }}>
@@ -35,23 +37,37 @@ export function MediaPreview({ node, kind }: { node?: CanvasNodeData; kind: Scri
 
 export function AssetEditor({
     asset,
+    variant,
     node,
+    voiceNode,
     disabled,
     usages,
     onSave,
+    onSaveVariant,
     onGenerate,
     onUpload,
+    onUploadVoice,
+    onAddVariant,
+    onRemoveVariant,
+    onSelectVariant,
     onDuplicate,
     onRemove,
     onLocate,
 }: {
     asset: ScriptAsset;
+    variant: ScriptAssetVariant;
     node?: CanvasNodeData;
+    voiceNode?: CanvasNodeData;
     disabled: boolean;
     usages: ProductionShotView[];
     onSave: (asset: ScriptAsset) => void;
+    onSaveVariant: (variant: ScriptAssetVariant) => void;
     onGenerate: () => void;
     onUpload: () => void;
+    onUploadVoice: () => void;
+    onAddVariant: () => void;
+    onRemoveVariant: (variantId: string) => void;
+    onSelectVariant: (variantId: string) => void;
     onDuplicate: () => void;
     onRemove: () => void;
     onLocate: () => void;
@@ -59,7 +75,10 @@ export function AssetEditor({
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const [draft, setDraft] = useState<ScriptAsset>(asset);
-    const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.prompt !== asset.prompt;
+    const [variantDraft, setVariantDraft] = useState<ScriptAssetVariant>(variant);
+    const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.prompt !== asset.prompt || PRODUCTION_H3_SECTIONS.some((section) => (draft.h3[section] || "") !== (asset.h3?.[section] || ""));
+    const variantDirty = variantDraft.name !== variant.name || variantDraft.description !== variant.description || variantDraft.prompt !== variant.prompt || PRODUCTION_H3_SECTIONS.some((section) => (variantDraft.h3[section] || "") !== (variant.h3?.[section] || ""));
+    const h3Fields = ASSET_H3_FIELDS[asset.kind];
 
     return (
         <div className="space-y-4">
@@ -82,10 +101,78 @@ export function AssetEditor({
                 <Input.TextArea value={draft.description} onChange={(event) => setDraft({ ...draft, description: event.target.value })} autoSize={{ minRows: 3, maxRows: 8 }} />
             </Field>
             <Field label={t("canvas.production.assetPrompt")}>
-                <Input.TextArea value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} autoSize={{ minRows: 6, maxRows: 16 }} />
+                <Input.TextArea value={draft.prompt} onChange={(event) => setDraft({ ...draft, prompt: event.target.value })} autoSize={{ minRows: 4, maxRows: 12 }} />
             </Field>
+            <div className="space-y-2">
+                <div className="text-xs font-medium">{t("canvas.production.assetH3Title")}</div>
+                <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.assetH3Hint")}</p>
+                {h3Fields.map((section) => (
+                    <Field key={section} label={section}>
+                        <Input.TextArea
+                            value={draft.h3[section] || ""}
+                            onChange={(event) => setDraft({ ...draft, h3: { ...draft.h3, [section]: event.target.value } })}
+                            autoSize={{ minRows: 3, maxRows: 10 }}
+                        />
+                    </Field>
+                ))}
+            </div>
             <Button size="small" disabled={disabled || !dirty || !draft.name.trim()} onClick={() => onSave(draft)}>{t("canvas.production.save")}</Button>
-            <div className="space-y-1">
+
+            <div className="space-y-2 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium">{t("canvas.production.variantsTitle")}</span>
+                    <Button size="small" type="text" icon={<Plus className="size-3.5" />} onClick={onAddVariant}>{t("canvas.production.addVariant")}</Button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                    {asset.variants.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => onSelectVariant(item.id)}
+                            className="rounded-lg border px-2 py-1 text-xs hover:bg-surface-hover"
+                            style={{ borderColor: theme.node.stroke, background: item.id === variant.id ? theme.toolbar.activeBg : undefined }}
+                        >
+                            {item.name || t("canvas.production.variantDefault")}
+                        </button>
+                    ))}
+                </div>
+                {asset.variants.length > 1 ? (
+                    <Button size="small" type="text" danger icon={<Trash2 className="size-3.5" />} onClick={() => onRemoveVariant(variant.id)}>{t("canvas.production.removeVariant")}</Button>
+                ) : null}
+                <Field label={t("canvas.production.variantName")}>
+                    <Input value={variantDraft.name} onChange={(event) => setVariantDraft({ ...variantDraft, name: event.target.value })} />
+                </Field>
+                <Field label={t("canvas.production.variantDescription")}>
+                    <Input.TextArea value={variantDraft.description} onChange={(event) => setVariantDraft({ ...variantDraft, description: event.target.value })} autoSize={{ minRows: 2, maxRows: 6 }} />
+                </Field>
+                <Field label={t("canvas.production.variantPrompt")}>
+                    <Input.TextArea value={variantDraft.prompt} onChange={(event) => setVariantDraft({ ...variantDraft, prompt: event.target.value })} autoSize={{ minRows: 3, maxRows: 10 }} />
+                </Field>
+                <div className="space-y-2">
+                    <div className="text-xs font-medium">{t("canvas.production.variantH3Title")}</div>
+                    {h3Fields.map((section) => (
+                        <Field key={section} label={section}>
+                            <Input.TextArea
+                                value={variantDraft.h3[section] || ""}
+                                onChange={(event) => setVariantDraft({ ...variantDraft, h3: { ...variantDraft.h3, [section]: event.target.value } })}
+                                autoSize={{ minRows: 3, maxRows: 10 }}
+                            />
+                        </Field>
+                    ))}
+                </div>
+                <Button size="small" disabled={disabled || !variantDirty} onClick={() => onSaveVariant(variantDraft)}>{t("canvas.production.save")}</Button>
+            </div>
+
+            {asset.kind === "character" ? (
+                <div className="space-y-2 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
+                    <div className="text-xs font-medium">{t("canvas.production.voiceTitle")}</div>
+                    <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.voiceHint")}</p>
+                    {voiceNode?.metadata?.content ? <audio className="w-full" controls src={voiceNode.metadata.content} /> : null}
+                    <Button size="small" icon={<Music className="size-4" />} onClick={onUploadVoice}>{t("canvas.production.uploadVoice")}</Button>
+                </div>
+            ) : null}
+
+            <div className="space-y-1 border-t pt-3" style={{ borderColor: theme.node.stroke }}>
                 <div className="text-xs font-medium">{t("canvas.production.usages", { count: usages.length })}</div>
                 {usages.length ? usages.map((shot) => (
                     <div key={shot.key} className="flex items-center gap-2 rounded-md border px-2 py-1 text-xs" style={{ borderColor: theme.node.stroke }}>
@@ -110,6 +197,7 @@ export function ShotEditor({
     onRegenerate,
     onGenerate,
     onLocate,
+    onReferencesChange,
 }: {
     shot: ProductionShotView;
     assets: ScriptAsset[];
@@ -121,6 +209,7 @@ export function ShotEditor({
     onRegenerate: () => void;
     onGenerate: () => void;
     onLocate: () => void;
+    onReferencesChange: (refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => void;
 }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -129,13 +218,13 @@ export function ShotEditor({
         draft.title !== shot.title ||
         draft.duration !== shot.duration ||
         draft.size !== shot.size ||
-        draft.imageAssetIds.join(",") !== shot.imageAssetIds.join(",") ||
+        draft.imageVariantIds.join(",") !== shot.imageVariantIds.join(",") ||
         draft.videoAssetIds.join(",") !== shot.videoAssetIds.join(",") ||
         draft.audioAssetIds.join(",") !== shot.audioAssetIds.join(",") ||
         PRODUCTION_H3_SECTIONS.some((section) => draft.h3[section] !== shot.h3[section]);
 
     const errors = validateShot(draft, assets, orientation);
-    const missing = [...draft.imageAssetIds, ...draft.videoAssetIds, ...draft.audioAssetIds].filter((id) => !isReady(id));
+    const missing = [...draft.imageVariantIds, ...draft.videoAssetIds, ...draft.audioAssetIds].filter((id) => !isReady(id));
     const workflowMissing = !node?.metadata?.workflowId;
     const sizeOptions = useMemo(
         () =>
@@ -149,10 +238,16 @@ export function ShotEditor({
         [orientation],
     );
     const patch = (value: Partial<ScriptShot>) => setDraft({ ...draft, ...value });
+    // 图片引用是形态；视频与音频引用是画布节点 ID，这里按节点 ID 找不到资产时回落到节点标题。
     const labelOf = (id: string) => {
-        const asset = assets.find((item) => item.id === id);
-        return asset ? assetLabel(asset) : t("canvas.production.unknownAsset", { id: id.slice(0, 6) });
+        for (const asset of assets) {
+            const variant = asset.variants?.find((item) => item.id === id);
+            if (variant) return variantLabel(asset, variant);
+        }
+        return t("canvas.production.unknownAsset", { id: id.slice(0, 6) });
     };
+
+    const variantOptions = assets.flatMap((asset) => (asset.variants || []).map((variant) => ({ value: variant.id, label: variantLabel(asset, variant) })));
 
     return (
         <div className="space-y-3">
@@ -168,9 +263,8 @@ export function ShotEditor({
                     <Select className="w-full" value={draft.size} options={sizeOptions} onChange={(value) => patch({ size: value })} />
                 </Field>
             </div>
-            <ReferenceList label={t("canvas.production.referenceImages")} limit={PRODUCTION_SHOT_LIMITS.image} ids={draft.imageAssetIds} assets={assets.filter((asset) => asset.kind !== "video" && asset.kind !== "audio")} onChange={(ids) => patch({ imageAssetIds: ids })} labelOf={labelOf} isReady={isReady} />
-            <ReferenceList label={t("canvas.production.referenceVideos")} limit={PRODUCTION_SHOT_LIMITS.video} ids={draft.videoAssetIds} assets={assets.filter((asset) => asset.kind === "video")} onChange={(ids) => patch({ videoAssetIds: ids })} labelOf={labelOf} isReady={isReady} />
-            <ReferenceList label={t("canvas.production.referenceAudios")} limit={PRODUCTION_SHOT_LIMITS.audio} ids={draft.audioAssetIds} assets={assets.filter((asset) => asset.kind === "audio")} onChange={(ids) => patch({ audioAssetIds: ids })} labelOf={labelOf} isReady={isReady} />
+            <ReferenceList label={t("canvas.production.referenceImages")} limit={PRODUCTION_SHOT_LIMITS.image} ids={draft.imageVariantIds} options={variantOptions} onChange={(ids) => { patch({ imageVariantIds: ids }); onReferencesChange({ ...draft, imageVariantIds: ids }); }} labelOf={labelOf} isReady={isReady} />
+            <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.referenceMediaHint")}</p>
             {PRODUCTION_H3_SECTIONS.map((section) => (
                 <Field key={section} label={section}>
                     <Input.TextArea value={draft.h3[section]} onChange={(event) => patch({ h3: { ...draft.h3, [section]: event.target.value } })} autoSize={{ minRows: 3, maxRows: 12 }} />
@@ -197,10 +291,10 @@ export function ShotEditor({
     );
 }
 
-export function ReferenceList({ label, limit, ids, assets, onChange, labelOf, isReady }: { label: string; limit: number; ids: string[]; assets: ScriptAsset[]; onChange: (ids: string[]) => void; labelOf: (id: string) => string; isReady: (id: string) => boolean }) {
+export function ReferenceList({ label, limit, ids, options, onChange, labelOf, isReady }: { label: string; limit: number; ids: string[]; options: { value: string; label: string }[]; onChange: (ids: string[]) => void; labelOf: (id: string) => string; isReady: (id: string) => boolean }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const available = assets.filter((asset) => !ids.includes(asset.id)).map((asset) => ({ value: asset.id, label: assetLabel(asset) }));
+    const available = options.filter((option) => !ids.includes(option.value));
     const move = (index: number, offset: number) => {
         const next = ids.slice();
         const target = index + offset;
@@ -251,8 +345,8 @@ export function EditorHeader({ title, node, onLocate }: { title: string; node?: 
     );
 }
 
-export const ASSET_KIND_ICON: Record<ScriptAssetKind, typeof ImageIcon> = { character: Users, scene: MapPin, prop: ImageIcon, video: Video, audio: Music };
+export const ASSET_KIND_ICON: Record<ScriptAssetKind, typeof ImageIcon> = { character: Users, scene: MapPin, prop: ImageIcon };
 
 function toShot(shot: ScriptShot): ScriptShot {
-    return { id: shot.id, number: shot.number, title: shot.title, duration: shot.duration, size: shot.size, imageAssetIds: shot.imageAssetIds, videoAssetIds: shot.videoAssetIds, audioAssetIds: shot.audioAssetIds, h3: shot.h3 };
+    return { id: shot.id, number: shot.number, title: shot.title, duration: shot.duration, size: shot.size, imageVariantIds: shot.imageVariantIds, videoAssetIds: shot.videoAssetIds, audioAssetIds: shot.audioAssetIds, h3: shot.h3 };
 }

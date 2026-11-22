@@ -64,8 +64,9 @@ import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNod
 import { exportCanvasProjects, safeFileName } from "@/lib/canvas/canvas-export";
 import { generateDuplicateNodeTitle, generateNextNodeTitle } from "@/lib/canvas/canvas-node-naming";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, cloneNodeMetadata, createCanvasNode, createDefaultNodeMetadata, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
-import { planProductionNodes } from "@/lib/production/production-nodes";
-import { listShots, productionAssetKey, validateShot } from "@/lib/production/production-model";
+import { planProductionNodes, planVoiceConnections, productionVariantKey } from "@/lib/production/production-nodes";
+import { assetVariants, formatH3Prompt, listShots, mergeAssetH3, validateShot } from "@/lib/production/production-model";
+import { orderAssetShotConnections, syncShotReferencesFromCanvas } from "@/lib/production/production-connections";
 import { useProductionStore } from "@/stores/canvas/use-production-store";
 import { useCanvasViewStore } from "@/stores/use-canvas-view-store";
 import { failCanvasGeneration, settleCanvasGeneration } from "@/lib/canvas/canvas-generation-settlement";
@@ -1022,18 +1023,29 @@ function InfiniteCanvasPage() {
             ids.set(plan.key, node.id);
             created.push(node.id);
         }
-        const assetIds = new Set(layout.nodes.filter((plan) => plan.key.startsWith("asset:")).map((plan) => ids.get(plan.key)).filter((id): id is string => Boolean(id)));
-        const shotIds = new Set(layout.nodes.filter((plan) => plan.key.startsWith("shot:")).map((plan) => ids.get(plan.key)).filter((id): id is string => Boolean(id)));
-        const nextConnections = connectionsRef.current.filter((connection) =>
-            !removedIds.has(connection.fromNodeId) && !removedIds.has(connection.toNodeId) &&
-            !(connection.kind === "input" && assetIds.has(connection.fromNodeId) && shotIds.has(connection.toNodeId)),
-        );
+        // 画布连线是引用的唯一权威：只清理已删除节点的连线，保留用户手动连线与顺序。
+        const nextConnections = connectionsRef.current.filter((connection) => !removedIds.has(connection.fromNodeId) && !removedIds.has(connection.toNodeId));
+        const existingPairs = new Set(nextConnections.filter((connection) => connection.kind === "input").map((connection) => `${connection.fromNodeId}->${connection.toNodeId}`));
+        // 角色音色参考：镜头引用了该角色时，把音色音频节点也连到镜头。
+        const nodeIdByKey = new Map<string, string>();
+        for (const [key, nodeId] of ids) nodeIdByKey.set(key, nodeId);
+        for (const connection of planVoiceConnections(source, next)) {
+            const fromNodeId = nodeIdByKey.get(connection.fromKey) || next.find((node) => node.id === connection.fromKey)?.id;
+            const toNodeId = nodeIdByKey.get(connection.toKey);
+            if (!fromNodeId || !toNodeId) continue;
+            const pair = `${fromNodeId}->${toNodeId}`;
+            if (existingPairs.has(pair)) continue;
+            existingPairs.add(pair);
+            nextConnections.push({ id: `production-connection:${connection.fromKey}:${connection.toKey}`, fromNodeId, toNodeId, kind: "input" });
+        }
         for (const connection of layout.connections) {
             const fromNodeId = ids.get(connection.fromKey);
             const toNodeId = ids.get(connection.toKey);
-            if (fromNodeId && toNodeId) {
-                nextConnections.push({ id: `production-connection:${connection.fromKey}:${connection.toKey}`, fromNodeId, toNodeId, kind: "input" });
-            }
+            if (!fromNodeId || !toNodeId) continue;
+            const pair = `${fromNodeId}->${toNodeId}`;
+            if (existingPairs.has(pair)) continue;
+            existingPairs.add(pair);
+            nextConnections.push({ id: `production-connection:${connection.fromKey}:${connection.toKey}`, fromNodeId, toNodeId, kind: "input" });
         }
         nodesRef.current = next;
         connectionsRef.current = nextConnections;
@@ -1051,16 +1063,69 @@ function InfiniteCanvasPage() {
         return data ? syncProductionNodes(data) : new Map<string, string>();
     }, [syncProductionNodes]);
 
+    /** 画布连线是引用的唯一权威：把画布上的 asset → shot 连线反写回生产态的镜头引用数组。 */
+    const syncProductionRefsFromCanvas = useCallback(() => {
+        const store = useProductionStore.getState();
+        const data = store.data;
+        if (!data) return false;
+        const updates = syncShotReferencesFromCanvas(data, nodesRef.current, connectionsRef.current);
+        if (!updates.size) return false;
+        store.update({
+            episodes: data.episodes.map((episode) => ({
+                ...episode,
+                shots: episode.shots.map((shot) => {
+                    const next = updates.get(shot.id);
+                    return next ? { ...shot, ...next } : shot;
+                }),
+            })),
+        });
+        return true;
+    }, []);
+
+    /**
+     * 连线变化后同步镜头节点：把引用变化后的 H3 合并结果写回节点提示词框。
+     * 先回写生产态引用，再刷新镜头节点提示词，避免提示词里残留旧的编号与字段。
+     */
+    const refreshShotNodesAfterConnectionChange = useCallback(() => {
+        if (!syncProductionRefsFromCanvas()) return;
+        const data = useProductionStore.getState().data;
+        if (!data) return;
+        const shots = listShots(data);
+        const assets = data.assets;
+        const next = nodesRef.current.map((node) => {
+            const shotId = node.metadata?.scriptKey?.startsWith("shot:") ? node.metadata.scriptKey.slice("shot:".length) : null;
+            if (!shotId) return node;
+            const shot = shots.find((item) => item.id === shotId);
+            if (!shot) return node;
+            const prompt = formatH3Prompt(mergeAssetH3(shot, assets));
+            if (node.metadata?.prompt === prompt) return node;
+            return {
+                ...node,
+                metadata: { ...node.metadata, prompt, content: "", storageKey: "", status: NODE_STATUS_IDLE, errorDetails: undefined },
+            };
+        });
+        nodesRef.current = next;
+        setNodes(next);
+    }, [setNodes]);
+
+    /** 工作台调整镜头引用：同步重排画布上的 variant → shot 连线，保持连线顺序与编号一致。 */
+    const applyShotReferencesToCanvas = useCallback((shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => {
+        const next = orderAssetShotConnections(connectionsRef.current, nodesRef.current, shotId, refs);
+        connectionsRef.current = next;
+        setConnections(next);
+    }, []);
+
     const collectProductionKeys = useCallback((kind: "asset" | "character" | "shot") => {
         const data = useProductionStore.getState().data;
         const ids = syncStoredProduction();
         const shots = data ? listShots(data) : [];
+        const variantKeys = (data?.assets || []).flatMap((asset) => assetVariants(asset).map((variant) => productionVariantKey(variant.id)));
         const wanted = new Set(
             kind === "shot"
                 ? shots.map((shot) => shot.key)
                 : kind === "character"
-                  ? (data?.assets.filter((asset) => asset.kind === "character") || []).map((asset) => productionAssetKey(asset.id))
-                  : (data?.assets || []).map((asset) => productionAssetKey(asset.id)),
+                  ? (data?.assets || []).filter((asset) => asset.kind === "character").flatMap((asset) => assetVariants(asset).map((variant) => productionVariantKey(variant.id)))
+                  : variantKeys,
         );
         return [...ids.keys()].filter((key) => wanted.has(key)).filter((key) => nodesRef.current.find((node) => node.metadata?.scriptKey === key)?.metadata?.status !== NODE_STATUS_SUCCESS);
     }, [syncStoredProduction]);
@@ -1094,19 +1159,26 @@ function InfiniteCanvasPage() {
                 const errors = shot && data ? validateShot(shot, data.assets, data.options.orientation) : [t("canvas.production.error.shotNotFound")];
                 if (shot) {
                     const expected: Record<"image" | "video" | "audio", string[]> = { image: [], video: [], audio: [] };
-                    const groups: ["image" | "video" | "audio", string, CanvasNodeType, string[]][] = [
-                        ["image", t("canvas.production.referenceLabel.image"), CanvasNodeType.Image, shot.imageAssetIds],
+                    // 图片引用是形态节点；视频与音频引用是用户自己上传并连线的媒体节点。
+                    for (const variantId of shot.imageVariantIds) {
+                        const referenceKey = productionVariantKey(variantId);
+                        const referenceNode = nodesRef.current.find((item) => item.metadata?.scriptKey === referenceKey);
+                        if (!referenceNode) errors.push(t("canvas.production.error.refNodeNotSynced", { label: t("canvas.production.referenceLabel.image"), id: variantId }));
+                        else if (referenceNode.type !== CanvasNodeType.Image) errors.push(t("canvas.production.error.refNodeTypeMismatch", { label: t("canvas.production.referenceLabel.image"), key: referenceKey }));
+                        else if (!referenceNode.metadata?.content) errors.push(t("canvas.production.error.refNodeNotReady", { label: t("canvas.production.referenceLabel.image"), key: referenceKey }));
+                        else expected.image.push(referenceNode.id);
+                    }
+                    const mediaGroups: ["video" | "audio", string, CanvasNodeType, string[]][] = [
                         ["video", t("canvas.production.referenceLabel.video"), CanvasNodeType.Video, shot.videoAssetIds],
                         ["audio", t("canvas.production.referenceLabel.audio"), CanvasNodeType.Audio, shot.audioAssetIds],
                     ];
-                    for (const [bucket, label, expectedType, assetIds] of groups) {
-                        for (const assetId of assetIds) {
-                            const referenceKey = productionAssetKey(assetId);
-                            const referenceNode = nodesRef.current.find((item) => item.metadata?.scriptKey === referenceKey);
-                            if (!referenceNode) errors.push(t("canvas.production.error.refNodeNotSynced", { label, id: assetId }));
-                            else if (referenceNode.type !== expectedType) errors.push(t("canvas.production.error.refNodeTypeMismatch", { label, key: referenceKey }));
-                            else if (!referenceNode.metadata?.content) errors.push(t("canvas.production.error.refNodeNotReady", { label, key: referenceKey }));
-                            else expected[bucket].push(referenceNode.id);
+                    for (const [bucket, label, expectedType, nodeIds] of mediaGroups) {
+                        for (const nodeId of nodeIds) {
+                            const referenceNode = nodesRef.current.find((item) => item.id === nodeId);
+                            if (!referenceNode) errors.push(t("canvas.production.error.refNodeNotSynced", { label, id: nodeId }));
+                            else if (referenceNode.type !== expectedType) errors.push(t("canvas.production.error.refNodeTypeMismatch", { label, key: nodeId }));
+                            else if (!referenceNode.metadata?.content) errors.push(t("canvas.production.error.refNodeNotReady", { label, key: nodeId }));
+                            else expected[bucket].push(nodeId);
                         }
                     }
                     if (!errors.length) {
@@ -1201,6 +1273,43 @@ function InfiniteCanvasPage() {
         setNodes(next);
         if (nextNode) await createNodeProjectAsset(nextNode);
     }, [createNodeProjectAsset, projectId, setNodes, syncStoredProduction]);
+
+    /**
+     * 上传角色音色参考：新建一个音频节点并记录到资产上。
+     * 音色是用户可选的补充，不是强制生成的资产；镜头通过连线引用这个音频节点。
+     */
+    const uploadProductionVoice = useCallback(
+        async (assetId: string, file: File) => {
+            const audio = await uploadMediaFile(file, "audio", projectId);
+            const spec = NODE_DEFAULT_SIZE[CanvasNodeType.Audio];
+            const id = `audio-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+            const node: CanvasNodeData = {
+                id,
+                type: CanvasNodeType.Audio,
+                position: { x: 0, y: 0 },
+                width: spec.width,
+                height: spec.height,
+                title: file.name || t("canvas.production.voiceNode"),
+                metadata: { ...createDefaultNodeMetadata(CanvasNodeType.Audio, config), ...audioMetadata(audio) },
+            };
+            const store = useProductionStore.getState();
+            const data = store.data;
+            if (!data) return;
+            const asset = data.assets.find((item) => item.id === assetId);
+            if (!asset) return;
+            // 音频节点放在资产形态节点右侧，方便用户直接连线到镜头。
+            const variantNodeIds = assetVariants(asset)
+                .map((variant) => nodesRef.current.find((item) => item.metadata?.scriptKey === productionVariantKey(variant.id)))
+                .filter((item): item is CanvasNodeData => Boolean(item));
+            const anchor = variantNodeIds[0];
+            node.position = anchor ? { x: anchor.position.x + anchor.width + 120, y: anchor.position.y } : getCanvasCenter();
+            nodesRef.current = [...nodesRef.current, node];
+            setNodes(nodesRef.current);
+            store.update({ assets: data.assets.map((item) => (item.id === assetId ? { ...item, voiceNodeId: id } : item)) });
+            await createNodeProjectAsset(node);
+        },
+        [config, createNodeProjectAsset, getCanvasCenter, projectId, setNodes, t],
+    );
 
     const setConnecting = useCallback((next: ConnectionHandle | null) => {
         if (isViewerRef.current && next) return;
@@ -1731,12 +1840,15 @@ function InfiniteCanvasPage() {
         setConnections((prev) => prev.filter((conn) => conn.id !== connectionId));
         setSelectedConnectionId((current) => (current === connectionId ? null : current));
         setContextMenu((current) => (current?.type === "connection" && current.connectionId === connectionId ? null : current));
-    }, []);
+        refreshShotNodesAfterConnectionChange();
+    }, [refreshShotNodesAfterConnectionChange]);
 
     const disconnectNodeReference = useCallback((fromNodeId: string, toNodeId: string) => {
         if (isViewerRef.current) return;
+        connectionsRef.current = connectionsRef.current.filter((connection) => connection.fromNodeId !== fromNodeId || connection.toNodeId !== toNodeId);
         setConnections((prev) => prev.filter((connection) => connection.fromNodeId !== fromNodeId || connection.toNodeId !== toNodeId));
-    }, []);
+        refreshShotNodesAfterConnectionChange();
+    }, [refreshShotNodesAfterConnectionChange]);
 
     const connectNodeReference = useCallback(
         (fromNodeId: string, toNodeId: string): boolean => {
@@ -1763,44 +1875,47 @@ function InfiniteCanvasPage() {
             };
             connectionsRef.current = [...connectionsRef.current, newConn];
             setConnections((prev) => [...prev, newConn]);
+            refreshShotNodesAfterConnectionChange();
             return true;
         },
-        [message, t],
+        [message, refreshShotNodesAfterConnectionChange, t],
     );
 
     const reorderNodeReferences = useCallback((toNodeId: string, orderedSourceNodeIds: string[]) => {
         if (isViewerRef.current) return;
-        setConnections((prev) => {
-            const isTargetInput = (c: CanvasConnection) => c.toNodeId === toNodeId && (c.kind === "input" || !c.kind);
-            const targetConns = prev.filter(isTargetInput);
-            if (targetConns.length <= 1) return prev;
+        const isTargetInput = (c: CanvasConnection) => c.toNodeId === toNodeId && (c.kind === "input" || !c.kind);
+        const current = connectionsRef.current;
+        const targetConns = current.filter(isTargetInput);
+        if (targetConns.length <= 1) return;
 
-            const connByFromId = new Map(targetConns.map((c) => [c.fromNodeId, c]));
-            const reordered: CanvasConnection[] = [];
-            for (const fromId of orderedSourceNodeIds) {
-                const conn = connByFromId.get(fromId);
-                if (conn) {
-                    reordered.push(conn);
-                    connByFromId.delete(fromId);
-                }
-            }
-            for (const conn of connByFromId.values()) {
+        const connByFromId = new Map(targetConns.map((c) => [c.fromNodeId, c]));
+        const reordered: CanvasConnection[] = [];
+        for (const fromId of orderedSourceNodeIds) {
+            const conn = connByFromId.get(fromId);
+            if (conn) {
                 reordered.push(conn);
+                connByFromId.delete(fromId);
             }
+        }
+        for (const conn of connByFromId.values()) {
+            reordered.push(conn);
+        }
 
-            const hasChanged = targetConns.some((c, i) => c.id !== reordered[i]?.id);
-            if (!hasChanged) return prev;
+        const hasChanged = targetConns.some((c, i) => c.id !== reordered[i]?.id);
+        if (!hasChanged) return;
 
-            let reorderIndex = 0;
-            return prev.map((conn) => {
-                if (isTargetInput(conn)) {
-                    const nextConn = reordered[reorderIndex++];
-                    return nextConn ?? conn;
-                }
-                return conn;
-            });
+        let reorderIndex = 0;
+        const next = current.map((conn) => {
+            if (isTargetInput(conn)) {
+                const nextConn = reordered[reorderIndex++];
+                return nextConn ?? conn;
+            }
+            return conn;
         });
-    }, []);
+        connectionsRef.current = next;
+        setConnections(next);
+        refreshShotNodesAfterConnectionChange();
+    }, [refreshShotNodesAfterConnectionChange]);
 
     const startNodeReferenceSelection = useCallback((nodeId: string) => {
         setReferencePickerNodeId(nodeId);
@@ -5638,6 +5753,8 @@ function InfiniteCanvasPage() {
                         onProduce={() => void runProductionToFilm()}
                         onStop={stopProductionGeneration}
                         onUploadAsset={replaceProductionAssetMedia}
+                        onUploadVoice={uploadProductionVoice}
+                        onSetShotReferences={applyShotReferencesToCanvas}
                         onLocate={(key) => {
                             locateScriptNode(key);
                             useCanvasViewStore.getState().setMode("canvas");

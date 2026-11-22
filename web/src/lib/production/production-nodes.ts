@@ -1,6 +1,17 @@
 import { CanvasNodeType, type ProductionState, type ScriptAssetKind } from "@/types/canvas";
 import { t } from "@/i18n";
-import { formatH3Prompt, productionAssetKey, productionEpisodeKey, productionShotKey, PRODUCTION_SETTING_KEY, PRODUCTION_OUTLINE_KEY, serializeOutline } from "@/lib/production/production-model";
+import {
+    assetVariants,
+    formatH3Prompt,
+    mergeAssetH3,
+    productionEpisodeKey,
+    productionShotKey,
+    PRODUCTION_SETTING_KEY,
+    PRODUCTION_OUTLINE_KEY,
+    serializeOutline,
+    variantH3,
+    variantPrompt,
+} from "@/lib/production/production-model";
 
 export type ProductionNodePlan = {
     key: string;
@@ -24,14 +35,15 @@ const ASSET_NODE_TYPE: Record<ScriptAssetKind, CanvasNodeType> = {
     character: CanvasNodeType.Image,
     scene: CanvasNodeType.Image,
     prop: CanvasNodeType.Image,
-    video: CanvasNodeType.Video,
-    audio: CanvasNodeType.Audio,
 };
 
 const COLUMN = 340;
 const ROW = 320;
 
-/** 由生产数据派生画布节点计划：设定/大纲/分集正文为只读文本节点，资产与镜头为生成节点。 */
+/** 形态节点键：每个形态独立成节点。 */
+export const productionVariantKey = (variantId: string) => `variant:${variantId}`;
+
+/** 由生产数据派生画布节点计划：设定/大纲/分集正文为只读文本节点，资产形态与镜头为生成节点。 */
 export function planProductionNodes(production: ProductionState, center: { x: number; y: number }): ProductionNodeLayout {
     const baseX = center.x - 2 * COLUMN;
     const baseY = center.y - 300;
@@ -60,17 +72,18 @@ export function planProductionNodes(production: ProductionState, center: { x: nu
         textRow += 1;
     });
 
+    // 每个资产形态一个图片节点；无形态时用资产自身作为默认形态节点。
     const assetX = baseX + COLUMN;
-    production.assets.forEach((asset, index) => {
-        const type = ASSET_NODE_TYPE[asset.kind];
+    const variants = production.assets.flatMap((asset) => assetVariants(asset).map((variant) => ({ asset, variant })));
+    variants.forEach(({ asset, variant }, index) => {
         nodes.push({
-            key: productionAssetKey(asset.id),
-            type,
-            title: asset.name || t(`canvas.production.kind.${asset.kind}`),
-            prompt: asset.prompt,
+            key: productionVariantKey(variant.id),
+            type: CanvasNodeType.Image,
+            title: variant.name ? `${asset.name} · ${variant.name}` : asset.name || t(`canvas.production.kind.${asset.kind}`),
+            prompt: variantPrompt(asset, variant),
             position: { x: assetX + (index % 3) * COLUMN, y: baseY + Math.floor(index / 3) * ROW },
             width: 320,
-            height: type === CanvasNodeType.Audio ? 180 : 240,
+            height: 240,
         });
     });
 
@@ -81,7 +94,7 @@ export function planProductionNodes(production: ProductionState, center: { x: nu
             key: productionShotKey(shot.id),
             type: CanvasNodeType.Video,
             title: shot.title,
-            prompt: formatH3Prompt(shot.h3),
+            prompt: formatH3Prompt(mergeAssetH3(shot, production.assets)),
             seconds: String(shot.duration),
             size: shot.size,
             h3: true,
@@ -92,12 +105,41 @@ export function planProductionNodes(production: ProductionState, center: { x: nu
     });
 
     const connections: ProductionConnectionPlan[] = [];
-    const assetKeys = new Set(production.assets.map((asset) => productionAssetKey(asset.id)));
+    const variantKeys = new Set(variants.map(({ variant }) => productionVariantKey(variant.id)));
     shots.forEach((shot) => {
-        for (const id of [...shot.imageAssetIds, ...shot.videoAssetIds, ...shot.audioAssetIds]) {
-            const fromKey = productionAssetKey(id);
-            if (assetKeys.has(fromKey)) connections.push({ fromKey, toKey: productionShotKey(shot.id) });
+        for (const id of shot.imageVariantIds) {
+            const fromKey = productionVariantKey(id);
+            if (variantKeys.has(fromKey)) connections.push({ fromKey, toKey: productionShotKey(shot.id) });
         }
     });
     return { nodes, connections };
+}
+
+/**
+ * 角色音色参考的连线计划：镜头引用了该角色的任一形态时，
+ * 把该角色的音色音频节点也连到镜头，作为音频参考。
+ */
+export function planVoiceConnections(production: ProductionState, nodes: { id: string; metadata?: { scriptKey?: string } }[]): ProductionConnectionPlan[] {
+    const nodeIdByKey = new Map<string, string>();
+    for (const node of nodes) {
+        const key = node.metadata?.scriptKey;
+        if (key) nodeIdByKey.set(key, node.id);
+    }
+    const connections: ProductionConnectionPlan[] = [];
+    for (const shot of production.episodes.flatMap((episode) => episode.shots)) {
+        const shotKey = productionShotKey(shot.id);
+        const shotNodeId = nodeIdByKey.get(shotKey);
+        if (!shotNodeId) continue;
+        const referencedAssets = new Set(
+            shot.imageVariantIds
+                .map((variantId) => production.assets.find((asset) => assetVariants(asset).some((variant) => variant.id === variantId)))
+                .filter((asset): asset is NonNullable<typeof asset> => Boolean(asset)),
+        );
+        for (const asset of referencedAssets) {
+            const voiceNodeId = asset.voiceNodeId;
+            if (!voiceNodeId || voiceNodeId === shotNodeId) continue;
+            connections.push({ fromKey: voiceNodeId, toKey: shotKey });
+        }
+    }
+    return connections;
 }

@@ -274,21 +274,28 @@ ${input.outline?.trim() || "（未提供）"}
 完整剧本正文：
 ${input.script?.trim() || "（未提供）"}
 
-请拆解完整剧本实际需要的角色、场景、道具，以及对 MiniMax H3 生成有明显帮助的参考视频和参考音频。
+请拆解完整剧本实际需要的角色、场景与道具。参考视频与参考音频不属于资产，由用户在画布上自行上传，不要生成这两类资产。
 
 输出契约（必须严格遵守）：
 - 只输出一个 JSON 对象，不要输出 Markdown、代码块标记、解释或任何多余文字。
-- 结构：{"assets":[{"kind":"character","name":"姓名","description":"定位/外貌/服装/性格概述","prompt":"图像生成提示词"}]}
-- kind 只能是 character、scene、prop、video、audio 之一；name 与大纲、正文保持一致，同一资产只出现一次，跨集信息合并到同一条。
-- character/scene/prop 的 prompt 用于图像生成；video/audio 的 prompt 描述需要继承的运镜、表演、声线或音乐特征。
+- 结构：{"assets":[{"kind":"character","name":"姓名","description":"定位/外貌/服装/性格概述","prompt":"图像生成提示词","h3":{"subject_definitions":"...","retention_analysis":"...","summary":"...","overall_soundscape":"...","non_diegetic_music":"...","detailed_description":"..."},"variants":[{"name":"形态名","description":"该形态与基础形象的差异","prompt":"该形态的图像生成提示词","h3":{"subject_definitions":"...","retention_analysis":"..."}}]}]}
+- kind 只能是 character、scene、prop 之一；name 与大纲、正文保持一致，同一资产只出现一次，跨集信息合并到同一条。
+- prompt 是该资产的基础图像生成提示词；character/scene/prop 的 prompt 用于图像生成。
+- variants 是该资产下的不同形态，例如角色的常服与雨夜造型、场景的白天与夜晚、道具的完整与破损。每个形态会独立对应画布上一个参考节点，镜头引用的是形态。
+- 没有多个形态时给一个形态，其 name 留空即可，prompt 与资产 prompt 保持一致。
+- h3 是该资产在 MiniMax H3 视频提示词中的参考字段模板，描述这个参考对象在视频里长什么样、必须保留什么特征，会被自动合并进引用它的每个镜头。
+- h3 字段按 kind 只填以下这些，其余字段留空字符串或不写：
+  - character：subject_definitions（外貌/发型/服装/气质）、retention_analysis（必须保留的五官比例、发型走向、服装版型配色等）、summary（性格与表演基调）、overall_soundscape（声线音色语速）。
+  - scene：subject_definitions（空间结构/时代/材质/陈设/光线）、retention_analysis（必须保留的空间与光线特征）、overall_soundscape（环境音底噪）。
+  - prop：subject_definitions（单个物体的轮廓与材质）、retention_analysis（必须保留的形制与材质细节）。
+- h3 正文使用英文，内容具体精炼；绝对不要写 <Picture N> / <Subject N> / <Video N> / <Audio N> 这类编号，编号由画布连线顺序自动注入。
 
 要求：
 1. 角色 prompt 包含年龄、外貌、发型、服装、气质和统一视觉风格；参考图应为单人、清晰正面或三分之二侧面、全身或大半身，避免多人、拼贴、文字和水印。
-2. 场景参考图尽量无主要人物，固定空间结构、时代、材质、陈设、时间和光线；不同时间或关键状态拆成不同资产。
-3. 道具参考图突出单个物体、轮廓和材质；完整、破损等关键状态拆成不同资产。
-4. 参考视频只描述需要继承的运镜、动作、表演或节奏，并明确不要继承的原人物、场景或声音。
-5. 参考音频明确音色、语速、情绪、语言、环境或音乐特征；角色声线要与角色一一对应。
-6. 不为了凑数量生成参考视频或音频，只保留能明显提升最终生成一致性的条目。`;
+2. 场景参考图尽量无主要人物，固定空间结构、时代、材质、陈设、时间和光线；不同时间或关键状态应拆成不同形态。
+3. 道具参考图突出单个物体、轮廓和材质；完整、破损等关键状态应拆成不同形态。
+4. 形态之间只在真正影响一致性的维度上区分（服装、光线、状态），不要为凑数量拆分。
+5. 不要生成参考视频或参考音频条目。`;
     }
 
     if (input.stage === "storyboard" && episode) {
@@ -315,12 +322,16 @@ ${input.assets?.trim() || "（未提供）"}
 
 输出契约（必须严格遵守）：
 - 只输出一个 JSON 对象，不要输出 Markdown、代码块标记、解释或任何多余文字。
-- 结构：{"episode":{"title":"第${episode}集 集名","shots":[{"number":1,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"videoAssets":[],"audioAssets":[],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}]}}
+- 结构：{"episode":{"title":"第${episode}集 集名","shots":[{"number":1,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}]}}
 - duration 为 1-15 的整数秒；本集各段时长合计约 ${clampNumber(options.duration, 15, 600, 60)} 秒。
 - size 只能取以下值之一（当前画幅预设）：${sizeList(options.orientation).join("、")}
-- imageAssets 只能引用 character/scene/prop 资产且最多 9 个；videoAssets 只能引用 video 资产且最多 3 个；audioAssets 只能引用 audio 资产且最多 3 个；不要凑数量引用无关资产。
-- 引用顺序即编号顺序：第 N 个参考图片对应 <Picture N>，第 N 个参考视频对应 <Video N>，第 N 个参考音频对应 <Audio N>；编号从 1 连续开始，不得跳号。
+- imageAssets 只能引用资产清单里的角色、场景与道具，最多 9 个；参考视频与参考音频由用户在画布上自行上传并连线，不要在 JSON 里输出 videoAssets 或 audioAssets。
+- 需要引用某个资产的具体形态时，写「资产id:形态名」或「资产id:形态名」对应的资产名加形态名；不指定形态时默认取该资产的第一个形态。
+- 不要凑数量引用无关资产。
+- 引用顺序即编号顺序：第 N 个参考图片对应 <Picture N>；编号从 1 连续开始，不得跳号。
 - h3 六个字段都必须非空；subject_definitions 用 <Subject N> 定义第 N 张图片主体并通过 <Picture N> 绑定；外观、服装、场景与道具只能复用资产设定，不得重新编造。
+- 资产清单里带「H3参考字段」的条目，其主体外观与保留特征会由系统自动合并进本镜头；你写 h3 时不要重复抄写这些外观细节（否则会重复），只写本镜头特有的叙事内容。
+- 若某个资产带有 H3参考字段，则该资产在 h3 中对应的字段可以只写本镜头场景下的补充描述；若不带，则需完整描述该主体。
 - h3 正文使用英文，内容完整但精炼；detailed_description 使用 [Shot N] 与 from ... to ... 时间轴，覆盖本段全部时长。
 - 台词保留剧情关键句并标说话人，中文台词写成 <d>[Chinese] Speaker (voice and emotion):「台词」</d>。
 - 严格按本集大纲与正文，不新增剧情。`;
@@ -349,7 +360,7 @@ ${input.shot?.trim() || "（未提供）"}
 请只重写这一个镜头，其余镜头保持不变。
 
 输出契约（必须严格遵守）：
-- 只输出一个 JSON 对象：{"shot":{"number":原序号,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"videoAssets":[],"audioAssets":[],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}}
+- 只输出一个 JSON 对象：{"shot":{"number":原序号,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}}
 - 保持 number 与原来一致；duration 为 1-15 的整数秒；size 只能取：${sizeList(options.orientation).join("、")}
 - 引用与 h3 的编号规则、英文正文与时间轴要求同分镜阶段；只引用资产清单中已存在的资产。`;
     }

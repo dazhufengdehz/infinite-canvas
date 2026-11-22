@@ -116,6 +116,60 @@ flowchart TD
 
 ---
 
+## 5.1 资产级 H3 参考字段与自动同步规格
+
+### 5.1.1 设计目标
+
+把「这个参考对象是什么、必须保留什么」的知识归属从镜头层上移到资产层，避免同一角色在每一集、每一个镜头被 LLM 重复描述导致形象漂移，同时降低分镜阶段生成成本。
+
+### 5.1.2 数据模型
+
+`ScriptAsset` 新增 `h3: Partial<ScriptH3Prompt>` 字段，存放该资产在 H3 六段提示词中的参考描述模板：
+
+```ts
+export type ScriptAsset = {
+    id: string;
+    kind: ScriptAssetKind;
+    name: string;
+    description: string;
+    prompt: string;                                  // 图像生成提示词
+    h3: Partial<ScriptH3Prompt>;                    // H3 参考字段模板，不含任何编号
+};
+```
+
+**关键约束：资产级 `h3` 字段中禁止出现 `<Picture N>` / `<Subject N>` / `<Video N>` / `<Audio N>` 编号**，编号取决于每个镜头内的连线顺序，必须由合并层在运行时注入。
+
+### 5.1.3 各资产类型的字段分工
+
+| 资产类型 | 允许贡献的 H3 字段 | 语义 |
+|---|---|---|
+| `character` | `subject_definitions` `retention_analysis` `summary` `overall_soundscape` | 外貌服装、必须保留的五官/发型/版型、性格表演基调、声线 |
+| `scene` | `subject_definitions` `retention_analysis` `overall_soundscape` | 空间结构时代材质陈设光线、需保留的环境特征、环境音 |
+| `prop` | `subject_definitions` `retention_analysis` | 单物体轮廓与材质、需保留的形制细节 |
+| `video` | `summary` `detailed_description` `overall_soundscape` | 需继承的运镜表演、动作节奏细节、需继承的声音 |
+| `audio` | `summary` `overall_soundscape` `non_diegetic_music` | 音色语速情绪语言、混音环境特征、音乐风格 |
+
+字段分工原则：**资产负责跨镜头恒定的部分，镜头负责本段发生的叙事部分**（`summary` 叙事、`detailed_description` 时间轴、`non_diegetic_music` 情绪配乐）。
+
+### 5.1.4 合并规则（镜头优先）
+
+合并函数 `mergeAssetH3(shot, assets)` 按连线顺序处理：
+
+1. 图片类资产的 `subject_definitions` 以 `<Subject N> is <Picture N>: <描述>` 格式注入，其余字段以 `<Subject N>` / `<Video N>` / `<Audio N>` 标签注入。
+2. **镜头优先**：若镜头文本中已出现该参考对象的标签（如 `<Subject 2>`），则不重复追加该资产的对应内容，避免重复描述。
+3. 镜头未覆盖的参考对象仍会被资产内容补齐，保证每个连上的资产都有对应绑定。
+
+### 5.1.5 连线权威性
+
+画布连线是镜头引用的唯一权威：
+
+- 连线顺序即编号顺序：第 N 条图片连线对应 `<Picture N>`。
+- 画布连线增删、顺序调整会双向同步到生产工作台的镜头引用列表。
+- 「写入画布」同步不再删除用户手动添加的 asset → shot 连线，只补建缺失的连线。
+- 编号契约与 Agent 提示词一致：`<Subject N>` 恒等于第 N 张参考图片的主语定义。
+
+---
+
 ## 6. 验收与测试用例矩阵 (Test Matrix)
 
 | 用例 ID | 测试场景 | 前置条件 / 输入 | 预期行为 |

@@ -5,28 +5,31 @@ import { AlertCircle, ArrowLeft, Boxes, Check, Clapperboard, Download, Film, Pla
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
-import { AssetEditor, ASSET_KIND_ICON, Field, MediaPreview, ShotEditor } from "@/components/production/production-editors";
+import { AssetEditor, ASSET_KIND_ICON, Field, ShotEditor } from "@/components/production/production-editors";
 import {
     assetLabel,
     assetUsages,
+    assetVariants,
+    createAssetVariant,
     createProductionAsset,
     createProductionEpisode,
     createProductionShot,
     formatAssetList,
     listShots,
     PRODUCTION_ASSET_KINDS,
-    productionAssetKey,
     productionShotKey,
     serializeOutline,
     splitNovelChapters,
     validateShot,
+    variantLabel,
 } from "@/lib/production/production-model";
+import { productionVariantKey } from "@/lib/production/production-nodes";
 import { generateAssets, generateEpisodeScript, generateEpisodeStoryboard, generateAllStoryboards, generateOutline, generateSetting, generateShot, type ProductionCaller } from "@/lib/production/production-generation";
 import { generateScriptStage, type ScriptAdaptRequest } from "@/services/api/canvas-agent";
 import { useProductionStore } from "@/stores/canvas/use-production-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { type CanvasNodeData, type ProductionEpisode, type ProductionState, type ScriptAsset, type ScriptAssetKind, type ScriptShot } from "@/types/canvas";
+import { type CanvasNodeData, type ProductionEpisode, type ProductionState, type ScriptAsset, type ScriptAssetKind, type ScriptAssetVariant, type ScriptShot } from "@/types/canvas";
 
 type Stage = "source" | "setting" | "outline" | "script" | "assets" | "storyboard" | "shots";
 
@@ -41,14 +44,18 @@ type Props = {
     onProduce: () => void;
     onStop: () => void;
     onUploadAsset: (key: string, file: File) => Promise<void>;
+    /** 上传角色音色参考：新建音频节点并记录到资产上。 */
+    onUploadVoice: (assetId: string, file: File) => Promise<void>;
     onLocate: (key: string) => void;
     onOpenCanvas: () => void;
+    /** 画布连线是引用的唯一权威：工作台调整镜头引用时同步调整画布连线。 */
+    onSetShotReferences: (shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => void;
 };
 
 const STAGES: Stage[] = ["source", "setting", "outline", "script", "assets", "storyboard", "shots"];
 const CONDENSE_TRIGGER = 20000;
 
-export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, onSync, onGenerate, onProduce, onStop, onUploadAsset, onLocate, onOpenCanvas }: Props) {
+export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, onSync, onGenerate, onProduce, onStop, onUploadAsset, onUploadVoice, onLocate, onOpenCanvas, onSetShotReferences }: Props) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -59,11 +66,16 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     const [stage, setStage] = useState<Stage>("source");
     const [episodeId, setEpisodeId] = useState<string>("");
     const [assetId, setAssetId] = useState<string>("");
+    const [variantId, setVariantId] = useState<string>("");
+    /** 资产分类筛选：左侧分类列表的当前选中项，空字符串表示全部。 */
+    const [assetKind, setAssetKind] = useState<ScriptAssetKind | "">("");
     const [shotId, setShotId] = useState<string>("");
     const [busy, setBusy] = useState(false);
     const [progress, setProgress] = useState("");
     const [chapters, setChapters] = useState<Set<number>>(new Set());
     const [uploadTarget, setUploadTarget] = useState<string>("");
+    /** 音色上传目标：角色 ID。 */
+    const [voiceTarget, setVoiceTarget] = useState<string>("");
     const fileRef = useRef<HTMLInputElement | null>(null);
 
     useEffect(() => {
@@ -86,6 +98,7 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     const shots = useMemo(() => (data ? listShots(data) : []), [data]);
     const selectedEpisode = data?.episodes.find((episode) => episode.id === episodeId) || data?.episodes[0];
     const selectedAsset = data?.assets.find((asset) => asset.id === assetId);
+    const selectedVariant = selectedAsset ? assetVariants(selectedAsset).find((variant) => variant.id === variantId) || assetVariants(selectedAsset)[0] : undefined;
     const selectedShot = shots.find((shot) => shot.id === shotId);
 
     const patch = (value: Partial<ProductionState>, sync = false) => {
@@ -103,6 +116,12 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
         patch({ episodes: data.episodes.map((episode) => ({ ...episode, shots: episode.shots.map((shot) => (shot.id === id ? next : shot)) })) }, true);
     };
 
+    /** 工作台调整镜头引用：先同步画布连线，再回写生产态引用数组。 */
+    const setShotReferences = (shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => {
+        if (!data) return;
+        onSetShotReferences(shotId, refs);
+        patch({ episodes: data.episodes.map((episode) => ({ ...episode, shots: episode.shots.map((shot) => (shot.id === shotId ? { ...shot, ...refs } : shot)) })) }, true);
+    };
     const callStage: ProductionCaller = async (nextStage, text, extra) => {
         const agent = useAgentStore.getState();
         if (!agent.connected || !agent.url.trim() || !agent.token.trim()) throw new Error(t("canvas.script.needAgent"));
@@ -219,8 +238,8 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
         const wanted = kind === "shot"
             ? shots.map((shot) => shot.key)
             : kind === "character"
-              ? (data?.assets.filter((asset) => asset.kind === "character") || []).map((asset) => productionAssetKey(asset.id))
-              : (data?.assets || []).map((asset) => productionAssetKey(asset.id));
+              ? (data?.assets || []).filter((asset) => asset.kind === "character").flatMap((asset) => assetVariants(asset).map((variant) => productionVariantKey(variant.id)))
+              : (data?.assets || []).flatMap((asset) => assetVariants(asset).map((variant) => productionVariantKey(variant.id)));
         return wanted.filter((key) => nodeByKey.get(key)?.metadata?.status !== "success");
     };
 
@@ -242,8 +261,10 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     const addAsset = (kind: ScriptAssetKind) => {
         if (!data) return;
         const asset = { ...createProductionAsset(kind), name: t(`canvas.production.kind.${kind}`) };
+        asset.variants = [createAssetVariant(asset)];
         patch({ assets: [...data.assets, asset] }, true);
         setAssetId(asset.id);
+        setVariantId(asset.variants[0].id);
         setStage("assets");
     };
 
@@ -251,13 +272,35 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
         if (!data) return;
         patch({ assets: data.assets.filter((item) => item.id !== asset.id) }, true);
         setAssetId("");
+        setVariantId("");
     };
 
     const duplicateAsset = (asset: ScriptAsset) => {
         if (!data) return;
-        const copy = { ...asset, id: `${asset.id}_copy_${Date.now().toString(36)}`, name: `${asset.name} ${t("canvas.production.copySuffix")}` };
+        const copy = { ...asset, id: `${asset.id}_copy_${Date.now().toString(36)}`, name: `${asset.name} ${t("canvas.production.copySuffix")}`, variants: assetVariants(asset).map((variant) => ({ ...variant, id: `${variant.id}_copy_${Date.now().toString(36)}` })) };
         patch({ assets: [...data.assets, copy] }, true);
         setAssetId(copy.id);
+        setVariantId(copy.variants[0]?.id || "");
+    };
+
+    /** 新增资产形态：每个形态独立对应一个画布节点。 */
+    const addVariant = (asset: ScriptAsset) => {
+        if (!data) return;
+        const variant = createAssetVariant(asset);
+        patch({ assets: data.assets.map((item) => (item.id === asset.id ? { ...item, variants: [...assetVariants(item), variant] } : item)) }, true);
+        setVariantId(variant.id);
+    };
+
+    const removeVariant = (asset: ScriptAsset, targetId: string) => {
+        if (!data) return;
+        const variants = assetVariants(asset).filter((variant) => variant.id !== targetId);
+        patch({ assets: data.assets.map((item) => (item.id === asset.id ? { ...item, variants } : item)) }, true);
+        setVariantId(variants[0]?.id || "");
+    };
+
+    const saveVariant = (asset: ScriptAsset, variant: ScriptAssetVariant) => {
+        if (!data) return;
+        patch({ assets: data.assets.map((item) => (item.id === asset.id ? { ...item, variants: assetVariants(item).map((itemVariant) => (itemVariant.id === variant.id ? variant : itemVariant)) } : item)) }, true);
     };
 
     const addEpisode = () => {
@@ -293,11 +336,11 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     };
 
     const uploadAccept = (() => {
-        const kind = selectedAsset?.kind;
-        return kind === "video" ? "video/*" : kind === "audio" ? "audio/*" : "image/*";
+        if (voiceTarget) return "audio/*";
+        return "image/*";
     })();
 
-    const isReady = (id: string) => Boolean(nodeByKey.get(productionAssetKey(id))?.metadata?.content);
+    const isReady = (id: string) => Boolean(nodeByKey.get(id)?.metadata?.content);
     const stageLabel = (value: Stage) => t(`canvas.production.stage.${value}`);
 
     return (
@@ -314,7 +357,7 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
             <div className="flex min-h-0 flex-1">
                 <aside className="flex w-[260px] shrink-0 flex-col gap-2 overflow-y-auto border-r p-3" style={{ borderColor: theme.toolbar.border }}>
                     {!data ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={loading ? t("canvas.production.loading") : t("canvas.production.empty")} /> : null}
-                    {data ? <SideNav stage={stage} data={data} shots={shots} episodeId={selectedEpisode?.id || ""} assetId={assetId} shotId={shotId} nodeByKey={nodeByKey} onEpisode={setEpisodeId} onAsset={setAssetId} onShot={(id) => { setShotId(id); setStage("storyboard"); }} onAddAsset={addAsset} onAddEpisode={addEpisode} onRemoveEpisode={removeEpisode} statusDot={statusDot} /> : null}
+                    {data ? <SideNav stage={stage} data={data} shots={shots} episodeId={selectedEpisode?.id || ""} assetKind={assetKind} shotId={shotId} onEpisode={setEpisodeId} onAssetKind={setAssetKind} onShot={(id) => { setShotId(id); setStage("storyboard"); }} onAddAsset={addAsset} onAddEpisode={addEpisode} onRemoveEpisode={removeEpisode} statusDot={statusDot} /> : null}
                 </aside>
 
                 <main className="min-w-0 flex-1 overflow-y-auto p-5">
@@ -328,30 +371,47 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
                         <ScriptStage data={data} episode={selectedEpisode} onChange={(value) => selectedEpisode && updateEpisode(selectedEpisode.id, { script: value }, false)} onBlur={onSync} onGenerate={(episode) => void doGenerateScript(episode)} busy={busy} />
                     ) : stage === "assets" ? (
                         <div className="space-y-4">
-                            <div className="flex flex-wrap gap-2">
-                                {PRODUCTION_ASSET_KINDS.map((kind) => (
-                                    <Button key={kind} size="small" icon={<Plus className="size-4" />} onClick={() => addAsset(kind)}>{t(`canvas.production.kind.${kind}`)}</Button>
-                                ))}
+                            <div className="flex flex-wrap items-center gap-2">
                                 <Button size="small" type="primary" icon={<Sparkles className="size-4" />} disabled={busy} onClick={doGenerateAssets}>{t("canvas.production.generateAssets")}</Button>
+                                <span className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.assetsHint")}</span>
                             </div>
-                            {selectedAsset ? (
-                                <AssetEditor
-                                    key={selectedAsset.id}
-                                    asset={selectedAsset}
-                                    node={nodeByKey.get(productionAssetKey(selectedAsset.id))}
-                                    disabled={busy}
-                                    usages={data ? assetUsages(data, selectedAsset.id) : []}
-                                    onSave={(next) => { patch({ assets: data.assets.map((asset) => (asset.id === next.id ? next : asset)) }, true); message.success(t("canvas.production.saved")); }}
-                                    onGenerate={() => onGenerate([productionAssetKey(selectedAsset.id)])}
-                                    onUpload={() => openUpload(productionAssetKey(selectedAsset.id))}
-                                    onDuplicate={() => duplicateAsset(selectedAsset)}
-                                    onRemove={() => removeAsset(selectedAsset)}
-                                    onLocate={() => onLocate(productionAssetKey(selectedAsset.id))}
-                                />
-                            ) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("canvas.production.selectAsset")} />}
+                            <AssetGrid
+                                data={data}
+                                kind={assetKind}
+                                nodeByKey={nodeByKey}
+                                onSelect={(asset, variant) => {
+                                    setAssetId(asset.id);
+                                    setVariantId(variant.id);
+                                }}
+                                onAddAsset={addAsset}
+                            />
+                            {selectedAsset && selectedVariant ? (
+                                <div className="border-t pt-4" style={{ borderColor: theme.node.stroke }}>
+                                    <AssetEditor
+                                        key={`${selectedAsset.id}:${selectedVariant.id}`}
+                                        asset={selectedAsset}
+                                        variant={selectedVariant}
+                                        node={nodeByKey.get(productionVariantKey(selectedVariant.id))}
+                                        voiceNode={selectedAsset.voiceNodeId ? nodes.find((node) => node.id === selectedAsset.voiceNodeId) : undefined}
+                                        disabled={busy}
+                                        usages={data ? assetUsages(data, selectedAsset.id) : []}
+                                        onSave={(next) => { patch({ assets: data.assets.map((asset) => (asset.id === next.id ? next : asset)) }, true); message.success(t("canvas.production.saved")); }}
+                                        onSaveVariant={(variant) => saveVariant(selectedAsset, variant)}
+                                        onGenerate={() => onGenerate([productionVariantKey(selectedVariant.id)])}
+                                        onUpload={() => openUpload(productionVariantKey(selectedVariant.id))}
+                                        onUploadVoice={() => { setVoiceTarget(selectedAsset.id); fileRef.current?.click(); }}
+                                        onAddVariant={() => addVariant(selectedAsset)}
+                                        onRemoveVariant={(targetId) => removeVariant(selectedAsset, targetId)}
+                                        onSelectVariant={setVariantId}
+                                        onDuplicate={() => duplicateAsset(selectedAsset)}
+                                        onRemove={() => removeAsset(selectedAsset)}
+                                        onLocate={() => onLocate(productionVariantKey(selectedVariant.id))}
+                                    />
+                                </div>
+                            ) : null}
                         </div>
                     ) : stage === "storyboard" ? (
-                        <StoryboardStage data={data} episode={selectedEpisode} shots={shots} selectedShot={selectedShot} onSelectEpisode={setEpisodeId} onSelectShot={setShotId} onAddShot={addShot} onRemoveShot={removeShot} onGenerateEpisode={(episode) => void doGenerateEpisodeStoryboard(episode)} onGenerateAll={doGenerateAllStoryboards} onSaveShot={(next) => updateShot(next.id, next)} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerateShot={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} isReady={isReady} nodeByKey={nodeByKey} busy={busy} />
+                        <StoryboardStage data={data} episode={selectedEpisode} shots={shots} selectedShot={selectedShot} onSelectEpisode={setEpisodeId} onSelectShot={setShotId} onAddShot={addShot} onRemoveShot={removeShot} onGenerateEpisode={(episode) => void doGenerateEpisodeStoryboard(episode)} onGenerateAll={doGenerateAllStoryboards} onSaveShot={(next) => updateShot(next.id, next)} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerateShot={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} isReady={isReady} nodeByKey={nodeByKey} busy={busy} onSetShotReferences={setShotReferences} />
                     ) : (
                         <ShotsStage data={data} shots={shots} nodeByKey={nodeByKey} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerate={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} onEdit={(id) => { setShotId(id); setStage("storyboard"); }} />
                     )}
@@ -381,9 +441,16 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
                 onChange={(event) => {
                     const file = event.target.files?.[0];
                     event.currentTarget.value = "";
+                    const voice = voiceTarget;
                     const key = uploadTarget;
                     setUploadTarget("");
-                    if (!file || !key) return;
+                    setVoiceTarget("");
+                    if (!file) return;
+                    if (voice) {
+                        void onUploadVoice(voice, file);
+                        return;
+                    }
+                    if (!key) return;
                     void onUploadAsset(key, file);
                 }}
             />
@@ -391,16 +458,81 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     );
 }
 
-function SideNav({ stage, data, shots, episodeId, assetId, shotId, nodeByKey, onEpisode, onAsset, onShot, onAddAsset, onAddEpisode, onRemoveEpisode, statusDot }: {
+/** 资产缩略图网格：每个形态一张卡片，点击后在下方展开详情。 */
+function AssetGrid({ data, kind, nodeByKey, onSelect, onAddAsset }: {
+    data: ProductionState;
+    kind: ScriptAssetKind | "";
+    nodeByKey: Map<string, CanvasNodeData>;
+    onSelect: (asset: ScriptAsset, variant: ScriptAssetVariant) => void;
+    onAddAsset: (kind: ScriptAssetKind) => void;
+}) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const assets = kind ? data.assets.filter((asset) => asset.kind === kind) : data.assets;
+    const cards = assets.flatMap((asset) => assetVariants(asset).map((variant) => ({ asset, variant })));
+    if (!cards.length) {
+        return (
+            <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description={t("canvas.production.assetsEmpty")}
+            >
+                <div className="flex flex-wrap justify-center gap-2">
+                    {PRODUCTION_ASSET_KINDS.map((item) => (
+                        <Button key={item} size="small" icon={<Plus className="size-4" />} onClick={() => onAddAsset(item)}>
+                            {t(`canvas.production.kind.${item}`)}
+                        </Button>
+                    ))}
+                </div>
+            </Empty>
+        );
+    }
+    return (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {cards.map(({ asset, variant }) => {
+                const node = nodeByKey.get(productionVariantKey(variant.id));
+                const content = node?.metadata?.content;
+                const status = node?.metadata?.status || "idle";
+                return (
+                    <button key={variant.id} type="button" onClick={() => onSelect(asset, variant)} className="group overflow-hidden rounded-xl border text-left transition hover:border-black/20 dark:hover:border-white/20" style={{ borderColor: theme.node.stroke }}>
+                        <div className="aspect-square bg-black/40">
+                            {content ? (
+                                <img src={content} alt="" className="size-full object-cover" />
+                            ) : (
+                                <div className="grid size-full place-items-center">
+                                    {status === "loading" ? (
+                                        <span className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.generating")}</span>
+                                    ) : (
+                                        (() => {
+                                            const Icon = ASSET_KIND_ICON[asset.kind];
+                                            return <Icon className="size-6 opacity-25" />;
+                                        })()
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                        <div className="space-y-0.5 p-2">
+                            <div className="truncate text-xs font-medium">{variant.name || asset.name || t("canvas.production.untitled")}</div>
+                            <div className="truncate text-[10px]" style={{ color: theme.node.muted }}>
+                                {asset.name !== variant.name ? `${asset.name} · ` : ""}
+                                {t(`canvas.production.kind.${asset.kind}`)}
+                            </div>
+                        </div>
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+function SideNav({ stage, data, shots, episodeId, assetKind, shotId, onEpisode, onAssetKind, onShot, onAddAsset, onAddEpisode, onRemoveEpisode, statusDot }: {
     stage: Stage;
     data: ProductionState;
     shots: ReturnType<typeof listShots>;
     episodeId: string;
-    assetId: string;
+    assetKind: ScriptAssetKind | "";
     shotId: string;
-    nodeByKey: Map<string, CanvasNodeData>;
     onEpisode: (id: string) => void;
-    onAsset: (id: string) => void;
+    onAssetKind: (kind: ScriptAssetKind | "") => void;
     onShot: (id: string) => void;
     onAddAsset: (kind: ScriptAssetKind) => void;
     onAddEpisode: () => void;
@@ -412,26 +544,33 @@ function SideNav({ stage, data, shots, episodeId, assetId, shotId, nodeByKey, on
     if (stage === "assets") {
         return (
             <>
+                <div className="px-1 text-[11px] font-medium" style={{ color: theme.node.muted }}>{t("canvas.production.assetCategories")}</div>
+                <button type="button" onClick={() => onAssetKind("")} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-hover" style={{ background: assetKind === "" ? theme.toolbar.activeBg : undefined }}>
+                    <span className="min-w-0 flex-1 truncate">{t("canvas.production.assetAll")}</span>
+                    <span className="text-[10px]" style={{ color: theme.node.muted }}>{data.assets.length}</span>
+                </button>
                 {PRODUCTION_ASSET_KINDS.map((kind) => {
                     const Icon = ASSET_KIND_ICON[kind];
-                    const list = data.assets.filter((asset) => asset.kind === kind);
+                    const count = data.assets.filter((asset) => asset.kind === kind).length;
                     return (
-                        <div key={kind} className="space-y-1">
-                            <div className="flex items-center gap-1 px-1 text-[11px] font-medium" style={{ color: theme.node.muted }}>
-                                <Icon className="size-3" />
-                                <span className="min-w-0 flex-1 truncate">{t(`canvas.production.kind.${kind}`)}</span>
-                                <button type="button" className="grid size-5 place-items-center rounded hover:bg-surface-hover" onClick={() => onAddAsset(kind)}><Plus className="size-3" /></button>
-                            </div>
-                            {list.map((asset) => (
-                                <button key={asset.id} type="button" onClick={() => onAsset(asset.id)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-hover" style={{ background: assetId === asset.id ? theme.toolbar.activeBg : undefined }}>
-                                    {statusDot(productionAssetKey(asset.id))}
-                                    <span className="min-w-0 flex-1 truncate">{asset.name || t("canvas.production.untitled")}</span>
-                                </button>
-                            ))}
-                            {!list.length ? <p className="px-2 text-[10px] italic opacity-40">{t("canvas.production.emptyKind")}</p> : null}
-                        </div>
+                        <button key={kind} type="button" onClick={() => onAssetKind(kind)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs hover:bg-surface-hover" style={{ background: assetKind === kind ? theme.toolbar.activeBg : undefined }}>
+                            <Icon className="size-3.5 shrink-0" />
+                            <span className="min-w-0 flex-1 truncate">{t(`canvas.production.kind.${kind}`)}</span>
+                            <span className="text-[10px]" style={{ color: theme.node.muted }}>{count}</span>
+                        </button>
                     );
                 })}
+                <div className="mt-2 space-y-1 border-t pt-2" style={{ borderColor: theme.node.stroke }}>
+                    <div className="px-1 text-[11px] font-medium" style={{ color: theme.node.muted }}>{t("canvas.production.assetAdd")}</div>
+                    {PRODUCTION_ASSET_KINDS.map((kind) => {
+                        const Icon = ASSET_KIND_ICON[kind];
+                        return (
+                            <Button key={kind} size="small" type="dashed" block icon={<Icon className="size-3.5" />} onClick={() => onAddAsset(kind)}>
+                                {t(`canvas.production.kind.${kind}`)}
+                            </Button>
+                        );
+                    })}
+                </div>
             </>
         );
     }
@@ -581,7 +720,7 @@ function ScriptStage({ data, episode, onChange, onBlur, onGenerate, busy }: { da
     );
 }
 
-function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, onSelectShot, onAddShot, onRemoveShot, onGenerateEpisode, onGenerateAll, onSaveShot, onRegenerate, onGenerateShot, onLocate, isReady, nodeByKey, busy }: {
+function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, onSelectShot, onAddShot, onRemoveShot, onGenerateEpisode, onGenerateAll, onSaveShot, onRegenerate, onGenerateShot, onLocate, isReady, nodeByKey, busy, onSetShotReferences }: {
     data: ProductionState;
     episode?: ProductionEpisode;
     shots: ReturnType<typeof listShots>;
@@ -599,6 +738,7 @@ function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, 
     isReady: (id: string) => boolean;
     nodeByKey: Map<string, CanvasNodeData>;
     busy: boolean;
+    onSetShotReferences: (shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => void;
 }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -624,6 +764,7 @@ function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, 
                         onRegenerate={() => onRegenerate(selectedShot)}
                         onGenerate={() => onGenerateShot(selectedShot)}
                         onLocate={() => onLocate(selectedShot.id)}
+                        onReferencesChange={(refs) => onSetShotReferences(selectedShot.id, refs)}
                     />
                     <Button size="small" type="text" danger onClick={() => onRemoveShot(selectedShot.id)}>{t("canvas.production.removeShot")}</Button>
                 </div>
@@ -705,7 +846,7 @@ function Inspector({ data, shots, selectedShot, selectedAsset, nodeByKey, isRead
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const ready = shots.filter((shot) => nodeByKey.get(shot.key)?.metadata?.status === "success").length;
     const errors = selectedShot && data ? validateShot(selectedShot, data.assets, data.options.orientation) : [];
-    const missing = selectedShot ? [...selectedShot.imageAssetIds, ...selectedShot.videoAssetIds, ...selectedShot.audioAssetIds].filter((id) => !isReady(id)) : [];
+    const missing = selectedShot ? [...selectedShot.imageVariantIds, ...selectedShot.videoAssetIds, ...selectedShot.audioAssetIds].filter((id) => !isReady(id)) : [];
     return (
         <>
             <div className="text-xs font-medium">{t("canvas.production.overview")}</div>
@@ -718,9 +859,6 @@ function Inspector({ data, shots, selectedShot, selectedAsset, nodeByKey, isRead
             {selectedAsset ? (
                 <div className="space-y-2">
                     <div className="text-xs font-medium">{assetLabel(selectedAsset)}</div>
-                    <div className="h-[120px] overflow-hidden rounded-lg border" style={{ borderColor: theme.node.stroke }}>
-                        <MediaPreview node={nodeByKey.get(productionAssetKey(selectedAsset.id))} kind={selectedAsset.kind} />
-                    </div>
                     <p className="text-[11px]" style={{ color: theme.node.muted }}>{selectedAsset.description || t("canvas.production.noDescription")}</p>
                 </div>
             ) : null}
