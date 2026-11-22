@@ -307,6 +307,7 @@ function InfiniteCanvasPage() {
 
     const productionData = useProductionStore((state) => state.data);
     const productionProjectId = useProductionStore((state) => state.projectId);
+    const productionLoading = useProductionStore((state) => state.loading);
     useEffect(() => {
         if (viewMode === "production" && projectId) void useProductionStore.getState().load(projectId, currentCanvas?.id || canvasId);
     }, [viewMode, projectId, currentCanvas?.id, canvasId]);
@@ -1076,7 +1077,7 @@ function InfiniteCanvasPage() {
     // 打开项目后以生产数据为准对齐一次画布，只补建/更新，不删除任何节点。
     const productionAlignedRef = useRef("");
     useEffect(() => {
-        if (!projectLoaded || !productionData || productionProjectId !== projectId) return;
+        if (!projectLoaded || productionLoading || !productionData || productionProjectId !== projectId) return;
         if (productionAlignedRef.current === projectId) return;
         productionAlignedRef.current = projectId;
         try {
@@ -1084,7 +1085,7 @@ function InfiniteCanvasPage() {
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("canvas.saveStatus.failed"));
         }
-    }, [message, productionData, productionProjectId, projectId, projectLoaded, syncStoredProduction, t]);
+    }, [message, productionData, productionLoading, productionProjectId, projectId, projectLoaded, syncStoredProduction, t]);
 
     const orphanProductionNodeCount = useMemo(() => {
         if (!productionData) return 0;
