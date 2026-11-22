@@ -27,6 +27,16 @@ const NODE_TYPE_CODES: Record<string, string> = {
     [CanvasNodeType.Group]: "GROUP",
 };
 
+// 标题缩放策略：字号跟随节点一起缩小，但比节点本身缩得更慢（阻尼），避免缩到 20% 时完全看不清；
+// 同时设一个可读下限，保证任何缩放级别下屏幕上的标题都不低于可辨认尺寸；
+// 缩得太小时直接隐藏（仅悬停/选中才出现），彻底解决缩略视图下标题叠成一片噪声的问题；
+// 悬停或选中时恢复到恒定可读尺寸，保证交互时永远读得清。
+const NODE_TITLE_MIN_SCALE = 0.5;
+const NODE_TITLE_BASE_PX = 12;
+// 屏幕字号 = BASE * k^EXPONENT，并夹在 [MIN_PX, BASE] 之间。
+const NODE_TITLE_EXPONENT = 0.65;
+const NODE_TITLE_MIN_PX = 10;
+
 type ResizeCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 type CanvasNodeProps = {
@@ -181,6 +191,15 @@ export const CanvasNode = React.memo(function CanvasNode({
     const isGenerating = !isGroup && data.metadata?.status === "loading";
     const isEmphasized = isActive || isGenerating;
     const imageBorderColor = isEmphasized ? theme.canvas.selectionStroke : isRelated ? theme.node.muted : "transparent";
+    // 缩得太小时标题不常驻显示，避免大量节点标题叠成一团；悬停、选中或正在改名时仍然可见。
+    const titleVisible = safeScale >= NODE_TITLE_MIN_SCALE || hovered || isSelected || isFocusRelated || isEditingTitle;
+    // 标题字号：默认跟随节点阻尼缩小（screen ≈ BASE * k^EXPONENT，下限 MIN_PX）；悬停/选中/改名时恒定可读。
+    const titleEmphasis = hovered || isSelected || isFocusRelated || isEditingTitle;
+    const titleScreenPx = titleEmphasis
+        ? NODE_TITLE_BASE_PX
+        : Math.max(NODE_TITLE_MIN_PX, NODE_TITLE_BASE_PX * Math.pow(safeScale, NODE_TITLE_EXPONENT));
+    // 抵消画布自身的 scale(k)，再补上目标屏幕字号与基准字号之比。
+    const titleScale = titleScreenPx / NODE_TITLE_BASE_PX / safeScale;
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const titleInputRef = useRef<HTMLInputElement>(null);
     const resizeRef = useRef({
@@ -360,10 +379,14 @@ export const CanvasNode = React.memo(function CanvasNode({
         >
             {!referenceSelectionState && (
                 <div
-                    className="absolute left-0.5 bottom-full z-[65] flex max-w-full origin-bottom-left items-baseline gap-1.5 whitespace-nowrap font-mono text-[9.5px] uppercase tracking-[.14em]"
+                    className={`absolute left-0.5 bottom-full z-[65] flex max-w-full origin-bottom-left items-baseline gap-1.5 whitespace-nowrap font-mono text-[12px] uppercase tracking-[.14em] transition-opacity duration-150 ${titleVisible ? "opacity-100" : "pointer-events-none opacity-0"}`}
                     style={{
-                        transform: `scale(var(--canvas-inv-scale, ${1 / safeScale}))`,
-                        paddingBottom: 8,
+                        // 抵消画布自身的 scale(k)，再按阻尼后的比例缩放：字号随节点一起变小，
+                        // 但比节点缩得更慢；悬停/选中时屏幕字号恒定，标题回到可读尺寸。
+                        transform: `scale(${titleScale})`,
+                        transformOrigin: "left bottom",
+                        // paddingBottom 处于被缩放的局部坐标系里，除以屏幕缩放系数才能保持 8px 恒定间距。
+                        paddingBottom: 8 * (NODE_TITLE_BASE_PX / titleScreenPx),
                     }}
                     onMouseDown={(event) => event.stopPropagation()}
                     onPointerDown={(event) => event.stopPropagation()}
@@ -630,13 +653,18 @@ const nodeContentRenderers = {
 function GroupNodeContent({ node, theme, groupChildCount, scale }: NodeContentRendererProps) {
     const { t } = useTranslation();
     const safeScale = scale && scale > 0 ? scale : 1;
+    // 组标题跟随组节点阻尼缩小，并设可读下限；缩得太小时不常驻显示，避免与外置标签叠成噪声。
+    const labelVisible = safeScale >= NODE_TITLE_MIN_SCALE;
+    const groupLabelPx = Math.max(NODE_TITLE_MIN_PX, NODE_TITLE_BASE_PX * Math.pow(safeScale, NODE_TITLE_EXPONENT));
+    const groupLabelScale = groupLabelPx / NODE_TITLE_BASE_PX / safeScale;
     return (
         <div className="pointer-events-none flex h-full w-full p-3">
             <div
-                className="flex h-7 max-w-full origin-top-left items-center gap-2 px-1 text-xs font-medium"
+                className={`flex h-7 max-w-full origin-top-left items-center gap-2 px-1 text-[12px] font-medium transition-opacity duration-150 ${labelVisible ? "opacity-100" : "opacity-0"}`}
                 style={{
                     color: theme.node.text,
-                    transform: `scale(var(--canvas-inv-scale, ${1 / safeScale}))`,
+                    transform: `scale(${groupLabelScale})`,
+                    transformOrigin: "left top",
                 }}
             >
                 <Group className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />
