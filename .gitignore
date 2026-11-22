@@ -24,3 +24,5 @@ web/src-tauri/binaries/
 web/src-tauri/resources/canvas-agent/
 web/src-tauri/gen/
 web/src-tauri/target/
+release/
+web/.vite-dev.err
