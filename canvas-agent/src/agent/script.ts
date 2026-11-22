@@ -12,6 +12,10 @@ export type ScriptOptions = {
     orientation?: "vertical" | "horizontal";
     keep?: string;
     change?: string;
+    /** 是否在提示词中保留台词文本（字幕）。 */
+    subtitle?: boolean;
+    /** 是否要求非叙事配乐段（BGM）。 */
+    bgm?: boolean;
 };
 
 export type ScriptGenerateInput = {
@@ -216,6 +220,8 @@ function buildStagePrompt(input: ScriptGenerateInput, source: string) {
         `画幅：${options.orientation === "horizontal" ? "横屏" : "竖屏"}`,
         options.keep?.trim() ? `必须保留：${options.keep.trim()}` : "",
         options.change?.trim() ? `允许调整：${options.change.trim()}` : "",
+        `字幕：${options.subtitle === false ? "关闭" : "开启"}`,
+        `BGM：${options.bgm === false ? "关闭" : "开启"}`,
         input.feedback?.trim() ? `本次修改要求：${input.feedback.trim()}` : "",
     ].filter(Boolean).join("\n");
 
@@ -322,7 +328,7 @@ ${input.assets?.trim() || "（未提供）"}
 
 输出契约（必须严格遵守）：
 - 只输出一个 JSON 对象，不要输出 Markdown、代码块标记、解释或任何多余文字。
-- 结构：{"episode":{"title":"第${episode}集 集名","shots":[{"number":1,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}]}}
+- 结构：{"episode":{"title":"第${episode}集 集名","shots":[{"number":1,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"blocking":{"characterIds":["形态id"],"positions":{"形态id":"画面左侧，背对镜头"},"continuous":true},"consistency":{"carryOverAssetIds":["形态id"],"notes":"需与上一镜头保持一致的说明"},"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}]}}
 - duration 为 1-15 的整数秒；本集各段时长合计约 ${clampNumber(options.duration, 15, 600, 60)} 秒。
 - size 只能取以下值之一（当前画幅预设）：${sizeList(options.orientation).join("、")}
 - imageAssets 只能引用资产清单里的角色、场景与道具，最多 9 个；参考视频与参考音频由用户在画布上自行上传并连线，不要在 JSON 里输出 videoAssets 或 audioAssets。
@@ -333,7 +339,10 @@ ${input.assets?.trim() || "（未提供）"}
 - 资产清单里带「H3参考字段」的条目，其主体外观与保留特征会由系统自动合并进本镜头；你写 h3 时不要重复抄写这些外观细节（否则会重复），只写本镜头特有的叙事内容。
 - 若某个资产带有 H3参考字段，则该资产在 h3 中对应的字段可以只写本镜头场景下的补充描述；若不带，则需完整描述该主体。
 - h3 正文使用英文，内容完整但精炼；detailed_description 使用 [Shot N] 与 from ... to ... 时间轴，覆盖本段全部时长。
-- 台词保留剧情关键句并标说话人，中文台词写成 <d>[Chinese] Speaker (voice and emotion):「台词」</d>。
+${subtitleRule(options)}
+${bgmRule(options)}
+- blocking 是空间站位声明：characterIds 写参与站位的角色形态 ID（必须来自 imageAssets），positions 为每个角色写一句站位描述（如「画面左侧，背对镜头」）；当本镜头与上一镜头存在剧情衔接、需要保持人物空间关系时，continuous 写 true，并明确写出「上一镜头结束时 X 位于……，本镜头保持该站位」。不涉及站位时整个 blocking 可省略。
+- consistency 是一致性声明：carryOverAssetIds 写必须与上一镜头保持一致的形态 ID（必须来自 imageAssets），notes 用一句话说明需要保持一致的视觉特征（如「李明仍穿同一件灰色风衣」）。无需要时整个 consistency 可省略。
 - 严格按本集大纲与正文，不新增剧情。`;
     }
 
@@ -360,9 +369,12 @@ ${input.shot?.trim() || "（未提供）"}
 请只重写这一个镜头，其余镜头保持不变。
 
 输出契约（必须严格遵守）：
-- 只输出一个 JSON 对象：{"shot":{"number":原序号,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}}
+- 只输出一个 JSON 对象：{"shot":{"number":原序号,"title":"镜头标题","duration":5,"size":"${defaultSize(options.orientation)}","imageAssets":["资产id或类型：名称"],"blocking":{"characterIds":["形态id"],"positions":{"形态id":"画面左侧，背对镜头"},"continuous":true},"consistency":{"carryOverAssetIds":["形态id"],"notes":"需与上一镜头保持一致的说明"},"h3":{"subject_definitions":"...","summary":"...","retention_analysis":"...","detailed_description":"...","overall_soundscape":"...","non_diegetic_music":"..."}}}
 - 保持 number 与原来一致；duration 为 1-15 的整数秒；size 只能取：${sizeList(options.orientation).join("、")}
-- 引用与 h3 的编号规则、英文正文与时间轴要求同分镜阶段；只引用资产清单中已存在的资产。`;
+- 引用与 h3 的编号规则、英文正文与时间轴要求同分镜阶段；只引用资产清单中已存在的资产。
+${subtitleRule(options)}
+${bgmRule(options)}
+- blocking 与 consistency 的写法同分镜阶段；需要保持与上一镜头一致的空间站位时必须写 continuous 为 true。`;
     }
 
     if (episode) {
@@ -430,6 +442,18 @@ function clampNumber(value: unknown, min: number, max: number, fallback: number)
     const parsed = Number(value);
     if (!Number.isFinite(parsed)) return fallback;
     return Math.min(max, Math.max(min, Math.round(parsed)));
+}
+
+/** 字幕开关对应的提示词规则。 */
+function subtitleRule(options: ScriptOptions) {
+    if (options.subtitle === false) return "- 字幕已关闭：不要输出任何 <d>...</d> 台词片段，也不要在 detailed_description 里写对白内容。";
+    return "- 台词保留剧情关键句并标说话人，中文台词写成 <d>[Chinese] Speaker (voice and emotion):「台词」</d>。";
+}
+
+/** BGM 开关对应的提示词规则。 */
+function bgmRule(options: ScriptOptions) {
+    if (options.bgm === false) return "- BGM 已关闭：non_diegetic_music 必须留空字符串。";
+    return "- non_diegetic_music 写本镜头的非叙事配乐（情绪、乐器、节奏、进入与退出点），没有配乐时留空字符串。";
 }
 
 /** 按画幅返回允许的 H3 尺寸预设。 */

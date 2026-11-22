@@ -50,6 +50,24 @@ export type ScriptH3Prompt = {
     non_diegetic_music: string;
 };
 
+/** 单镜头的空间站位：人物相对画面与彼此的位置，跨镜头衔接时锁定。 */
+export type ShotBlocking = {
+    /** 参与站位的角色资产 ID（形态 ID 优先），与 imageVariantIds 对齐。 */
+    characterIds: string[];
+    /** 每个角色的站位描述，如「画面左侧，背对镜头」。 */
+    positions: Record<string, string>;
+    /** 是否与上一镜头存在剧情衔接，需要保持站位连续。 */
+    continuous: boolean;
+};
+
+/** 跨镜头一致性声明。 */
+export type ShotConsistency = {
+    /** 必须与前镜头保持一致的资产 ID。 */
+    carryOverAssetIds: string[];
+    /** 一致性备注，写入 H3 retention_analysis。 */
+    notes: string;
+};
+
 /** 结构化镜头：参数与有序引用随镜头保存，画布节点由 production-nodes 派生。 */
 export type ScriptShot = {
     id: string;
@@ -64,6 +82,10 @@ export type ScriptShot = {
     /** 参考音频节点 ID：角色的音色参考，由用户手动连线产生。 */
     audioAssetIds: string[];
     h3: ScriptH3Prompt;
+    /** 空间站位：跨镜头衔接时锁定的角色位置。 */
+    blocking?: ShotBlocking;
+    /** 跨镜头一致性声明。 */
+    consistency?: ShotConsistency;
 };
 
 /** 生产链路参数：画幅、集数、单集时长与题材等创作约束。 */
@@ -75,6 +97,24 @@ export type ProductionOptions = {
     orientation: "vertical" | "horizontal";
     keep?: string;
     change?: string;
+    /** 是否在 H3 提示词中保留台词文本（字幕）。 */
+    subtitle: boolean;
+    /** 是否在 H3 提示词中要求非叙事配乐段（BGM）。 */
+    bgm: boolean;
+};
+
+/** 批量生成配置：工作流与参数覆盖，作用于「生成所有资产 / 所有分镜」。 */
+export type ProductionBatchConfig = {
+    /** 资产图片工作流 ID；空表示用渠道默认。 */
+    assetWorkflowId: string;
+    /** 镜头视频工作流 ID；空表示用渠道默认。 */
+    shotWorkflowId: string;
+    /** 资产图片尺寸覆盖；空表示用节点自身。 */
+    assetSize: string;
+    /** 镜头时长覆盖（秒）；0 表示用镜头自身。 */
+    shotSeconds: number;
+    /** 固定种子；-1 表示随机。 */
+    seed: number;
 };
 
 export type ProductionChapter = { title: string; content: string };
@@ -99,6 +139,8 @@ export type ProductionState = {
     setting: string;
     assets: ScriptAsset[];
     episodes: ProductionEpisode[];
+    /** 批量生成的工作流与参数覆盖。 */
+    batch: ProductionBatchConfig;
 };
 
 export type CanvasProject = {

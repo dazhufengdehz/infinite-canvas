@@ -8,15 +8,17 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { MINIMAX_H3_SIZES } from "@/services/api/models/video-minimax-h3-omni";
 import {
     assetLabel,
+    assetVariants,
     ASSET_H3_FIELDS,
     PRODUCTION_H3_SECTIONS,
     PRODUCTION_SHOT_LIMITS,
     variantLabel,
     validateShot,
+    validateShotConsistency,
     type ProductionShotView,
 } from "@/lib/production/production-model";
 import { useThemeStore } from "@/stores/use-theme-store";
-import { CanvasNodeType, type CanvasNodeData, type ProductionOptions, type ScriptAsset, type ScriptAssetKind, type ScriptAssetVariant, type ScriptShot } from "@/types/canvas";
+import { CanvasNodeType, type CanvasNodeData, type ProductionOptions, type ScriptAsset, type ScriptAssetKind, type ScriptAssetVariant, type ScriptShot, type ShotBlocking } from "@/types/canvas";
 
 export function MediaPreview({ node, kind }: { node?: CanvasNodeData; kind: ScriptAssetKind | "shot" | "voice" }) {
     const { t } = useTranslation();
@@ -190,6 +192,8 @@ export function ShotEditor({
     shot,
     assets,
     orientation,
+    media,
+    siblings,
     node,
     disabled,
     isReady,
@@ -202,6 +206,10 @@ export function ShotEditor({
     shot: ProductionShotView;
     assets: ScriptAsset[];
     orientation: ProductionOptions["orientation"];
+    /** 字幕与 BGM 开关：影响 H3 校验与提示词内容。 */
+    media?: Pick<ProductionOptions, "subtitle" | "bgm">;
+    /** 同集内的全部镜头，用于跨镜头一致性检查与上一镜头站位参考。 */
+    siblings?: ScriptShot[];
     node?: CanvasNodeData;
     disabled: boolean;
     isReady: (id: string) => boolean;
@@ -221,9 +229,12 @@ export function ShotEditor({
         draft.imageVariantIds.join(",") !== shot.imageVariantIds.join(",") ||
         draft.videoAssetIds.join(",") !== shot.videoAssetIds.join(",") ||
         draft.audioAssetIds.join(",") !== shot.audioAssetIds.join(",") ||
-        PRODUCTION_H3_SECTIONS.some((section) => draft.h3[section] !== shot.h3[section]);
+        PRODUCTION_H3_SECTIONS.some((section) => draft.h3[section] !== shot.h3[section]) ||
+        JSON.stringify(draft.blocking || null) !== JSON.stringify(shot.blocking || null) ||
+        JSON.stringify(draft.consistency || null) !== JSON.stringify(shot.consistency || null);
 
-    const errors = validateShot(draft, assets, orientation);
+    const errors = validateShot(draft, assets, orientation, media);
+    const warnings = siblings ? validateShotConsistency(draft, siblings, assets) : [];
     const missing = [...draft.imageVariantIds, ...draft.videoAssetIds, ...draft.audioAssetIds].filter((id) => !isReady(id));
     const workflowMissing = !node?.metadata?.workflowId;
     const sizeOptions = useMemo(
@@ -248,6 +259,12 @@ export function ShotEditor({
     };
 
     const variantOptions = assets.flatMap((asset) => (asset.variants || []).map((variant) => ({ value: variant.id, label: variantLabel(asset, variant) })));
+    // 上一镜头用于站位参考与跨镜头一致性提示。
+    const previousShot = useMemo(() => {
+        if (!siblings?.length) return undefined;
+        const index = siblings.findIndex((item) => item.id === shot.id);
+        return index > 0 ? siblings[index - 1] : undefined;
+    }, [shot.id, siblings]);
 
     return (
         <div className="space-y-3">
@@ -265,6 +282,12 @@ export function ShotEditor({
             </div>
             <ReferenceList label={t("canvas.production.referenceImages")} limit={PRODUCTION_SHOT_LIMITS.image} ids={draft.imageVariantIds} options={variantOptions} onChange={(ids) => { patch({ imageVariantIds: ids }); onReferencesChange({ ...draft, imageVariantIds: ids }); }} labelOf={labelOf} isReady={isReady} />
             <p className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.referenceMediaHint")}</p>
+            <BlockingEditor
+                draft={draft}
+                assets={assets}
+                previous={previousShot}
+                onChange={(blocking) => patch({ blocking })}
+            />
             {PRODUCTION_H3_SECTIONS.map((section) => (
                 <Field key={section} label={section}>
                     <Input.TextArea value={draft.h3[section]} onChange={(event) => patch({ h3: { ...draft.h3, [section]: event.target.value } })} autoSize={{ minRows: 3, maxRows: 12 }} />
@@ -273,6 +296,11 @@ export function ShotEditor({
             {errors.length ? (
                 <ul className="space-y-0.5 rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: theme.state.danger, color: theme.state.danger }}>
                     {errors.map((error) => <li key={error}>{error}</li>)}
+                </ul>
+            ) : null}
+            {warnings.length ? (
+                <ul className="space-y-0.5 rounded-md border px-2 py-1.5 text-xs" style={{ borderColor: theme.state.warning, color: theme.state.warning }}>
+                    {warnings.map((warning) => <li key={warning}>{warning}</li>)}
                 </ul>
             ) : null}
             {missing.length ? <p className="text-xs" style={{ color: theme.state.warning }}>{t("canvas.production.referenceMissing", { count: missing.length })}</p> : null}
@@ -347,6 +375,83 @@ export function EditorHeader({ title, node, onLocate }: { title: string; node?: 
 
 export const ASSET_KIND_ICON: Record<ScriptAssetKind, typeof ImageIcon> = { character: Users, scene: MapPin, prop: ImageIcon };
 
+/** 空间站位编辑区：逐个角色填写位置描述，并声明是否与上一镜头衔接。 */
+function BlockingEditor({ draft, assets, previous, onChange }: {
+    draft: ScriptShot;
+    assets: ScriptAsset[];
+    previous?: ScriptShot;
+    onChange: (blocking?: ShotBlocking) => void;
+}) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    // 站位只对角色资产有意义，场景与道具不参与人物空间关系。
+    const characters = assets.filter((asset) => asset.kind === "character");
+    const referenced = draft.imageVariantIds.filter((id) => characters.some((asset) => assetVariants(asset).some((variant) => variant.id === id)));
+    if (!characters.length) return null;
+
+    const positions = draft.blocking?.positions || {};
+    const continuous = Boolean(draft.blocking?.continuous);
+    const updatePosition = (id: string, value: string) => {
+        const next = { ...positions };
+        if (value.trim()) next[id] = value;
+        else delete next[id];
+        onChange(Object.keys(next).length ? { characterIds: Object.keys(next), positions: next, continuous } : undefined);
+    };
+    const setContinuous = (value: boolean) => {
+        if (!value) {
+            onChange(undefined);
+            return;
+        }
+        const inherited = { ...(previous?.blocking?.positions || {}), ...positions };
+        onChange({ characterIds: Object.keys(inherited), positions: inherited, continuous: true });
+    };
+    const labelOf = (id: string) => {
+        for (const asset of characters) {
+            const variant = assetVariants(asset).find((item) => item.id === id);
+            if (variant) return variantLabel(asset, variant);
+        }
+        return id.slice(0, 6);
+    };
+
+    return (
+        <div className="space-y-2 rounded-md border p-2" style={{ borderColor: theme.node.stroke }}>
+            <div className="flex items-center gap-2">
+                <span className="text-xs font-medium">{t("canvas.production.blockingTitle")}</span>
+                <label className="ml-auto flex items-center gap-1 text-[11px]" style={{ color: theme.node.muted }}>
+                    <input type="checkbox" checked={continuous} onChange={(event) => setContinuous(event.target.checked)} />
+                    {t("canvas.production.blockingContinuous")}
+                </label>
+            </div>
+            <p className="text-[11px]" style={{ color: theme.node.muted }}>{t("canvas.production.blockingHint")}</p>
+            {referenced.length ? referenced.map((id) => (
+                <div key={id} className="space-y-1">
+                    <span className="text-[11px]" style={{ color: theme.node.muted }}>{labelOf(id)}</span>
+                    <Input
+                        size="small"
+                        value={positions[id] || ""}
+                        placeholder={previous?.blocking?.positions[id] || t("canvas.production.blockingPlaceholder")}
+                        onChange={(event) => updatePosition(id, event.target.value)}
+                    />
+                </div>
+            )) : (
+                <p className="text-[11px]" style={{ color: theme.node.muted }}>{t("canvas.production.blockingNoCharacter")}</p>
+            )}
+        </div>
+    );
+}
+
 function toShot(shot: ScriptShot): ScriptShot {
-    return { id: shot.id, number: shot.number, title: shot.title, duration: shot.duration, size: shot.size, imageVariantIds: shot.imageVariantIds, videoAssetIds: shot.videoAssetIds, audioAssetIds: shot.audioAssetIds, h3: shot.h3 };
+    return {
+        id: shot.id,
+        number: shot.number,
+        title: shot.title,
+        duration: shot.duration,
+        size: shot.size,
+        imageVariantIds: shot.imageVariantIds,
+        videoAssetIds: shot.videoAssetIds,
+        audioAssetIds: shot.audioAssetIds,
+        h3: shot.h3,
+        blocking: shot.blocking,
+        consistency: shot.consistency,
+    };
 }

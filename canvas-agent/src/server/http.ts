@@ -200,6 +200,7 @@ export function startHttpServer() {
             episode: req.body?.episode ? Number(req.body.episode) : undefined,
             episodeTotal: req.body?.episodeTotal ? Number(req.body.episodeTotal) : undefined,
             episodeOutline: req.body?.episodeOutline ? String(req.body.episodeOutline) : undefined,
+            shot: req.body?.shot ? String(req.body.shot) : undefined,
         });
         res.json({ ok: true, content: result.content });
     }));

@@ -584,6 +584,47 @@ export default {
             "shotHint": "镜头引用按顺序编号，直接决定 H3 的 Picture / Video / Audio 编号。",
             "generateBlocked": "镜头参数校验未通过，请先修正标红项",
             "noNode": "未同步到画布",
+            "resize": "调整宽度",
+            "subtitle": "字幕",
+            "bgm": "配乐",
+            "batchSettings": "批量生成设置",
+            "batch": {
+                "assetWorkflow": "资产图片工作流",
+                "shotWorkflow": "镜头视频工作流",
+                "assetSize": "资产图片尺寸",
+                "shotSeconds": "镜头时长(秒)",
+                "seed": "固定种子",
+                "useNode": "跟随节点自身",
+                "useDefault": "使用渠道默认",
+                "hint": "批量设置会覆盖画布节点的默认工作流与参数；切换工作流后已生成的内容会被清空并需要重新生成。"
+            },
+            "blockingTitle": "空间站位",
+            "blockingContinuous": "与上一镜头衔接",
+            "blockingHint": "填写人物在画面中的位置。勾选「与上一镜头衔接」后，提示词会锁定上一镜头的站位关系，保证多段视频的空间连续性。",
+            "blockingPlaceholder": "如：画面左侧，背对镜头",
+            "blockingNoCharacter": "该镜头还没有引用角色，添加角色引用后可设置站位。",
+            "nextStep": {
+                "title": "下一步",
+                "generateSetting": "下一步：生成故事设定",
+                "generateOutline": "下一步：生成分集大纲",
+                "generateScript": "下一步：写本集剧本",
+                "generateAssets": "下一步：生成全部资产",
+                "generateStoryboard": "下一步：生成分镜",
+                "generateShots": "下一步：生成所有镜头"
+            },
+            "blocking": {
+                "emptySource": "请先粘贴小说原文",
+                "emptySetting": "请先生成故事设定",
+                "noOutline": "请先生成分集大纲",
+                "synopsisMissing": "还有 {{count}} 集缺少本集梗概",
+                "noAssets": "请先生成资产",
+                "scriptMissing": "还有 {{count}} 集缺少剧本正文",
+                "storyboardMissing": "还有 {{count}} 集缺少分镜",
+                "noShots": "请先生成分镜"
+            },
+            "stageProgress": {
+                "autoStage": "自动判断当前阶段为「{{stage}}」"
+            },
             "stage": {
                 "source": "原文",
                 "setting": "设定",
@@ -641,6 +682,11 @@ export default {
                 "refCountMismatch": "实际连线的参考{{label}}数量（{{actual}}）与镜头约定（{{expected}}）不一致",
                 "refOrderMismatch": "实际连线的参考{{label}}顺序与镜头约定不一致",
                 "refCheckFailed": "参考资源校验失败"
+            },
+            "warning": {
+                "blockingConflict": "站位冲突：上一镜头为「{{position}}」，本镜头为「{{next}}」，如需衔接请勾选「与上一镜头衔接」",
+                "carryOverMissing": "继承一致性缺失：「{{name}}」声明要与上一镜头保持一致，但本镜头没有引用它",
+                "variantDrift": "形态漂移：「{{name}}」在相邻镜头引用了不同形态，画面一致性可能受影响"
             },
             "referenceLabel": {
                 "image": "图片",

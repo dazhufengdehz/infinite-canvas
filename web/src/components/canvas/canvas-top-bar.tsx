@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, BookOpen, Bot, Check, ChevronsUpDown, CircleUser, Copy, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
+import { ArrowLeft, BookOpen, Bot, ChevronsUpDown, CircleUser, Copy, Download, FolderOpen, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Redo2, Save, Trash2, Undo2, Upload } from "lucide-react";
 import { App, Dropdown, Input, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 import { useNavigate, useParams } from "react-router-dom";
@@ -10,7 +10,6 @@ import { canvasThemes } from "@/lib/canvas-theme";
 import { useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
 import { useCollabStore } from "@/stores/use-collab-store";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
-import { useCanvasViewStore } from "@/stores/use-canvas-view-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { DOCS_URL } from "@/constant/env";
 
@@ -70,8 +69,6 @@ export function CanvasTopBar({
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
     const toggleSidePanel = useCanvasSidePanelStore((state) => state.togglePanel);
-    const viewMode = useCanvasViewStore((state) => state.mode);
-    const setViewMode = useCanvasViewStore((state) => state.setMode);
 
     useEffect(() => {
         if (!isTitleEditing) return;
@@ -104,9 +101,6 @@ export function CanvasTopBar({
                         trigger={["click"]}
                         menu={{
                             items: [
-                                { key: "view-canvas", icon: <MenuCheck active={viewMode === "canvas"} />, label: t("canvas.view.canvas"), onClick: () => setViewMode("canvas") },
-                                { key: "view-production", icon: <MenuCheck active={viewMode === "production"} />, label: t("canvas.view.production"), onClick: () => setViewMode("production") },
-                                { type: "divider" },
                                 { key: "undo", disabled: !canUndo, icon: <Undo2 className="size-4" />, label: <MenuLabel text={t("canvas.undo")} shortcut="⌘ Z" />, onClick: onUndo },
                                 { key: "redo", disabled: !canRedo, icon: <Redo2 className="size-4" />, label: <MenuLabel text={t("canvas.redo")} shortcut="⌘ ⇧ Z / ⌘ Y" />, onClick: onRedo },
                                 { type: "divider" },
@@ -314,10 +308,6 @@ function MenuLabel({ text, shortcut }: { text: string; shortcut: string }) {
             <span className="text-xs opacity-45">{shortcut}</span>
         </span>
     );
-}
-
-function MenuCheck({ active }: { active: boolean }) {
-    return <Check className={`size-4 ${active ? "" : "opacity-0"}`} />;
 }
 
 function AccountMenu({ onOpenPlugins, onOpenShortcuts }: { onOpenPlugins: () => void; onOpenShortcuts: () => void }) {

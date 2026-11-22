@@ -1,24 +1,14 @@
 import { create } from "zustand";
 
-export type CanvasViewMode = "canvas" | "production";
-
-const MODE_KEY = "infinite-canvas:canvas-view-mode";
-
-function initialMode(): CanvasViewMode {
-    if (typeof window === "undefined") return "canvas";
-    const stored = localStorage.getItem(MODE_KEY);
-    return stored === "production" ? stored : "canvas";
-}
+export type CanvasViewMode = "canvas";
 
 type CanvasViewStore = {
     mode: CanvasViewMode;
     setMode: (mode: CanvasViewMode) => void;
 };
 
+/** 画布视图模式：生产工作台已改为右侧抽屉，画布始终可见。 */
 export const useCanvasViewStore = create<CanvasViewStore>((set) => ({
-    mode: initialMode(),
-    setMode: (mode) => {
-        if (typeof window !== "undefined") localStorage.setItem(MODE_KEY, mode);
-        set({ mode });
-    },
+    mode: "canvas",
+    setMode: (mode) => set({ mode }),
 }));

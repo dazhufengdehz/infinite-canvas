@@ -10,7 +10,7 @@ import { generateRandomSeed, validateVideoToolInputs } from "@/services/api/comf
 import { requestAudioGeneration, storeGeneratedAudio } from "@/services/api/audio";
 import { requestVideoGeneration, storeGeneratedVideo } from "@/services/api/video";
 import { getModelProfile, resolveModelIdFromWorkflowId } from "@/services/api/models";
-import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { defaultConfig, findWorkflowById, getDefaultComfyWorkflowItems, getDefaultWorkflow, inpaintModelOptions, resolveModelChannel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
 import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
 import { addStoredProjectAsset, readProjectAssets, readProjectBundle, saveStoredProjectAssets } from "@/services/project-storage";
@@ -69,7 +69,6 @@ import { planProductionNodes, planVoiceConnections, productionVariantKey } from 
 import { assetVariants, formatH3Prompt, listShots, mergeAssetH3, validateShot } from "@/lib/production/production-model";
 import { orderAssetShotConnections, syncShotReferencesFromCanvas } from "@/lib/production/production-connections";
 import { useProductionStore } from "@/stores/canvas/use-production-store";
-import { useCanvasViewStore } from "@/stores/use-canvas-view-store";
 import { failCanvasGeneration, settleCanvasGeneration } from "@/lib/canvas/canvas-generation-settlement";
 import {
     calculateGroupBoundsForNodes,
@@ -140,6 +139,7 @@ import {
     type SelectionBox,
     type ViewportTransform,
     type ProductionState,
+    type ScriptShot,
 } from "@/types/canvas";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio } from "@/types/media";
@@ -303,14 +303,13 @@ function InfiniteCanvasPage() {
     const currentCanvas = useCanvasStore((state) => (state.activeProject?.id === projectId && (!canvasId || state.activeCanvas?.id === canvasId) ? state.activeCanvas : null));
     const projectCanvases = useCanvasStore((state) => (state.activeProject?.id === projectId ? state.canvases : EMPTY_CANVAS_SUMMARIES));
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
-    const viewMode = useCanvasViewStore((state) => state.mode);
 
     const productionData = useProductionStore((state) => state.data);
     const productionProjectId = useProductionStore((state) => state.projectId);
     const productionLoading = useProductionStore((state) => state.loading);
     useEffect(() => {
-        if (viewMode === "production" && projectId) void useProductionStore.getState().load(projectId, currentCanvas?.id || canvasId);
-    }, [viewMode, projectId, currentCanvas?.id, canvasId]);
+        if (projectId) void useProductionStore.getState().load(projectId, currentCanvas?.id || canvasId);
+    }, [projectId, currentCanvas?.id, canvasId]);
     const [nodes, setNodes] = useState<CanvasNodeData[]>([]);
     const [connections, setConnections] = useState<CanvasConnection[]>([]);
     const [chatSessions, setChatSessions] = useState<CanvasAssistantSession[]>([]);
@@ -969,13 +968,26 @@ function InfiniteCanvasPage() {
         const center = getCanvasCenter();
         const layout = planProductionNodes(source, center);
         const activeChannel = (config.channelId ? config.channels?.find((item) => item.id === config.channelId) : undefined) || config.channels?.[0];
-        const h3Workflow = getDefaultWorkflow(activeChannel, "omniVideo");
+        // 批量设置可覆盖镜头工作流，否则用渠道默认的 MiniMax H3 全能参考视频工作流。
+        const shotWorkflowId = source.batch?.shotWorkflowId;
+        const h3Workflow = shotWorkflowId
+            ? findWorkflowById(config, shotWorkflowId)
+            : getDefaultWorkflow(activeChannel, "omniVideo");
         const h3ModelId = resolveModelIdFromWorkflowId(h3Workflow?.id);
         const h3Binding = h3Workflow && h3ModelId ? { workflowId: h3Workflow.id, modelId: h3ModelId, videoMode: "omni" as const } : null;
         if (layout.nodes.some((plan) => plan.h3) && !h3Binding) {
             message.error(t("canvas.script.h3Missing"));
             return new Map<string, string>();
         }
+        // 批量设置可覆盖资产图片工作流。
+        const assetWorkflowId = source.batch?.assetWorkflowId;
+        const assetBinding = assetWorkflowId
+            ? (() => {
+                  const workflow = findWorkflowById(config, assetWorkflowId);
+                  const modelId = workflow ? resolveModelIdFromWorkflowId(workflow.id) : "";
+                  return workflow && modelId ? { workflowId: workflow.id, modelId } : {};
+              })()
+            : {};
         const existing = new Map<string, CanvasNodeData>();
         nodesRef.current.forEach((node) => {
             const key = node.metadata?.scriptKey;
@@ -987,7 +999,7 @@ function InfiniteCanvasPage() {
         const ids = new Map<string, string>();
         const created: string[] = [];
         for (const plan of layout.nodes) {
-            const binding = plan.h3 ? h3Binding || {} : {};
+            const binding = plan.h3 ? h3Binding || {} : plan.workflowId ? assetBinding : {};
             const current = existing.get(plan.key);
             if (current) {
                 const index = next.findIndex((node) => node.id === current.id);
@@ -995,7 +1007,8 @@ function InfiniteCanvasPage() {
                 const generationChanged =
                     (plan.prompt !== undefined && current.metadata?.prompt !== plan.prompt) ||
                     (plan.seconds !== undefined && current.metadata?.seconds !== plan.seconds) ||
-                    (plan.size !== undefined && current.metadata?.size !== plan.size);
+                    (plan.size !== undefined && current.metadata?.size !== plan.size) ||
+                    (plan.workflowId !== undefined && current.metadata?.workflowId !== plan.workflowId);
                 next[index] = {
                     ...current,
                     title: plan.title,
@@ -1006,6 +1019,7 @@ function InfiniteCanvasPage() {
                         ...(plan.prompt !== undefined ? { prompt: plan.prompt } : {}),
                         ...(plan.seconds !== undefined ? { seconds: plan.seconds } : {}),
                         ...(plan.size !== undefined ? { size: plan.size } : {}),
+                        ...(plan.seed !== undefined ? { seed: plan.seed } : {}),
                         ...(generationChanged ? { content: "", storageKey: "", status: NODE_STATUS_IDLE, errorDetails: undefined } : {}),
                         scriptKey: plan.key,
                     },
@@ -1023,6 +1037,7 @@ function InfiniteCanvasPage() {
                     ...(plan.prompt !== undefined ? { prompt: plan.prompt } : {}),
                     ...(plan.seconds !== undefined ? { seconds: plan.seconds } : {}),
                     ...(plan.size !== undefined ? { size: plan.size } : {}),
+                    ...(plan.seed !== undefined ? { seed: plan.seed } : {}),
                     scriptKey: plan.key,
                 },
                 plan.title,
@@ -1131,12 +1146,19 @@ function InfiniteCanvasPage() {
         if (!data) return;
         const shots = listShots(data);
         const assets = data.assets;
+        // 上一镜头按集内顺序取，跨集不继承站位。
+        const previousByShot = new Map<string, ScriptShot>();
+        data.episodes.forEach((episode) => {
+            episode.shots.forEach((shot, index) => {
+                if (index > 0) previousByShot.set(shot.id, episode.shots[index - 1]);
+            });
+        });
         const next = nodesRef.current.map((node) => {
             const shotId = node.metadata?.scriptKey?.startsWith("shot:") ? node.metadata.scriptKey.slice("shot:".length) : null;
             if (!shotId) return node;
             const shot = shots.find((item) => item.id === shotId);
             if (!shot) return node;
-            const prompt = formatH3Prompt(mergeAssetH3(shot, assets));
+            const prompt = formatH3Prompt(mergeAssetH3(shot, assets, { previous: previousByShot.get(shotId), options: data.options }));
             if (node.metadata?.prompt === prompt) return node;
             return {
                 ...node,
@@ -1179,6 +1201,8 @@ function InfiniteCanvasPage() {
             openConfigDialog(true);
             return;
         }
+        // 批量设置可能改过工作流与参数，先同步一次画布节点再生成。
+        syncStoredProduction();
         if (options?.resetCancel !== false) scriptBatchCancelRef.current = false;
         const phase = options?.phase || "";
         const publish = (done: number, failed: number, running: boolean) => setScriptBatch({ total: keys.length, done, failed, running, phase });
@@ -1195,7 +1219,7 @@ function InfiniteCanvasPage() {
             if (key.startsWith("shot:")) {
                 const data = useProductionStore.getState().data;
                 const shot = data ? listShots(data).find((item) => item.key === key) : undefined;
-                const errors = shot && data ? validateShot(shot, data.assets, data.options.orientation) : [t("canvas.production.error.shotNotFound")];
+                const errors = shot && data ? validateShot(shot, data.assets, data.options.orientation, data.options) : [t("canvas.production.error.shotNotFound")];
                 if (shot) {
                     const expected: Record<"image" | "video" | "audio", string[]> = { image: [], video: [], audio: [] };
                     // 图片引用是形态节点；视频与音频引用是用户自己上传并连线的媒体节点。
@@ -1251,7 +1275,7 @@ function InfiniteCanvasPage() {
             publish(index + 1, failed, true);
         }
         publish(keys.length, failed, false);
-    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog, t]);
+    }, [effectiveConfig, isAiConfigReady, message, openConfigDialog, syncStoredProduction, t]);
 
     const stopProductionGeneration = useCallback(() => {
         scriptBatchCancelRef.current = true;
@@ -2868,7 +2892,6 @@ function InfiniteCanvasPage() {
 
     useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
-            if (viewMode === "production") return;
             const target = event.target instanceof Element ? event.target : null;
             if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement || target?.closest("[contenteditable='true'],[data-canvas-no-zoom],[data-canvas-shortcuts-ignore]")) return;
 
@@ -2942,7 +2965,7 @@ function InfiniteCanvasPage() {
 
         window.addEventListener("keydown", handleKeyDown);
         return () => window.removeEventListener("keydown", handleKeyDown);
-    }, [copySelectedNodes, deleteConnection, deleteNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas, viewMode]);
+    }, [copySelectedNodes, deleteConnection, deleteNodes, redoCanvas, selectedConnectionId, setConnecting, undoCanvas]);
 
     const handleConnectStart = useCallback(
         (event: ReactMouseEvent | React.PointerEvent, nodeId: string, handleType: "source" | "target") => {
@@ -5499,17 +5522,15 @@ function InfiniteCanvasPage() {
 
     return (
         <main className="flex h-full min-h-0 overflow-hidden" style={{ background: theme.canvas.background, color: theme.node.text }}>
-            {viewMode === "canvas" ? (
-                <CanvasSidePanel
-                    nodes={nodes}
-                    selectedNodeIds={selectedNodeIds}
-                    onFocusNode={focusNode}
-                    onPreviewNode={setPreviewNodeId}
-                    onInsertAsset={handleAssetInsert}
-                    onTitleChange={handleNodeTitleChange}
-                    projectTitle={currentProject?.title}
-                />
-            ) : null}
+            <CanvasSidePanel
+                nodes={nodes}
+                selectedNodeIds={selectedNodeIds}
+                onFocusNode={focusNode}
+                onPreviewNode={setPreviewNodeId}
+                onInsertAsset={handleAssetInsert}
+                onTitleChange={handleNodeTitleChange}
+                projectTitle={currentProject?.title}
+            />
             <section className="relative min-w-0 flex-1 overflow-hidden">
                 <CanvasTopBar
                     title={currentProject?.title || t("canvas.projectPage.untitledCanvas")}
@@ -5780,29 +5801,23 @@ function InfiniteCanvasPage() {
                     }}
                 </CanvasScene>
 
-                {viewMode === "production" ? (
-                    <ProductionWorkspace
-                        projectId={projectId || ""}
-                        canvasId={currentCanvas?.id || canvasId}
-                        title={currentProject?.title || ""}
-                        nodes={nodes}
-                        batch={scriptBatch}
-                        onSync={() => void syncStoredProduction()}
-                        onGenerate={(keys) => void runProductionGeneration(keys)}
-                        onProduce={() => void runProductionToFilm()}
-                        onStop={stopProductionGeneration}
-                        onUploadAsset={replaceProductionAssetMedia}
-                        onUploadVoice={uploadProductionVoice}
-                        onSetShotReferences={applyShotReferencesToCanvas}
-                        orphanNodeCount={orphanProductionNodeCount}
-                        onCleanupOrphans={cleanupOrphanProductionNodes}
-                        onLocate={(key) => {
-                            locateScriptNode(key);
-                            useCanvasViewStore.getState().setMode("canvas");
-                        }}
-                        onOpenCanvas={() => useCanvasViewStore.getState().setMode("canvas")}
-                    />
-                ) : null}
+                <ProductionWorkspace
+                    projectId={projectId || ""}
+                    canvasId={currentCanvas?.id || canvasId}
+                    title={currentProject?.title || ""}
+                    nodes={nodes}
+                    batch={scriptBatch}
+                    onSync={() => void syncStoredProduction()}
+                    onGenerate={(keys) => void runProductionGeneration(keys)}
+                    onProduce={() => void runProductionToFilm()}
+                    onStop={stopProductionGeneration}
+                    onUploadAsset={replaceProductionAssetMedia}
+                    onUploadVoice={uploadProductionVoice}
+                    onSetShotReferences={applyShotReferencesToCanvas}
+                    orphanNodeCount={orphanProductionNodeCount}
+                    onCleanupOrphans={cleanupOrphanProductionNodes}
+                    onLocate={(key) => locateScriptNode(key)}
+                />
 
                 {isViewer ? (
                     <div
@@ -5823,7 +5838,7 @@ function InfiniteCanvasPage() {
                         <span className="h-4 w-px bg-stone-300 dark:bg-stone-700" />
                         <span className="text-xs opacity-60">{t("canvas.collabWatchMode.tip")}</span>
                     </div>
-                ) : viewMode === "canvas" ? (
+                ) : (
                     <CanvasToolbar
                         selectedCount={selectedNodeIds.size}
                         interruptedSelectedCount={selectedInterruptedNodes.length}

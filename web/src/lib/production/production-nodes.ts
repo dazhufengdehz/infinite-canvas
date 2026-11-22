@@ -1,4 +1,4 @@
-import { CanvasNodeType, type ProductionState, type ScriptAssetKind } from "@/types/canvas";
+import { CanvasNodeType, type ProductionState, type ScriptAssetKind, type ScriptShot } from "@/types/canvas";
 import { t } from "@/i18n";
 import {
     assetVariants,
@@ -26,6 +26,10 @@ export type ProductionNodePlan = {
     size?: string;
     /** 镜头节点：需要绑定内置 MiniMax H3 全能参考视频工作流。 */
     h3?: boolean;
+    /** 显式指定的工作流 ID：来自批量生成设置，优先于渠道默认。 */
+    workflowId?: string;
+    /** 固定种子；-1 或缺省表示随机。 */
+    seed?: number;
 };
 
 export type ProductionConnectionPlan = { fromKey: string; toKey: string };
@@ -74,6 +78,7 @@ export function planProductionNodes(production: ProductionState, center: { x: nu
 
     // 每个资产形态一个图片节点；无形态时用资产自身作为默认形态节点。
     const assetX = baseX + COLUMN;
+    const batch = production.batch;
     const variants = production.assets.flatMap((asset) => assetVariants(asset).map((variant) => ({ asset, variant })));
     variants.forEach(({ asset, variant }, index) => {
         nodes.push({
@@ -84,20 +89,33 @@ export function planProductionNodes(production: ProductionState, center: { x: nu
             position: { x: assetX + (index % 3) * COLUMN, y: baseY + Math.floor(index / 3) * ROW },
             width: 320,
             height: 240,
+            ...(batch.assetWorkflowId ? { workflowId: batch.assetWorkflowId } : {}),
+            ...(batch.assetSize ? { size: batch.assetSize } : {}),
+            ...(batch.seed >= 0 ? { seed: batch.seed } : {}),
         });
     });
 
     const shotX = assetX + 3 * COLUMN;
     const shots = production.episodes.flatMap((episode) => episode.shots);
+    // 上一镜头按集内顺序取，跨集不继承站位。
+    const previousByShot = new Map<string, ScriptShot>();
+    production.episodes.forEach((episode) => {
+        episode.shots.forEach((shot, index) => {
+            if (index > 0) previousByShot.set(shot.id, episode.shots[index - 1]);
+        });
+    });
     shots.forEach((shot, index) => {
+        const previous = previousByShot.get(shot.id);
         nodes.push({
             key: productionShotKey(shot.id),
             type: CanvasNodeType.Video,
             title: shot.title,
-            prompt: formatH3Prompt(mergeAssetH3(shot, production.assets)),
-            seconds: String(shot.duration),
+            prompt: formatH3Prompt(mergeAssetH3(shot, production.assets, { previous, options: production.options })),
+            seconds: batch.shotSeconds > 0 ? String(batch.shotSeconds) : String(shot.duration),
             size: shot.size,
             h3: true,
+            ...(batch.shotWorkflowId ? { workflowId: batch.shotWorkflowId } : {}),
+            ...(batch.seed >= 0 ? { seed: batch.seed } : {}),
             position: { x: shotX + (index % 2) * COLUMN, y: baseY + Math.floor(index / 2) * ROW },
             width: 320,
             height: 240,

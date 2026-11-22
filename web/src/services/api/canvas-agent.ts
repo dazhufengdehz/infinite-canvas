@@ -165,7 +165,7 @@ export async function fetchOpenAiModels(endpoint: string, token: string) {
 }
 
 export type ScriptStage = "setting" | "outline" | "script" | "assets" | "storyboard" | "shot" | "condense";
-export type ScriptAdaptOptions = { episodes?: number; duration?: number; genre?: string; audience?: string; orientation?: "vertical" | "horizontal"; keep?: string; change?: string };
+export type ScriptAdaptOptions = { episodes?: number; duration?: number; genre?: string; audience?: string; orientation?: "vertical" | "horizontal"; keep?: string; change?: string; subtitle?: boolean; bgm?: boolean };
 export type ScriptAdaptRequest = { stage: ScriptStage; source: string; options?: ScriptAdaptOptions; setting?: string; outline?: string; script?: string; assets?: string; shot?: string; preamble?: string; feedback?: string; episode?: number; episodeTotal?: number; episodeOutline?: string };
 
 export async function generateScriptStage(endpoint: string, token: string, payload: ScriptAdaptRequest) {

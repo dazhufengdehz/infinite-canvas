@@ -1,7 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { App, Button, Empty, Input, Modal, Popconfirm, Segmented, Select, Space, Spin, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { BookOpen, Bot, Check, ChevronRight, Copy, Download, Eye, FileText, Frame, Image as ImageIcon, Images, ListChecks, Moon, Music, Music2, Plus, Search, Settings2, Square, Sun, Trash2, Type, Video } from "lucide-react";
+import { BookOpen, Bot, Check, ChevronRight, Clapperboard, Copy, Download, Eye, FileText, Frame, Image as ImageIcon, Images, ListChecks, Moon, Music, Music2, Plus, Search, Settings2, Square, Sun, Trash2, Type, Video } from "lucide-react";
 import { motion } from "motion/react";
 import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
@@ -20,6 +20,7 @@ import { uploadImage } from "@/services/image-storage";
 import { useAssetStore, type Asset, type AssetKind } from "@/stores/use-asset-store";
 import { useAgentStore } from "@/stores/use-agent-store";
 import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
+import { useProductionPanelStore } from "@/stores/use-production-panel-store";
 import { CANVAS_SIDE_PANEL_MAX_WIDTH, CANVAS_SIDE_PANEL_MIN_WIDTH, CANVAS_SIDE_PANEL_MOTION_MS, useCanvasSidePanelStore } from "@/stores/use-canvas-side-panel-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
@@ -67,6 +68,8 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
     const closePanel = useCanvasSidePanelStore((state) => state.closePanel);
     const agentPanelOpen = useAgentStore((state) => state.panelOpen);
     const toggleAgentPanel = useAgentStore((state) => state.togglePanel);
+    const productionPanelOpen = useProductionPanelStore((state) => state.panelOpen);
+    const toggleProductionPanel = useProductionPanelStore((state) => state.togglePanel);
     const [resizing, setResizing] = useState(false);
 
     const startResize = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -121,6 +124,7 @@ export function CanvasSidePanel({ nodes, selectedNodeIds, onFocusNode, onPreview
                 ))}
                 <span className="my-0.5 h-px w-6" style={{ background: theme.hairline.base }} />
                 <RailButton icon={Bot} label={t(agentPanelOpen ? "topNav.closeAgent" : "topNav.openAgent")} active={agentPanelOpen} theme={theme} onClick={toggleAgentPanel} />
+                <RailButton icon={Clapperboard} label={t("canvas.production.title")} active={productionPanelOpen} theme={theme} onClick={toggleProductionPanel} />
                 <RailButton icon={colorTheme === "dark" ? Sun : Moon} label={t("theme.toggle")} theme={theme} onClick={() => setColorTheme(colorTheme === "dark" ? "light" : "dark")} />
             </div>
             {panelMounted ? (

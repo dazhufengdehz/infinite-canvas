@@ -584,6 +584,47 @@ export default {
             "shotHint": "Reference order defines the Picture / Video / Audio numbering in the H3 prompt.",
             "generateBlocked": "Shot validation failed, fix the highlighted fields first",
             "noNode": "Not synced to canvas",
+            "resize": "Resize width",
+            "subtitle": "Subtitles",
+            "bgm": "BGM",
+            "batchSettings": "Batch generation settings",
+            "batch": {
+                "assetWorkflow": "Asset image workflow",
+                "shotWorkflow": "Shot video workflow",
+                "assetSize": "Asset image size",
+                "shotSeconds": "Shot duration (s)",
+                "seed": "Fixed seed",
+                "useNode": "Follow node",
+                "useDefault": "Channel default",
+                "hint": "Batch settings override the canvas node default workflow and parameters; switching workflows clears generated content and requires regenerating."
+            },
+            "blockingTitle": "Spatial blocking",
+            "blockingContinuous": "Continue from previous shot",
+            "blockingHint": "Describe where each character stands in frame. With “Continue from previous shot” enabled the prompt locks the previous blocking so consecutive shots stay spatially consistent.",
+            "blockingPlaceholder": "e.g. left of frame, back to camera",
+            "blockingNoCharacter": "This shot has no character reference yet; add one to set blocking.",
+            "nextStep": {
+                "title": "Next step",
+                "generateSetting": "Next: generate story setting",
+                "generateOutline": "Next: generate episode outline",
+                "generateScript": "Next: write this episode",
+                "generateAssets": "Next: generate all assets",
+                "generateStoryboard": "Next: generate storyboard",
+                "generateShots": "Next: generate all shots"
+            },
+            "blocking": {
+                "emptySource": "Paste the source novel first",
+                "emptySetting": "Generate the story setting first",
+                "noOutline": "Generate the episode outline first",
+                "synopsisMissing": "{{count}} episodes still have no synopsis",
+                "noAssets": "Generate the assets first",
+                "scriptMissing": "{{count}} episodes still have no screenplay",
+                "storyboardMissing": "{{count}} episodes still have no storyboard",
+                "noShots": "Generate the storyboard first"
+            },
+            "stageProgress": {
+                "autoStage": "Automatically detected current stage: “{{stage}}”"
+            },
             "stage": {
                 "source": "Source",
                 "setting": "Setting",
@@ -641,6 +682,11 @@ export default {
                 "refCountMismatch": "Actual {{label}} reference count ({{actual}}) does not match the shot contract ({{expected}})",
                 "refOrderMismatch": "Actual {{label}} reference order does not match the shot contract",
                 "refCheckFailed": "Reference validation failed"
+            },
+            "warning": {
+                "blockingConflict": "Blocking conflict: the previous shot had “{{position}}” but this shot uses “{{next}}”; enable “Continue from previous shot” if they should match",
+                "carryOverMissing": "Missing carry-over: “{{name}}” must stay consistent with the previous shot but is not referenced here",
+                "variantDrift": "Variant drift: “{{name}}” uses a different variant in adjacent shots, which may break visual consistency"
             },
             "referenceLabel": {
                 "image": "image",

@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { t } from "@/i18n";
 import { getDslMiddleSize, MINIMAX_H3_SIZES } from "@/services/api/models/video-minimax-h3-omni";
 import type {
+    ProductionBatchConfig,
     ProductionChapter,
     ProductionEpisode,
     ProductionOptions,
@@ -12,6 +13,8 @@ import type {
     ScriptAssetVariant,
     ScriptH3Prompt,
     ScriptShot,
+    ShotBlocking,
+    ShotConsistency,
 } from "@/types/canvas";
 
 export const PRODUCTION_ASSET_KINDS: ScriptAssetKind[] = ["character", "scene", "prop"];
@@ -134,12 +137,16 @@ export function createProductionShot(orientation?: ProductionOptions["orientatio
     };
 }
 
-export function createProductionEpisode(number: number, title = ""): ProductionEpisode {
-    return { id: nanoid(), number, title: title || `第${number}集`, synopsis: "", script: "", shots: [] };
+export function createProductionEpisode(number: number, title = "", synopsis = ""): ProductionEpisode {
+    return { id: nanoid(), number, title: title || `第${number}集`, synopsis, script: "", shots: [] };
 }
 
 export function defaultProductionOptions(): ProductionOptions {
-    return { episodes: 12, duration: 60, genre: "", audience: "", orientation: "vertical" };
+    return { episodes: 12, duration: 60, genre: "", audience: "", orientation: "vertical", subtitle: true, bgm: true };
+}
+
+export function defaultProductionBatch(): ProductionBatchConfig {
+    return { assetWorkflowId: "", shotWorkflowId: "", assetSize: "", shotSeconds: 0, seed: -1 };
 }
 
 export function createEmptyProduction(canvasId = "", options?: Partial<ProductionOptions>): ProductionState {
@@ -152,6 +159,7 @@ export function createEmptyProduction(canvasId = "", options?: Partial<Productio
         setting: "",
         assets: [],
         episodes: [],
+        batch: defaultProductionBatch(),
     };
 }
 
@@ -241,7 +249,7 @@ function assetCoverageTags(bucket: "image" | "video" | "audio", index: number) {
  * 镜头优先：镜头文本里已经写过该参考对象的字段保持原样，
  * 资产只补充镜头尚未覆盖的部分，因此每个参考对象都会保留自己的绑定。
  */
-export function mergeAssetH3(shot: ScriptShot, assets: ScriptAsset[]): ScriptH3Prompt {
+export function mergeAssetH3(shot: ScriptShot, assets: ScriptAsset[], context?: { previous?: ScriptShot; options?: Pick<ProductionOptions, "subtitle" | "bgm"> }): ScriptH3Prompt {
     const buckets = [
         { bucket: "image" as const, ids: shot.imageVariantIds },
         { bucket: "video" as const, ids: shot.videoAssetIds },
@@ -283,13 +291,37 @@ export function mergeAssetH3(shot: ScriptShot, assets: ScriptAsset[]): ScriptH3P
         if (own.includes(tag)) continue;
         merged[field] = [own, tag].filter(Boolean).join("\n\n");
     }
-    return merged;
+    // 站位锁定：连续镜头把上一镜头的位置声明注入本镜头，保证跨镜头空间关系连续。
+    const blocking = shot.blocking?.continuous ? deriveShotBlocking(shot, context?.previous) : shot.blocking;
+    if (blocking) {
+        const indexById = new Map(shot.imageVariantIds.map((id, index) => [id, index + 1]));
+        const lines: string[] = [];
+        for (const [id, position] of Object.entries(blocking.positions)) {
+            const number = indexById.get(id);
+            if (!number) continue;
+            lines.push(`<Subject ${number}> 站位：${position}`);
+        }
+        if (lines.length) {
+            const own = merged.subject_definitions?.trim() ?? "";
+            merged.subject_definitions = [own, ...lines].filter(Boolean).join("\n");
+            const retention = merged.retention_analysis?.trim() ?? "";
+            const keep = lines.map((line) => `${line.replace(" 站位：", " 保持与上一镜头一致的站位：")}`).join("\n");
+            merged.retention_analysis = [retention, keep].filter(Boolean).join("\n");
+        }
+    }
+    // 一致性备注写入保留段，确保跨镜头需要保留的特征进入提示词。
+    const notes = shot.consistency?.notes?.trim();
+    if (notes) {
+        const retention = merged.retention_analysis?.trim() ?? "";
+        merged.retention_analysis = [retention, notes].filter(Boolean).join("\n");
+    }
+    return context?.options ? applyMediaOptions(merged, context.options) : merged;
 }
 
 
 /** 镜头用于生成的最终 H3 文本：镜头内容优先，资产贡献补齐空字段。 */
-export function resolveShotH3(shot: ScriptShot, assets: ScriptAsset[]) {
-    return mergeAssetH3(shot, assets);
+export function resolveShotH3(shot: ScriptShot, assets: ScriptAsset[], context?: { previous?: ScriptShot; options?: Pick<ProductionOptions, "subtitle" | "bgm"> }) {
+    return mergeAssetH3(shot, assets, context);
 }
 
 
@@ -306,7 +338,12 @@ function checkTags(errors: string[], prompt: string, tag: string, count: number)
 }
 
 /** 校验镜头参数、六段 H3 文本与有序引用；媒体是否就绪由画布节点另行检查。 */
-export function validateShot(shot: ScriptShot, assets: ScriptAsset[], orientation?: ProductionOptions["orientation"]) {
+export function validateShot(
+    shot: ScriptShot,
+    assets: ScriptAsset[],
+    orientation?: ProductionOptions["orientation"],
+    options?: Pick<ProductionOptions, "subtitle" | "bgm">,
+) {
     const errors: string[] = [];
     if (!shot.title.trim()) errors.push(t("canvas.production.error.titleEmpty"));
     if (!Number.isInteger(shot.duration) || shot.duration < PRODUCTION_SHOT_DURATION.min || shot.duration > PRODUCTION_SHOT_DURATION.max) {
@@ -319,8 +356,12 @@ export function validateShot(shot: ScriptShot, assets: ScriptAsset[], orientatio
         if (orientation === "vertical" && !isVertical) errors.push(t("canvas.production.error.sizeVertical", { size: shot.size }));
         if (orientation === "horizontal" && isVertical) errors.push(t("canvas.production.error.sizeHorizontal", { size: shot.size }));
     }
-    const merged = mergeAssetH3(shot, assets);
-    for (const section of PRODUCTION_H3_SECTIONS) if (!merged[section]?.trim()) errors.push(t("canvas.production.error.h3Missing", { section }));
+    const merged = mergeAssetH3(shot, assets, { options });
+    for (const section of PRODUCTION_H3_SECTIONS) {
+        // 关闭 BGM 时配乐段不再必填。
+        if (section === "non_diegetic_music" && options && !options.bgm) continue;
+        if (!merged[section]?.trim()) errors.push(t("canvas.production.error.h3Missing", { section }));
+    }
     // 图片引用必须指向真实存在的形态。
     if (shot.imageVariantIds.length > PRODUCTION_SHOT_LIMITS.image) errors.push(t("canvas.production.error.refLimit", { label: t("canvas.production.referenceLabel.image"), count: shot.imageVariantIds.length, limit: PRODUCTION_SHOT_LIMITS.image }));
     if (new Set(shot.imageVariantIds).size !== shot.imageVariantIds.length) errors.push(t("canvas.production.error.refDuplicate", { label: t("canvas.production.referenceLabel.image") }));
@@ -335,6 +376,50 @@ export function validateShot(shot: ScriptShot, assets: ScriptAsset[], orientatio
     checkTags(errors, prompt, "Video", shot.videoAssetIds.length);
     checkTags(errors, prompt, "Audio", shot.audioAssetIds.length);
     return errors;
+}
+
+/**
+ * 跨镜头一致性检查：只提示不阻断。
+ * 覆盖三类问题：站位冲突、继承资产缺失、同一资产形态漂移。
+ */
+export function validateShotConsistency(shot: ScriptShot, shots: ScriptShot[], assets: ScriptAsset[]) {
+    const warnings: string[] = [];
+    const index = shots.findIndex((item) => item.id === shot.id);
+    const previous = index > 0 ? shots[index - 1] : undefined;
+
+    // 站位冲突：相邻镜头同一角色站位描述完全不同且未声明连续。
+    if (previous?.blocking && shot.blocking && !shot.blocking.continuous) {
+        for (const [id, position] of Object.entries(shot.blocking.positions)) {
+            const before = previous.blocking.positions[id];
+            if (before && before !== position) {
+                warnings.push(t("canvas.production.warning.blockingConflict", { position: before, next: position }));
+                break;
+            }
+        }
+    }
+
+    // 继承资产缺失：声明要与上一镜头保持一致的资产没有出现在本镜头引用里。
+    for (const id of shot.consistency?.carryOverAssetIds || []) {
+        if (!shot.imageVariantIds.includes(id)) {
+            const found = findVariant(assets, id);
+            warnings.push(t("canvas.production.warning.carryOverMissing", { name: found?.asset.name || id.slice(0, 6) }));
+        }
+    }
+
+    // 形态漂移：同一资产在相邻镜头被引用了不同形态。
+    if (previous) {
+        const assetOf = (variantId: string) => assets.find((asset) => assetVariants(asset).some((variant) => variant.id === variantId));
+        for (const id of shot.imageVariantIds) {
+            const asset = assetOf(id);
+            if (!asset) continue;
+            const before = previous.imageVariantIds.find((variantId) => assetOf(variantId)?.id === asset.id);
+            if (before && before !== id) {
+                warnings.push(t("canvas.production.warning.variantDrift", { name: asset.name }));
+                break;
+            }
+        }
+    }
+    return warnings;
 }
 
 function parseJson(content: string): Record<string, unknown> {
@@ -404,7 +489,71 @@ function normalizeShot(value: unknown, assets: ScriptAsset[], orientation: Produ
         videoAssetIds: [],
         audioAssetIds: [],
         h3: PRODUCTION_H3_SECTIONS.reduce((acc, section) => ({ ...acc, [section]: String(h3[section] || "").trim() }), {} as ScriptH3Prompt),
+        blocking: parseGeneratedBlocking(raw.blocking, assets),
+        consistency: parseGeneratedConsistency(raw.consistency, assets),
     };
+}
+
+/** 解析站位声明：characterIds 只接受真实存在的角色资产，positions 保留文本。 */
+export function parseGeneratedBlocking(value: unknown, assets: ScriptAsset[]): ShotBlocking | undefined {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    const positions: Record<string, string> = {};
+    const rawPositions = raw.positions && typeof raw.positions === "object" ? (raw.positions as Record<string, unknown>) : {};
+    for (const [key, text] of Object.entries(rawPositions)) {
+        const description = String(text || "").trim();
+        if (!description) continue;
+        const found = findVariant(assets, key) || assets.find((asset) => asset.id === key);
+        if (!found) continue;
+        positions[found.variant ? found.variant.id : found.asset.id] = description;
+    }
+    const characterIds = Object.keys(positions);
+    if (!characterIds.length) return undefined;
+    return { characterIds, positions, continuous: Boolean(raw.continuous) };
+}
+
+/** 解析一致性声明：只保留真实存在的资产 ID。 */
+export function parseGeneratedConsistency(value: unknown, assets: ScriptAsset[]): ShotConsistency | undefined {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    const carryOverAssetIds: string[] = [];
+    const list = Array.isArray(raw.carryOverAssetIds) ? raw.carryOverAssetIds : [];
+    for (const token of list) {
+        const id = String(token || "").trim();
+        if (!id) continue;
+        const found = findVariant(assets, id);
+        if (!found) continue;
+        carryOverAssetIds.push(found.variant.id);
+    }
+    const notes = String(raw.notes || "").trim();
+    if (!carryOverAssetIds.length && !notes) return undefined;
+    return { carryOverAssetIds, notes };
+}
+
+/** 按上一镜头继承站位：连续镜头自动带上上一镜头的位置描述。 */
+export function deriveShotBlocking(shot: ScriptShot, previous?: ScriptShot): ShotBlocking | undefined {
+    if (!previous?.blocking) return shot.blocking;
+    if (!shot.blocking?.continuous) return shot.blocking;
+    const positions = { ...previous.blocking.positions, ...(shot.blocking?.positions || {}) };
+    const characterIds = Array.from(new Set([...previous.blocking.characterIds, ...(shot.blocking?.characterIds || [])]));
+    return { characterIds, positions, continuous: true };
+}
+
+/** 字幕与 BGM 开关收口：关闭时清空台词片段与配乐段。 */
+export function applyMediaOptions(h3: ScriptH3Prompt, options: Pick<ProductionOptions, "subtitle" | "bgm">): ScriptH3Prompt {
+    const next = { ...h3 };
+    if (!options.bgm) next.non_diegetic_music = "";
+    if (!options.subtitle) {
+        next.detailed_description = stripDialogue(next.detailed_description);
+        next.overall_soundscape = stripDialogue(next.overall_soundscape);
+        next.summary = stripDialogue(next.summary);
+    }
+    return next;
+}
+
+/** 去掉 H3 文本里的台词片段（<d>...</d>），用于关闭字幕的场景。 */
+function stripDialogue(text: string) {
+    return text.replace(/<d>[\s\S]*?<\/d>/g, "").trim();
 }
 
 /** 解析资产阶段 JSON，客户端为每个资产与形态分配稳定 ID。 */
@@ -501,6 +650,7 @@ export function normalizeProduction(raw: unknown, canvasId: string): ProductionS
         options: { ...base.options, ...value.options },
         source: { ...base.source, ...value.source },
         setting: value.setting || "",
+        batch: { ...base.batch, ...(value.batch || {}) },
         assets: Array.isArray(value.assets)
             ? value.assets.map((asset) => ({
                   ...asset,
@@ -514,7 +664,13 @@ export function normalizeProduction(raw: unknown, canvasId: string): ProductionS
             ? value.episodes.map((episode) => ({
                   ...createProductionEpisode(episode.number || 1, episode.title || ""),
                   ...episode,
-                  shots: Array.isArray(episode.shots) ? episode.shots : [],
+                  shots: Array.isArray(episode.shots)
+                      ? episode.shots.map((shot) => ({
+                            ...shot,
+                            blocking: shot.blocking && typeof shot.blocking === "object" ? shot.blocking : undefined,
+                            consistency: shot.consistency && typeof shot.consistency === "object" ? shot.consistency : undefined,
+                        }))
+                      : [],
               }))
             : [],
     };

@@ -871,6 +871,16 @@ export function findWorkflow(config: AiConfig, channelId?: string, workflowId?: 
     return list[0];
 }
 
+/** 跨渠道按工作流 ID 查找：批量设置选择的工作流可能不在当前渠道。 */
+export function findWorkflowById(config: AiConfig, workflowId: string): ComfyWorkflowItem | undefined {
+    if (!workflowId) return undefined;
+    for (const channel of config.channels || []) {
+        const found = getChannelWorkflows(channel).find((wf) => wf.id === workflowId);
+        if (found) return found;
+    }
+    return undefined;
+}
+
 export function encodeChannelModel(channelId: string, model: string) {
     return `${channelId}${CHANNEL_MODEL_SEPARATOR}${model.trim()}`;
 }
