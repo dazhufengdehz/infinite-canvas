@@ -747,6 +747,8 @@ export default {
             "cancelRename": "Cancel rename",
             "export": "Export",
             "rename": "Rename",
+            "migrate": "Migrate to folder",
+            "migrateRequired": "Migration required",
             "delete": "Delete",
             "deleteTitle": "Delete projects?",
             "deleteDescription": "This removes {{count}} projects from the list with their canvases and project assets. Global assets are preserved, and folders chosen at creation are not deleted."

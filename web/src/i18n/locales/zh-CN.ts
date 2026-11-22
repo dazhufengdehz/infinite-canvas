@@ -747,6 +747,8 @@ export default {
             "cancelRename": "取消重命名",
             "export": "导出",
             "rename": "重命名",
+            "migrate": "迁移到文件夹",
+            "migrateRequired": "需迁移",
             "delete": "删除",
             "deleteTitle": "删除项目？",
             "deleteDescription": "将从列表中移除 {{count}} 个项目及其画布与项目资产，全局素材不受影响；创建时自选的文件夹不会被删除。"

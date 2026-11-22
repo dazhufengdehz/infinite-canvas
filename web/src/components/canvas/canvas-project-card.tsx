@@ -1,4 +1,4 @@
-import { Check, Download, Pencil, Trash2, X } from "lucide-react";
+import { Check, Download, FolderOpen, Pencil, Trash2, X } from "lucide-react";
 import { Input } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -39,7 +39,10 @@ export function CanvasProjectCard({ project }: { project: CanvasProjectSummary }
                             actions.open();
                         }}
                     >
-                        <h2 className="truncate text-heading font-semibold text-ink">{project.title}</h2>
+                        <span className="flex items-center gap-2">
+                            <h2 className="truncate text-heading font-semibold text-ink">{project.title}</h2>
+                            {project.migrateRequired ? <span className="shrink-0 rounded-full border border-hairline px-2 py-0.5 text-[11px] text-ink-soft">{t("canvas.project.migrateRequired")}</span> : null}
+                        </span>
                         <p className="mt-3 text-meta leading-5 text-ink-soft">
                             {t("canvas.project.stats", { canvases: project.canvasCount, nodes: project.nodeCount, connections: project.connectionCount, assets: project.assetCount })}
                         </p>
@@ -62,6 +65,11 @@ export function CanvasProjectCard({ project }: { project: CanvasProjectSummary }
                         </>
                     ) : (
                         <>
+                            {project.migrateRequired ? (
+                                <IconButton size="sm" onClick={actions.open} aria-label={t("canvas.project.migrate")}>
+                                    <FolderOpen />
+                                </IconButton>
+                            ) : null}
                             <IconButton size="sm" onClick={() => void actions.exportProject()} aria-label={t("canvas.project.export")}>
                                 <Download />
                             </IconButton>

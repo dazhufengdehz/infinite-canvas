@@ -1,4 +1,4 @@
-import { Check, Download, Pencil, Trash2, X } from "lucide-react";
+import { Check, Download, FolderOpen, Pencil, Trash2, X } from "lucide-react";
 import { Input } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -43,7 +43,10 @@ export function CanvasProjectRow({ project }: { project: CanvasProjectSummary })
                             actions.open();
                         }}
                     >
-                        <span className="block truncate text-heading font-semibold text-ink">{project.title}</span>
+                        <span className="flex items-center gap-2">
+                            <span className="truncate text-heading font-semibold text-ink">{project.title}</span>
+                            {project.migrateRequired ? <span className="shrink-0 rounded-full border border-hairline px-2 py-0.5 text-[11px] text-ink-soft">{t("canvas.project.migrateRequired")}</span> : null}
+                        </span>
                         <span className="mt-1 block truncate text-meta text-ink-faint md:hidden">
                             {t("canvas.project.stats", { canvases: project.canvasCount, nodes: project.nodeCount, connections: project.connectionCount, assets: project.assetCount })}
                         </span>
@@ -68,6 +71,11 @@ export function CanvasProjectRow({ project }: { project: CanvasProjectSummary })
                     </>
                 ) : (
                     <>
+                        {project.migrateRequired ? (
+                            <IconButton size="sm" onClick={() => void actions.open()} aria-label={t("canvas.project.migrate")}>
+                                <FolderOpen />
+                            </IconButton>
+                        ) : null}
                         <IconButton size="sm" onClick={() => void actions.exportProject()} aria-label={t("canvas.project.export")}>
                             <Download />
                         </IconButton>
