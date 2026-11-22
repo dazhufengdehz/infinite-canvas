@@ -14,6 +14,7 @@ import { defaultConfig, findWorkflow, getDefaultComfyWorkflowItems, getDefaultWo
 import { adoptGeneratedImage, copyImageFile, importImageFile, uploadImage } from "@/services/image-storage";
 import { acquireMediaUrl, copyMediaFile, importMediaFile, releaseMediaUrl, unloadMediaElement, uploadMediaFile } from "@/services/file-storage";
 import { addStoredProjectAsset, readProjectAssets, readProjectBundle, saveStoredProjectAssets } from "@/services/project-storage";
+import { flushStorageServer } from "@/services/api/storage";
 import { assetFromCanvasNode, copyAssetToOwner, resolveAssetMedia, toAssetDraft } from "@/services/project-assets";
 import { nanoid } from "nanoid";
 import { readImageMeta } from "@/lib/image-utils";
@@ -304,6 +305,8 @@ function InfiniteCanvasPage() {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const viewMode = useCanvasViewStore((state) => state.mode);
 
+    const productionData = useProductionStore((state) => state.data);
+    const productionProjectId = useProductionStore((state) => state.projectId);
     useEffect(() => {
         if (viewMode === "production" && projectId) void useProductionStore.getState().load(projectId, currentCanvas?.id || canvasId);
     }, [viewMode, projectId, currentCanvas?.id, canvasId]);
@@ -785,7 +788,10 @@ function InfiniteCanvasPage() {
     }, [message, storageError]);
 
     useEffect(() => {
-        const flush = () => void flushProject();
+        const flush = () => {
+            void useProductionStore.getState().flush();
+            void flushProject();
+        };
         const flushHidden = () => {
             if (document.visibilityState === "hidden") flush();
         };
@@ -812,8 +818,11 @@ function InfiniteCanvasPage() {
                     closing = true;
                     event.preventDefault();
                     try {
+                        await useProductionStore.getState().flush();
                         await flushProject();
                         if (useCanvasStore.getState().hasPendingSaves()) throw new Error(useCanvasStore.getState().storageError || t("canvas.saveStatus.failed"));
+                        if (useProductionStore.getState().error) throw new Error(useProductionStore.getState().error);
+                        await flushStorageServer().catch(() => {});
                         await appWindow.destroy();
                     } catch (error) {
                         closing = false;
@@ -1062,6 +1071,19 @@ function InfiniteCanvasPage() {
         const data = useProductionStore.getState().data;
         return data ? syncProductionNodes(data) : new Map<string, string>();
     }, [syncProductionNodes]);
+
+    // 打开项目后以生产数据为准对齐一次画布，只补建/更新，不删除任何节点。
+    const productionAlignedRef = useRef("");
+    useEffect(() => {
+        if (!projectLoaded || !productionData || productionProjectId !== projectId) return;
+        if (productionAlignedRef.current === projectId) return;
+        productionAlignedRef.current = projectId;
+        try {
+            syncStoredProduction();
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("canvas.saveStatus.failed"));
+        }
+    }, [message, productionData, productionProjectId, projectId, projectLoaded, syncStoredProduction, t]);
 
     /** 画布连线是引用的唯一权威：把画布上的 asset → shot 连线反写回生产态的镜头引用数组。 */
     const syncProductionRefsFromCanvas = useCallback(() => {

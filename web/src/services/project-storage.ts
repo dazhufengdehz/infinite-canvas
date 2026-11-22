@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { localForageStorage } from "@/lib/localforage-storage";
-import { hasStorageServer, storageRequest } from "@/services/api/storage";
+import { hasStorageServer, isDesktopRuntime, storageRequest } from "@/services/api/storage";
 import type { Asset } from "@/stores/use-asset-store";
 import type { CanvasDocument, CanvasDocumentSummary, CanvasProject, CanvasProjectBundle, CanvasProjectSummary } from "@/types/canvas";
 
@@ -139,6 +139,7 @@ export async function checkStoredProjectFolder(storagePath: string) {
 
 export async function createStoredProject(project: CanvasProject, canvases: CanvasDocument[], assets: Asset[] = [], storagePath?: string) {
     if (await hasStorageServer()) {
+        if (isDesktopRuntime() && !storagePath) throw new Error("请选择项目存放文件夹");
         return storageRequest<{ project: CanvasProject; canvases: CanvasDocument[] }>("/projects", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -275,6 +276,8 @@ export async function deleteStoredProjects(ids: string[]) {
 }
 
 export async function replaceStoredProjects(projects: CanvasProjectBundle[]) {
+    // 桌面端项目与磁盘文件夹一一对应，不能像浏览器存储那样整体覆盖。
+    if (isDesktopRuntime()) throw new Error("桌面端不支持覆盖式同步，请使用项目导出/导入");
     const existing = await listProjects();
     await deleteStoredProjects(existing.map((item) => item.id));
     for (const project of projects) {
@@ -340,6 +343,41 @@ export async function saveAssets(assets: Asset[]) {
         return;
     }
     await localForageStorage.setItem(ASSET_STORE_KEY, JSON.stringify({ state: { assets }, version: 0 }));
+}
+
+export type StoredProjectMigration = {
+    projectId: string;
+    title: string;
+    from: string;
+    to: string;
+    backupPath: string;
+    status: "done" | "rolled-back";
+    completedAt: string;
+    rolledBackAt?: string;
+};
+
+export async function registerStoredProjectLocation(projectId: string, storagePath: string) {
+    return storageRequest<{ projectId: string; storagePath: string }>(`/projects/${encodeURIComponent(projectId)}/location`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ storagePath }),
+    });
+}
+
+export async function migrateStoredProject(projectId: string, targetParent: string) {
+    return storageRequest<{ projectId: string; from: string; to: string; backupPath: string }>(`/projects/${encodeURIComponent(projectId)}/migrate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetParent }),
+    });
+}
+
+export async function rollbackStoredMigration(projectId: string) {
+    return storageRequest<{ projectId: string; restored: string }>(`/projects/${encodeURIComponent(projectId)}/migrate/rollback`, { method: "POST" });
+}
+
+export async function readStoredMigrations() {
+    return storageRequest<StoredProjectMigration[]>("/migrations");
 }
 
 export function scopedStorageKey(kind: string, ownerId = "assets") {

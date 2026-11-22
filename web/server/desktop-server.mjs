@@ -150,10 +150,12 @@ export function createDesktopServer(options = {}) {
         setCors(req, res);
         if (req.method === "POST" && (req.url || "").split("?")[0] === "/api/shutdown") {
             closing = true;
-            sendJson(req, res, 200, { ok: true });
-            server.close();
-            res.on("finish", () => {
-                if (inFlight === 0) process.exit(0);
+            void storage.drain().finally(() => {
+                sendJson(req, res, 200, { ok: true });
+                server.close();
+                res.on("finish", () => {
+                    if (inFlight === 0) process.exit(0);
+                });
             });
             return;
         }
@@ -193,6 +195,32 @@ export function createDesktopServer(options = {}) {
         if (pathname === "/api/storage/projects/check-folder" && req.method === "POST") {
             const body = await readJson(req);
             sendJson(req, res, 200, await storage.checkProjectFolder(body.path));
+            return;
+        }
+        if (pathname === "/api/storage/flush" && req.method === "POST") {
+            await storage.drain();
+            sendJson(req, res, 200, { ok: true });
+            return;
+        }
+        if (pathname === "/api/storage/migrations" && req.method === "GET") {
+            sendJson(req, res, 200, await storage.listMigrations());
+            return;
+        }
+        const migrationRollbackMatch = /^\/api\/storage\/projects\/([^/]+)\/migrate\/rollback$/.exec(pathname);
+        if (migrationRollbackMatch && req.method === "POST") {
+            sendJson(req, res, 200, await storage.rollbackMigration(decodeSegment(migrationRollbackMatch[1])));
+            return;
+        }
+        const locationMatch = /^\/api\/storage\/projects\/([^/]+)\/location$/.exec(pathname);
+        if (locationMatch && req.method === "POST") {
+            const body = await readJson(req);
+            sendJson(req, res, 200, await storage.registerProjectLocation(decodeSegment(locationMatch[1]), body.storagePath));
+            return;
+        }
+        const migrationMatch = /^\/api\/storage\/projects\/([^/]+)\/migrate$/.exec(pathname);
+        if (migrationMatch && req.method === "POST") {
+            const body = await readJson(req);
+            sendJson(req, res, 200, await storage.migrateProject(decodeSegment(migrationMatch[1]), body.targetParent));
             return;
         }
         if (pathname === "/api/storage/projects") {

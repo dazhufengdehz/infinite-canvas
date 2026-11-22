@@ -41,10 +41,11 @@ type CanvasStore = {
     saving: boolean;
     storageError: string | null;
     createProject: (title?: string, id?: string, storagePath?: string) => Promise<string>;
-    importProject: (project: Partial<CanvasProjectBundle>, id?: string, storageKeyMap?: Map<string, string>) => Promise<string>;
+    importProject: (project: Partial<CanvasProjectBundle>, id?: string, storageKeyMap?: Map<string, string>, storagePath?: string) => Promise<string>;
     openProject: (id: string, canvasId?: string) => Promise<CanvasWorkspace | null>;
     renameProject: (id: string, title: string) => Promise<void>;
     deleteProjects: (ids: string[]) => Promise<void>;
+    refreshProjects: () => Promise<void>;
     replaceProjects: (projects: CanvasProjectBundle[]) => Promise<void>;
     createCanvas: (projectId: string, title?: string) => Promise<CanvasDocument>;
     duplicateCanvas: (projectId: string, canvasId: string) => Promise<CanvasDocument>;
@@ -298,7 +299,7 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
             });
             return stored.project.id;
         },
-        importProject: async (source, id, storageKeyMap = new Map()) => {
+        importProject: async (source, id, storageKeyMap = new Map(), storagePath) => {
             const project = makeProject(source.title || i18n.t("canvas.project.imported"), id, source);
             const sourceCanvases: Array<Partial<CanvasDocument>> = source.canvases?.length ? source.canvases : [{}];
             const newCanvasIds = sourceCanvases.map(() => nanoid());
@@ -350,15 +351,12 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
             });
             project.activeCanvasId = source.activeCanvasId ? requiredImportedId(canvasIdMap, source.activeCanvasId, "活跃画布") : canvases[0].id;
             const assets = (source.assets || []).map((asset) => remapImportedAsset(asset, project.id, source.id, assetIdMap, canvasIdMap, canvasNodeMaps, nodeIdMap, storageKeyMap));
-            const stored = await createStoredProject(project, canvases, assets);
+            const stored = await createStoredProject(project, canvases, assets, storagePath);
             set((state) => ({ projects: upsertSummary(state.projects, stored.project, stored.canvases.map(canvasSummary), assets.length), storageError: null }));
             return stored.project.id;
         },
         openProject: async (id, canvasId) => {
-            const current = get();
-            if (current.activeProject?.id === id && current.activeCanvas && (!canvasId || current.activeCanvas.id === canvasId)) {
-                return { project: current.activeProject, canvases: current.canvases, canvas: current.activeCanvas };
-            }
+            // 始终从磁盘重读，避免外部写入后仍显示内存旧数据。
             await flushProject();
             let project = await readProject(id);
             if (!project) return null;
@@ -398,6 +396,9 @@ export const useCanvasStore = create<CanvasStore>()((set, get) => {
                 canvases: state.activeProject && ids.includes(state.activeProject.id) ? [] : state.canvases,
                 storageError: null,
             }));
+        },
+        refreshProjects: async () => {
+            set({ projects: await listProjects(), storageError: null });
         },
         replaceProjects: async (projects) => {
             await flushProject();

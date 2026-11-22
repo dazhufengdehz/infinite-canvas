@@ -45,7 +45,9 @@ fn main() {
         if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
             if let Some(processes) = app_handle.try_state::<Mutex<DesktopProcesses>>() {
                 if let Ok(mut processes) = processes.lock() {
-                    stop_child(&mut processes.storage);
+                    // 先让存储服务把队列写完，再等待退出；超时才强制结束。
+                    request_storage_shutdown();
+                    stop_child_gracefully(&mut processes.storage);
                     if let Some(agent) = processes.canvas_agent.as_mut() {
                         stop_child(agent);
                     }
@@ -95,6 +97,29 @@ fn spawn_canvas_agent(app: &AppHandle) -> Option<Child> {
 }
 
 fn stop_child(child: &mut Child) {
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// 通知存储服务把写队列清空后自行退出。
+fn request_storage_shutdown() {
+    use std::io::Write;
+    let Ok(address) = "127.0.0.1:18080".parse::<SocketAddr>() else { return };
+    let Ok(mut stream) = TcpStream::connect_timeout(&address, Duration::from_millis(300)) else { return };
+    let _ = stream.set_write_timeout(Some(Duration::from_millis(500)));
+    let request = "POST /api/shutdown HTTP/1.1\r\nHost: 127.0.0.1:18080\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+    let _ = stream.write_all(request.as_bytes());
+    let _ = stream.flush();
+}
+
+fn stop_child_gracefully(child: &mut Child) {
+    for _ in 0..30 {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => std::thread::sleep(Duration::from_millis(100)),
+            Err(_) => break,
+        }
+    }
     let _ = child.kill();
     let _ = child.wait();
 }

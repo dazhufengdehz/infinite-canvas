@@ -154,6 +154,8 @@ export type CanvasProjectSummary = {
     connectionCount: number;
     assetCount: number;
     storagePath?: string;
+    migrateRequired?: boolean;
+    legacyPath?: string | null;
 };
 
 export type CanvasProjectBundle = CanvasProject & {

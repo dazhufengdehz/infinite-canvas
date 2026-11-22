@@ -26,12 +26,9 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
     loading: false,
     saving: false,
     error: "",
+    // 打开项目时必须从磁盘重读，内存只作为渲染缓存。
     load: async (projectId, canvasId) => {
-        const current = get();
-        if (current.projectId === projectId && current.data) {
-            if (canvasId && current.data.canvasId !== canvasId) set({ data: { ...current.data, canvasId } });
-            return;
-        }
+        if (get().projectId === projectId) await get().flush();
         set({ projectId, loading: true, error: "" });
         try {
             const project = await readProject(projectId);
@@ -66,15 +63,21 @@ export const useProductionStore = create<ProductionStore>((set, get) => ({
         if (!projectId || !data) return;
         set({ saving: true });
         pending = (async () => {
-            try {
-                await updateStoredProject(projectId, { production: data });
-                set({ error: "" });
-            } catch (error) {
-                set({ error: error instanceof Error ? error.message : "生产数据保存失败" });
-            } finally {
-                set({ saving: false });
-                pending = null;
+            let lastError: unknown;
+            for (let attempt = 0; attempt < 3; attempt++) {
+                try {
+                    await updateStoredProject(projectId, { production: data });
+                    set({ error: "" });
+                    lastError = undefined;
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, [300, 1000][attempt]));
+                }
             }
+            if (lastError) set({ error: lastError instanceof Error ? lastError.message : "生产数据保存失败" });
+            set({ saving: false });
+            pending = null;
         })();
         await pending;
     },

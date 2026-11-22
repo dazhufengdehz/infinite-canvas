@@ -4,13 +4,15 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
-import { readProjectBundle } from "@/services/project-storage";
+import { migrateStoredProject, readProjectBundle } from "@/services/project-storage";
+import { isDesktopRuntime } from "@/services/api/storage";
+import { readLastProjectDir, rememberProjectDir } from "@/lib/canvas/project-location";
 import { useCanvasStore, type CanvasProjectSummary } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
 
 /** 项目库列表与卡片共用的项目操作。 */
 export function useCanvasProjectActions(project: CanvasProjectSummary) {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const { t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -23,10 +25,50 @@ export function useCanvasProjectActions(project: CanvasProjectSummary) {
     const stopEditing = useCanvasUiStore((state) => state.stopEditingProject);
     const toggleSelected = useCanvasUiStore((state) => state.toggleSelectedProjectId);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
+    const refreshProjects = useCanvasStore((state) => state.refreshProjects);
 
-    const open = () => {
+    const navigateToProject = () => {
         const agentHash = hasAgentUrlBootstrap(window.location.hash) ? window.location.hash : "";
         navigate(`/canvas/${project.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}${agentHash}`, { replace: Boolean(agentHash) });
+    };
+
+    const open = async () => {
+        if (project.migrateRequired) {
+            if (!isDesktopRuntime()) {
+                message.error(t("canvas.migrateDesktopOnly"));
+                return;
+            }
+            try {
+                const { open: pickFolder } = await import("@tauri-apps/plugin-dialog");
+                const targetParent = await pickFolder({ directory: true, multiple: false, title: t("canvas.migrateChooseFolder"), defaultPath: readLastProjectDir() });
+                if (typeof targetParent !== "string") return;
+                const confirmed = await new Promise<boolean>((resolve) => {
+                    modal.confirm({
+                        title: t("canvas.migrateTitle"),
+                        content: t("canvas.migrateDescription", { from: project.legacyPath || "", to: targetParent }),
+                        okText: t("canvas.migrateStart"),
+                        cancelText: t("common.cancel"),
+                        onOk: () => resolve(true),
+                        onCancel: () => resolve(false),
+                    });
+                });
+                if (!confirmed) return;
+                const loadingKey = `migrate-${project.id}`;
+                message.open({ key: loadingKey, type: "loading", content: t("canvas.migrating"), duration: 0 });
+                try {
+                    await migrateStoredProject(project.id, targetParent);
+                    rememberProjectDir(targetParent);
+                    await refreshProjects();
+                } finally {
+                    message.destroy(loadingKey);
+                }
+                message.success(t("canvas.migrateSuccess"));
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("canvas.migrateFailed"));
+                return;
+            }
+        }
+        navigateToProject();
     };
     const saveTitle = async () => {
         try {

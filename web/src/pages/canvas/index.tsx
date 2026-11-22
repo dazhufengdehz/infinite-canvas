@@ -8,7 +8,8 @@ import { nanoid } from "nanoid";
 import { readZip } from "@/lib/zip";
 import { setMediaBlob } from "@/services/file-storage";
 import { setImageBlob } from "@/services/image-storage";
-import { checkStoredProjectFolder, readProjects, scopedStorageKey } from "@/services/project-storage";
+import { checkStoredProjectFolder, readProjects, readStoredMigrations, registerStoredProjectLocation, rollbackStoredMigration, scopedStorageKey } from "@/services/project-storage";
+import { isDesktopRuntime } from "@/services/api/storage";
 import { CanvasDeleteProjectsDialog } from "@/components/canvas/canvas-delete-projects-dialog";
 import { CanvasProjectCard } from "@/components/canvas/canvas-project-card";
 import { CanvasProjectRow } from "@/components/canvas/canvas-project-row";
@@ -20,6 +21,7 @@ import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
 import { collectStorageKeys, exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
+import { readLastProjectDir, rememberProjectDir } from "@/lib/canvas/project-location";
 
 type LibraryFilter = "all" | "recent" | "empty";
 type LibrarySort = "updated" | "name";
@@ -37,6 +39,7 @@ export default function CanvasPage() {
     const hydrated = useCanvasStore((state) => state.hydrated);
     const projects = useCanvasStore((state) => state.projects);
     const createProject = useCanvasStore((state) => state.createProject);
+    const refreshProjects = useCanvasStore((state) => state.refreshProjects);
     const importProject = useCanvasStore((state) => state.importProject);
     const selectedIds = useCanvasUiStore((state) => state.selectedProjectIds);
     const setDeleteIds = useCanvasUiStore((state) => state.setDeleteProjectIds);
@@ -69,14 +72,15 @@ export default function CanvasPage() {
     };
     const openCreateDialog = () => {
         setCreateTitle(t("canvas.defaultTitle", { count: projects.length + 1 }));
-        setCreatePath("");
+        setCreatePath(isDesktop ? readLastProjectDir() || "" : "");
         setCreateOpen(true);
     };
     const chooseFolder = async () => {
         try {
             const { open } = await import("@tauri-apps/plugin-dialog");
-            const selected = await open({ directory: true, multiple: false, title: t("canvas.chooseFolder") });
+            const selected = await open({ directory: true, multiple: false, title: t("canvas.chooseFolder"), defaultPath: readLastProjectDir() });
             if (typeof selected !== "string") return;
+            rememberProjectDir(selected);
             const status = await checkStoredProjectFolder(selected);
             if (status.occupied) {
                 message.error(t("canvas.folderOccupied"));
@@ -99,9 +103,14 @@ export default function CanvasPage() {
     };
     const submitCreate = async () => {
         if (creating) return;
+        if (isDesktop && !createPath.trim()) {
+            message.error(t("canvas.storagePathRequired"));
+            return;
+        }
         setCreating(true);
         try {
             const id = await createProject(createTitle.trim() || t("canvas.defaultTitle", { count: projects.length + 1 }), undefined, createPath || undefined);
+            if (createPath) rememberProjectDir(createPath);
             setCreateOpen(false);
             enterProject(id);
         } catch (error) {
@@ -113,12 +122,23 @@ export default function CanvasPage() {
     const importCanvas = async (file?: File) => {
         if (!file) return;
         try {
+            let parentPath: string | undefined;
+            if (isDesktop) {
+                const { open } = await import("@tauri-apps/plugin-dialog");
+                const selected = await open({ directory: true, multiple: false, title: t("canvas.chooseFolder"), defaultPath: readLastProjectDir() });
+                if (typeof selected !== "string") return;
+                parentPath = selected;
+                rememberProjectDir(selected);
+            }
             const zip = await readZip(file);
             const projectFile = zip.get("projects.json");
             if (!projectFile) throw new Error("missing projects.json");
             const data = JSON.parse(await projectFile.text()) as CanvasExportFile;
             for (const exported of data.projects) {
                 const id = nanoid();
+                const folderTitle = String(exported.project.title || "project").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+                const storagePath = parentPath ? await (await import("@tauri-apps/api/path")).join(parentPath, `${folderTitle}-${id}`) : undefined;
+                if (storagePath) await registerStoredProjectLocation(id, storagePath);
                 const referencedKeys = collectStorageKeys(exported.project);
                 const filesByKey = new Map(exported.files.map((file) => [file.storageKey, file]));
                 const keyMap = new Map(referencedKeys.map((storageKey) => [storageKey, scopedStorageKey(storageKey.split(":", 1)[0], id)]));
@@ -132,7 +152,7 @@ export default function CanvasPage() {
                     const typedBlob = blob.type ? blob : blob.slice(0, blob.size, file.mimeType);
                     await (storageKey.startsWith("image:") ? setImageBlob(storageKey, typedBlob) : setMediaBlob(storageKey, typedBlob));
                 }
-                await importProject(exported.project, id, keyMap);
+                await importProject(exported.project, id, keyMap, storagePath);
             }
             message.success(t("canvas.imported", { count: data.projects.length }));
         } catch {
@@ -152,11 +172,51 @@ export default function CanvasPage() {
             .catch((error) => message.error(error instanceof Error ? error.message : t("canvas.importFailed")));
     };
 
+    const rollbackLatestMigration = () => {
+        void (async () => {
+            try {
+                const migrations = await readStoredMigrations();
+                const record = [...migrations].reverse().find((item) => item.status === "done");
+                if (!record) {
+                    message.info(t("canvas.noMigration"));
+                    return;
+                }
+                modal.confirm({
+                    title: t("canvas.rollbackTitle"),
+                    content: t("canvas.rollbackDescription", { from: record.to, to: record.from }),
+                    okText: t("canvas.rollbackConfirm"),
+                    cancelText: t("common.cancel"),
+                    onOk: async () => {
+                        await rollbackStoredMigration(record.projectId);
+                        await refreshProjects();
+                        message.success(t("canvas.rollbackSuccess"));
+                    },
+                });
+            } catch (error) {
+                message.error(error instanceof Error ? error.message : t("canvas.importFailed"));
+            }
+        })();
+    };
+
     useEffect(() => {
         if (!hydrated || autoOpenRef.current || (mode !== "new" && mode !== "recent")) return;
         autoOpenRef.current = true;
         void (async () => {
-            const id = mode === "new" ? await createProject(t("canvas.defaultTitle", { count: projects.length + 1 })) : projects[0]?.id || (await createProject(t("canvas.defaultTitle", { count: projects.length + 1 })));
+            if (mode === "recent" && projects[0]) {
+                if (projects[0].migrateRequired) {
+                    navigate("/canvas", { replace: true });
+                    return;
+                }
+                enterProject(projects[0].id);
+                return;
+            }
+            const storagePath = isDesktop ? readLastProjectDir() : undefined;
+            if (isDesktop && !storagePath) {
+                autoOpenRef.current = false;
+                openCreateDialog();
+                return;
+            }
+            const id = await createProject(t("canvas.defaultTitle", { count: projects.length + 1 }), undefined, storagePath);
             enterProject(id);
         })().catch((error) => {
             autoOpenRef.current = false;
@@ -164,7 +224,7 @@ export default function CanvasPage() {
         });
     }, [createProject, hydrated, message, mode, projects, t]);
 
-    if (hydrated && (mode === "new" || mode === "recent")) return <main className="flex h-full items-center justify-center bg-background text-body text-ink-faint">{t("canvas.opening")}</main>;
+    if (hydrated && (mode === "new" || mode === "recent") && !createOpen) return <main className="flex h-full items-center justify-center bg-background text-body text-ink-faint">{t("canvas.opening")}</main>;
 
     return (
         <main className="h-full overflow-auto bg-background">
@@ -240,10 +300,15 @@ export default function CanvasPage() {
                                 menu={{
                                     items: [
                                         { key: "export", icon: <Download className="size-4" />, label: t("canvas.exportAll") },
+                                        ...(isDesktop ? [{ key: "rollback", label: t("canvas.rollbackMigration") }] : []),
                                         { type: "divider" },
                                         { key: "delete", icon: <Trash2 className="size-4" />, label: t("canvas.deleteAll"), danger: true },
                                     ],
-                                    onClick: ({ key }) => (key === "export" ? exportAll() : setDeleteIds(projects.map((project) => project.id))),
+                                    onClick: ({ key }) => {
+                                        if (key === "export") return exportAll();
+                                        if (key === "rollback") return rollbackLatestMigration();
+                                        setDeleteIds(projects.map((project) => project.id));
+                                    },
                                 }}
                             >
                                 <IconButton aria-label={t("canvas.libraryTools.more")}>

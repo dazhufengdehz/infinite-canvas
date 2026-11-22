@@ -12,6 +12,10 @@ export function storageApiUrl(path: string) {
     return `${configuredBaseUrl}/api/storage${path}`;
 }
 
+export function isDesktopRuntime() {
+    return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 async function probeStorageServer() {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), 1500);
@@ -34,6 +38,7 @@ export async function hasStorageServer() {
                 if (configuredBaseUrl) await new Promise((resolve) => window.setTimeout(resolve, 100));
             }
             if (configuredBaseUrl) throw new Error("本地磁盘存储服务连接失败，请稍后重试或重启客户端");
+            if (isDesktopRuntime()) throw new Error("桌面端必须连接本地磁盘存储服务，不能使用浏览器存储");
             return false;
         })().catch((error) => {
             healthPromise = null;
@@ -65,4 +70,8 @@ export async function putStorageBlob(path: string, blob: Blob) {
         headers: { "Content-Type": blob.type || "application/octet-stream" },
         body: blob,
     });
+}
+
+export async function flushStorageServer() {
+    await storageRequest("/flush", { method: "POST" });
 }
