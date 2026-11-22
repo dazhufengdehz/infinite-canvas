@@ -358,6 +358,18 @@ function readAssetRefs(value: unknown, assets: ScriptAsset[], label: string): st
         const raw = String(token).trim();
         // 直接给形态 ID。
         if (findVariant(assets, raw)) return raw;
+        const normalized = raw.replace("：", ":");
+        // 「资产id:形态名」或「资产id:形态id」：先按资产 ID 定位资产，再匹配形态。
+        const colonIndex = normalized.indexOf(":");
+        if (colonIndex > 0) {
+            const owner = assets.find((asset) => asset.id === normalized.slice(0, colonIndex).trim());
+            if (owner) {
+                const variantToken = normalized.slice(colonIndex + 1).trim();
+                const variants = assetVariants(owner);
+                const matched = variants.find((variant) => variant.id === variantToken || variant.name === variantToken);
+                return (matched || variants[0]).id;
+            }
+        }
         // 给资产 ID：解析到该资产的第一个形态。
         const byAsset = assets.find((asset) => asset.id === raw);
         if (byAsset) {
@@ -366,7 +378,6 @@ function readAssetRefs(value: unknown, assets: ScriptAsset[], label: string): st
             return first.id;
         }
         // 「类型：名称」或纯名称：解析到同名资产的第一个形态。
-        const normalized = raw.replace("：", ":");
         const parts = normalized.split(":");
         const kindLabel = parts.length > 1 ? parts[0].trim() : "";
         const name = (parts.length > 1 ? parts.slice(1).join(":") : normalized).trim();
