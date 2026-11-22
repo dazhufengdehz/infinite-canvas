@@ -50,12 +50,15 @@ type Props = {
     onOpenCanvas: () => void;
     /** 画布连线是引用的唯一权威：工作台调整镜头引用时同步调整画布连线。 */
     onSetShotReferences: (shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => void;
+    /** 画布上已不属于当前生产数据的派生节点数量。 */
+    orphanNodeCount: number;
+    onCleanupOrphans: () => void;
 };
 
 const STAGES: Stage[] = ["source", "setting", "outline", "script", "assets", "storyboard", "shots"];
 const CONDENSE_TRIGGER = 20000;
 
-export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, onSync, onGenerate, onProduce, onStop, onUploadAsset, onUploadVoice, onLocate, onOpenCanvas, onSetShotReferences }: Props) {
+export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, onSync, onGenerate, onProduce, onStop, onUploadAsset, onUploadVoice, onLocate, onOpenCanvas, onSetShotReferences, orphanNodeCount, onCleanupOrphans }: Props) {
     const { t } = useTranslation();
     const { message } = App.useApp();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
@@ -411,7 +414,7 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
                             ) : null}
                         </div>
                     ) : stage === "storyboard" ? (
-                        <StoryboardStage data={data} episode={selectedEpisode} shots={shots} selectedShot={selectedShot} onSelectEpisode={setEpisodeId} onSelectShot={setShotId} onAddShot={addShot} onRemoveShot={removeShot} onGenerateEpisode={(episode) => void doGenerateEpisodeStoryboard(episode)} onGenerateAll={doGenerateAllStoryboards} onSaveShot={(next) => updateShot(next.id, next)} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerateShot={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} isReady={isReady} nodeByKey={nodeByKey} busy={busy} onSetShotReferences={setShotReferences} />
+                        <StoryboardStage data={data} episode={selectedEpisode} shots={shots} selectedShot={selectedShot} onSelectEpisode={setEpisodeId} onSelectShot={setShotId} onAddShot={addShot} onRemoveShot={removeShot} onGenerateEpisode={(episode) => void doGenerateEpisodeStoryboard(episode)} onGenerateAll={doGenerateAllStoryboards} onSaveShot={(next) => updateShot(next.id, next)} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerateShot={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} isReady={isReady} nodeByKey={nodeByKey} busy={busy} onSetShotReferences={setShotReferences} orphanNodeCount={orphanNodeCount} onCleanupOrphans={onCleanupOrphans} />
                     ) : (
                         <ShotsStage data={data} shots={shots} nodeByKey={nodeByKey} onRegenerate={(shot) => void doRegenerateShot(shot)} onGenerate={(shot) => onGenerate([productionShotKey(shot.id)])} onLocate={(id) => onLocate(productionShotKey(id))} onEdit={(id) => { setShotId(id); setStage("storyboard"); }} />
                     )}
@@ -720,7 +723,7 @@ function ScriptStage({ data, episode, onChange, onBlur, onGenerate, busy }: { da
     );
 }
 
-function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, onSelectShot, onAddShot, onRemoveShot, onGenerateEpisode, onGenerateAll, onSaveShot, onRegenerate, onGenerateShot, onLocate, isReady, nodeByKey, busy, onSetShotReferences }: {
+function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, onSelectShot, onAddShot, onRemoveShot, onGenerateEpisode, onGenerateAll, onSaveShot, onRegenerate, onGenerateShot, onLocate, isReady, nodeByKey, busy, onSetShotReferences, orphanNodeCount, onCleanupOrphans }: {
     data: ProductionState;
     episode?: ProductionEpisode;
     shots: ReturnType<typeof listShots>;
@@ -739,8 +742,11 @@ function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, 
     nodeByKey: Map<string, CanvasNodeData>;
     busy: boolean;
     onSetShotReferences: (shotId: string, refs: { imageVariantIds: string[]; videoAssetIds: string[]; audioAssetIds: string[] }) => void;
+    orphanNodeCount: number;
+    onCleanupOrphans: () => void;
 }) {
     const { t } = useTranslation();
+    const { modal } = App.useApp();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     return (
         <div className="space-y-4">
@@ -749,6 +755,17 @@ function StoryboardStage({ data, episode, shots, selectedShot, onSelectEpisode, 
                 <Button size="small" type="primary" icon={<Sparkles className="size-4" />} disabled={!episode || busy} onClick={() => episode && onGenerateEpisode(episode)}>{t("canvas.production.generateEpisodeStoryboard")}</Button>
                 <Button size="small" icon={<Sparkles className="size-4" />} disabled={busy || !data.episodes.length} onClick={onGenerateAll}>{t("canvas.production.generateAllStoryboards")}</Button>
                 <Button size="small" icon={<Plus className="size-4" />} disabled={!episode} onClick={onAddShot}>{t("canvas.production.addShot")}</Button>
+                {orphanNodeCount ? (
+                    <Button size="small" danger onClick={() => {
+                        modal.confirm({
+                            title: t("canvas.production.cleanupOrphans"),
+                            content: t("canvas.production.cleanupOrphansDescription", { count: orphanNodeCount }),
+                            okText: t("canvas.production.cleanupOrphansConfirm"),
+                            cancelText: t("common.cancel"),
+                            onOk: onCleanupOrphans,
+                        });
+                    }}>{t("canvas.production.cleanupOrphans")}（{orphanNodeCount}）</Button>
+                ) : null}
             </div>
             {selectedShot ? (
                 <div className="space-y-2">

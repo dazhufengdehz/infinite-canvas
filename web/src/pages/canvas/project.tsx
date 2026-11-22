@@ -963,7 +963,8 @@ function InfiniteCanvasPage() {
     const scriptBatchCancelRef = useRef(false);
     const scriptPipelineRunningRef = useRef(false);
 
-    const syncProductionNodes = useCallback((source: ProductionState) => {
+    const syncProductionNodes = useCallback((source: ProductionState, options?: { removeOrphans?: boolean }) => {
+        const removeOrphans = options?.removeOrphans !== false;
         const center = getCanvasCenter();
         const layout = planProductionNodes(source, center);
         const activeChannel = (config.channelId ? config.channels?.find((item) => item.id === config.channelId) : undefined) || config.channels?.[0];
@@ -980,7 +981,7 @@ function InfiniteCanvasPage() {
             if (key) existing.set(key, node);
         });
         const planKeys = new Set(layout.nodes.map((plan) => plan.key));
-        const removedIds = new Set(nodesRef.current.filter((node) => node.metadata?.scriptKey && !planKeys.has(node.metadata.scriptKey)).map((node) => node.id));
+        const removedIds = new Set(removeOrphans ? nodesRef.current.filter((node) => node.metadata?.scriptKey && !planKeys.has(node.metadata.scriptKey)).map((node) => node.id) : []);
         const next = nodesRef.current.filter((node) => !removedIds.has(node.id));
         const ids = new Map<string, string>();
         const created: string[] = [];
@@ -1067,9 +1068,9 @@ function InfiniteCanvasPage() {
         return ids;
     }, [config, getCanvasCenter, message, setNodes, t]);
 
-    const syncStoredProduction = useCallback(() => {
+    const syncStoredProduction = useCallback((options?: { removeOrphans?: boolean }) => {
         const data = useProductionStore.getState().data;
-        return data ? syncProductionNodes(data) : new Map<string, string>();
+        return data ? syncProductionNodes(data, options) : new Map<string, string>();
     }, [syncProductionNodes]);
 
     // 打开项目后以生产数据为准对齐一次画布，只补建/更新，不删除任何节点。
@@ -1079,11 +1080,26 @@ function InfiniteCanvasPage() {
         if (productionAlignedRef.current === projectId) return;
         productionAlignedRef.current = projectId;
         try {
-            syncStoredProduction();
+            syncStoredProduction({ removeOrphans: false });
         } catch (error) {
             message.error(error instanceof Error ? error.message : t("canvas.saveStatus.failed"));
         }
     }, [message, productionData, productionProjectId, projectId, projectLoaded, syncStoredProduction, t]);
+
+    const orphanProductionNodeCount = useMemo(() => {
+        if (!productionData) return 0;
+        const keys = new Set(planProductionNodes(productionData, { x: 0, y: 0 }).nodes.map((plan) => plan.key));
+        return nodes.filter((node) => node.metadata?.scriptKey && !keys.has(node.metadata.scriptKey)).length;
+    }, [nodes, productionData]);
+
+    const cleanupOrphanProductionNodes = useCallback(() => {
+        if (!productionData) return;
+        const keys = new Set(planProductionNodes(productionData, { x: 0, y: 0 }).nodes.map((plan) => plan.key));
+        const orphanIds = new Set(nodesRef.current.filter((node) => node.metadata?.scriptKey && !keys.has(node.metadata.scriptKey)).map((node) => node.id));
+        if (!orphanIds.size) return;
+        setNodes(nodesRef.current.filter((node) => !orphanIds.has(node.id)));
+        setConnections(connectionsRef.current.filter((connection) => !orphanIds.has(connection.fromNodeId) && !orphanIds.has(connection.toNodeId)));
+    }, [productionData, setConnections, setNodes]);
 
     /** 画布连线是引用的唯一权威：把画布上的 asset → shot 连线反写回生产态的镜头引用数组。 */
     const syncProductionRefsFromCanvas = useCallback(() => {
@@ -5777,6 +5793,8 @@ function InfiniteCanvasPage() {
                         onUploadAsset={replaceProductionAssetMedia}
                         onUploadVoice={uploadProductionVoice}
                         onSetShotReferences={applyShotReferencesToCanvas}
+                        orphanNodeCount={orphanProductionNodeCount}
+                        onCleanupOrphans={cleanupOrphanProductionNodes}
                         onLocate={(key) => {
                             locateScriptNode(key);
                             useCanvasViewStore.getState().setMode("canvas");

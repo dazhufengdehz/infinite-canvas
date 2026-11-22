@@ -72,8 +72,15 @@ export default function CanvasPage() {
     };
     const openCreateDialog = () => {
         setCreateTitle(t("canvas.defaultTitle", { count: projects.length + 1 }));
-        setCreatePath(isDesktop ? readLastProjectDir() || "" : "");
+        setCreatePath("");
         setCreateOpen(true);
+        const lastDir = isDesktop ? readLastProjectDir() : undefined;
+        if (!lastDir) return;
+        void checkStoredProjectFolder(lastDir)
+            .then((status) => {
+                if (!status.occupied) setCreatePath(lastDir);
+            })
+            .catch(() => {});
     };
     const chooseFolder = async () => {
         try {
@@ -210,14 +217,18 @@ export default function CanvasPage() {
                 enterProject(projects[0].id);
                 return;
             }
-            const storagePath = isDesktop ? readLastProjectDir() : undefined;
-            if (isDesktop && !storagePath) {
+            const parent = isDesktop ? readLastProjectDir() : undefined;
+            if (isDesktop && !parent) {
                 autoOpenRef.current = false;
                 openCreateDialog();
                 return;
             }
-            const id = await createProject(t("canvas.defaultTitle", { count: projects.length + 1 }), undefined, storagePath);
-            enterProject(id);
+            const title = t("canvas.defaultTitle", { count: projects.length + 1 });
+            const id = nanoid();
+            const folderName = title.replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+            const storagePath = parent ? await (await import("@tauri-apps/api/path")).join(parent, `${folderName}-${id}`) : undefined;
+            const createdId = await createProject(title, id, storagePath);
+            enterProject(createdId);
         })().catch((error) => {
             autoOpenRef.current = false;
             message.error(error instanceof Error ? error.message : t("canvas.importFailed"));
