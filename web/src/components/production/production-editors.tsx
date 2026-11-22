@@ -78,7 +78,7 @@ export function AssetEditor({
     const [variantDraft, setVariantDraft] = useState<ScriptAssetVariant>(variant);
     const dirty = draft.name !== asset.name || draft.description !== asset.description || draft.prompt !== asset.prompt || PRODUCTION_H3_SECTIONS.some((section) => (draft.h3[section] || "") !== (asset.h3?.[section] || ""));
     const variantDirty = variantDraft.name !== variant.name || variantDraft.description !== variant.description || variantDraft.prompt !== variant.prompt || PRODUCTION_H3_SECTIONS.some((section) => (variantDraft.h3[section] || "") !== (variant.h3?.[section] || ""));
-    const h3Fields = ASSET_H3_FIELDS[asset.kind];
+    const h3Fields = ASSET_H3_FIELDS[asset.kind] ?? [];
 
     return (
         <div className="space-y-4">

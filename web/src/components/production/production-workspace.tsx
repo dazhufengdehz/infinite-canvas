@@ -506,7 +506,7 @@ function AssetGrid({ data, kind, nodeByKey, onSelect, onAddAsset }: {
                                         <span className="text-xs" style={{ color: theme.node.muted }}>{t("canvas.production.generating")}</span>
                                     ) : (
                                         (() => {
-                                            const Icon = ASSET_KIND_ICON[asset.kind];
+                                            const Icon = ASSET_KIND_ICON[asset.kind] ?? Boxes;
                                             return <Icon className="size-6 opacity-25" />;
                                         })()
                                     )}
