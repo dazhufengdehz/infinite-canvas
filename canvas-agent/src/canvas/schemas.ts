@@ -46,6 +46,8 @@ export const toolNames = [
     "prompts_search",
     "assets_list",
     "assets_add",
+    "production_read",
+    "production_generate",
 ] as const;
 export type ToolName = (typeof toolNames)[number];
 
@@ -132,6 +134,8 @@ export const toolInputSchemas = {
     prompts_search: z.object({ keyword: z.string().optional(), category: z.string().optional(), tags: z.array(z.string()).optional(), page: z.number().optional(), pageSize: z.number().optional() }),
     assets_list: z.object({ kind: z.enum(["all", "text", "image", "video"]).optional(), keyword: z.string().optional(), page: z.number().optional(), pageSize: z.number().optional() }),
     assets_add: z.object({ kind: z.enum(["text", "image"]), title: z.string(), content: z.string().optional(), imageUrl: z.string().optional(), tags: z.array(z.string()).optional(), source: z.string().optional(), note: z.string().optional() }),
+    production_read: z.object({ includeBody: z.boolean().optional() }),
+    production_generate: z.object({ goal: z.string(), mode: z.enum(["auto", "stage"]).optional(), stage: z.enum(["condense", "setting", "outline", "script", "assets", "storyboard", "shot"]).optional(), instruction: z.string().optional(), episode: z.number().optional(), shot: z.string().optional() }),
 } satisfies Record<ToolName, z.AnyZodObject>;
 
 export const toolDescriptions: Record<ToolName, string> = {
@@ -173,4 +177,6 @@ export const toolDescriptions: Record<ToolName, string> = {
     prompts_search: "搜索提示词库（第三方提示词合集），支持 keyword、category、tags 过滤和 page/pageSize 分页，返回标题、提示词、分类、标签、封面等。",
     assets_list: "列出用户「我的素材」，支持 kind（text/image/video）过滤、keyword 搜索和 page/pageSize 分页。为控制体积不返回图片/视频原始 data，仅返回封面与元信息。",
     assets_add: "向「我的素材」新增素材。kind=text 时用 content 传文本内容；kind=image 时用 imageUrl 传图片地址或 dataURL。可附带 title、tags、source、note。",
+    production_read: "读取当前项目的生产工作台状态：原文长度、故事设定、各集梗概与正文长度、资产清单、分镜数量与项目参数。用于了解接手的是个什么进度的项目。includeBody=true 时附带每集剧本正文全文。",
+    production_generate: "驱动自主生产 Agent 推进短剧制作。goal 写清这次要达成什么（如「做出 12 集竖屏短剧」）；mode=auto 时 Agent 自主判断当前该做哪一步、做完自检并自动返工，mode=stage 时指定执行某个阶段（condense/setting/outline/script/assets/storyboard/shot）。可传 instruction 追加要求、episode 指定集号。产出自动回写生产态并同步到画布；返回 Agent 的判断依据、审片问题与是否需要用户确认。",
 };

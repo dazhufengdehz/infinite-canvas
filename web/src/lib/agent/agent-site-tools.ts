@@ -7,9 +7,13 @@ import { listStoredCanvases } from "@/services/project-storage";
 import { imageAspectOptions, imageQualityOptions } from "@/components/image-settings-panel";
 import { videoResolutionOptions, videoSecondOptions, videoSizeOptions } from "@/components/video-settings-panel";
 import type { CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
+import { runProductionAgentStep } from "@/lib/production/production-agent";
 import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { useProductionStore } from "@/stores/canvas/use-production-store";
 import { useAssetStore } from "@/stores/use-asset-store";
 import { modelOptionLabel, modelOptionName, normalizeModelOptionValue, selectableModelsByCapability, useConfigStore } from "@/stores/use-config-store";
+import { buildCreativeRulePrompt, useCreativeRuleStore } from "@/stores/use-creative-rule-store";
+import { useAgentStore } from "@/stores/use-agent-store";
 import { useWorkbenchAgentStore } from "@/stores/use-workbench-agent-store";
 
 // Execute site-level Agent tools in the browser, including canvas lists, workbench generation, prompt search, and asset operations.
@@ -28,6 +32,8 @@ export const SITE_TOOL_NAMES = [
     "prompts_search",
     "assets_list",
     "assets_add",
+    "production_read",
+    "production_generate",
 ] as const;
 
 export type SiteToolName = (typeof SITE_TOOL_NAMES)[number];
@@ -53,6 +59,8 @@ export const SITE_TOOL_LABELS: Record<SiteToolName, string> = {
     get prompts_search() { return siteText("promptSearch"); },
     get assets_list() { return siteText("assetList"); },
     get assets_add() { return siteText("assetAdd"); },
+    get production_read() { return siteText("productionRead"); },
+    get production_generate() { return siteText("productionGenerate"); },
 };
 
 type SiteToolInput = Record<string, unknown>;
@@ -86,6 +94,10 @@ export async function runSiteTool(name: SiteToolName, input: SiteToolInput, navi
             return listAssets(input);
         case "assets_add":
             return addAsset(input);
+        case "production_read":
+            return readProduction(input);
+        case "production_generate":
+            return generateProduction(input);
         default:
             throw new Error(siteText("unknownTool", { name }));
     }
@@ -357,4 +369,86 @@ function paginate(input: SiteToolInput, total: number, defaultSize: number) {
     const page = Math.min(maxPage, Math.max(1, Math.floor(Number(input.page)) || 1));
     const start = (page - 1) * pageSize;
     return { page, pageSize, start, end: start + pageSize };
+}
+
+/**
+ * 读取当前项目的生产态：让 Agent 知道自己接手的是个什么进度的项目。
+ * 只回传结构化摘要，不回传原文全文，避免撑爆上下文。
+ */
+function readProduction(input: SiteToolInput) {
+    const data = useProductionStore.getState().data;
+    if (!data) throw new Error(siteText("productionEmpty"));
+    const includeBody = input.includeBody === true;
+    const episodes = data.episodes.map((episode) => ({
+        number: episode.number,
+        title: episode.title,
+        synopsis: episode.synopsis,
+        scriptLength: episode.script.trim().length,
+        shotCount: episode.shots.length,
+        shots: episode.shots.map((shot) => ({ id: shot.id, number: shot.number, title: shot.title, duration: shot.duration, size: shot.size, imageRefs: shot.imageVariantIds.length, videoRefs: shot.videoAssetIds.length, audioRefs: shot.audioAssetIds.length })),
+        ...(includeBody && episode.script.trim() ? { script: episode.script } : {}),
+    }));
+    return {
+        sourceLength: data.source.text.trim().length,
+        condensedLength: data.source.condensed.trim().length,
+        settingLength: data.setting.trim().length,
+        settingExcerpt: data.setting.trim().slice(0, 2000),
+        assetCount: data.assets.length,
+        assets: data.assets.map((asset) => ({ id: asset.id, kind: asset.kind, name: asset.name, variantCount: asset.variants.length })),
+        episodeCount: data.episodes.length,
+        episodes,
+        options: data.options,
+        shotCount: data.episodes.reduce((total, episode) => total + episode.shots.length, 0),
+    };
+}
+
+/**
+ * 驱动自主生产 Agent 推进一步。
+ * Agent 自己决定做什么、做完自检、必要时返工，产出自动回写生产态并同步到画布。
+ */
+async function generateProduction(input: SiteToolInput) {
+    const goal = String(input.goal || "").trim();
+    if (!goal) throw new Error(siteText("productionGoalRequired"));
+    const agent = useAgentStore.getState();
+    if (!agent.connected || !agent.url.trim() || !agent.token.trim()) throw new Error(siteText("productionAgentOffline"));
+    const data = useProductionStore.getState().data;
+    if (!data) throw new Error(siteText("productionEmpty"));
+    const mode = input.mode === "stage" ? "stage" : "auto";
+    const stage = typeof input.stage === "string" && input.stage ? input.stage : undefined;
+    if (mode === "stage" && !stage) throw new Error(siteText("productionStageRequired"));
+    const preamble = buildCreativeRulePrompt(useCreativeRuleStore.getState().rules);
+    const episode = input.episode ? Number(input.episode) : undefined;
+    const target = episode ? data.episodes.find((item) => item.number === episode) : undefined;
+    const { result, writeback } = await runProductionAgentStep({
+        endpoint: agent.url.trim(),
+        token: agent.token.trim(),
+        goal,
+        mode,
+        stage: stage as never,
+        state: data,
+        preamble: preamble || undefined,
+        instruction: typeof input.instruction === "string" && input.instruction.trim() ? input.instruction.trim() : undefined,
+        episode,
+        episodeTotal: data.episodes.length || undefined,
+        episodeOutline: target?.synopsis || undefined,
+        shot: typeof input.shot === "string" && input.shot.trim() ? input.shot.trim() : undefined,
+    });
+    if (writeback.data) {
+        useProductionStore.getState().update(writeback.data);
+        await useProductionStore.getState().flush();
+    }
+    return {
+        stage: result.plan.stage,
+        reasoning: result.plan.reasoning,
+        instruction: result.plan.instruction,
+        awaitingConfirmation: result.awaitingConfirmation,
+        question: result.plan.question,
+        suggestedOptions: result.plan.suggestedOptions,
+        reviewPassed: result.review.passed,
+        issues: result.review.issues,
+        rounds: result.rounds,
+        written: Boolean(writeback.data),
+        episodeNumber: writeback.episodeNumber,
+        contentPreview: result.content.slice(0, 1200),
+    };
 }

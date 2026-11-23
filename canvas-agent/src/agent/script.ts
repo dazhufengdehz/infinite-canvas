@@ -77,6 +77,14 @@ const JSON_STAGES: ScriptStage[] = ["assets", "storyboard", "shot"];
 export async function generateScriptStage(config: CanvasAgentConfig, input: ScriptGenerateInput, fetchImpl: typeof fetch = fetch) {
     const current = getOpenAiConfig(config);
     if (!current.apiKey) throw new OpenAiTurnError("请先在 Agent 设置中配置 OpenAI API Key", 400);
+    return generateScriptStageWith(current, input, fetchImpl);
+}
+
+/**
+ * 用已解析好的模型配置生成剧本内容。
+ * 自主 Agent 已在规划阶段解析过一次配置，这里复用，避免重复解析与重复校验。
+ */
+export async function generateScriptStageWith(current: ChatConfig, input: ScriptGenerateInput, fetchImpl: typeof fetch = fetch) {
     const source = String(input.source || "").trim();
     if (!source) throw new OpenAiTurnError("请先输入要改编的原文", 400);
     if (!["setting", "outline", "script", "assets", "storyboard", "shot", "condense"].includes(input.stage)) throw new OpenAiTurnError("未知的剧本阶段", 400);

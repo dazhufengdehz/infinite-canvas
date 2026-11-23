@@ -7,7 +7,8 @@ import { runClaudeTurn } from "../agent/claude.js";
 import { checkWorkbuddyStatus, replyWorkbuddyPermission, runWorkbuddyTurn, updateWorkbuddyConfig } from "../agent/workbuddy.js";
 import { checkTraeStatus, interruptTraeTurn, startTraeTurn, TRAE_THREAD_ID, TraeTurnError } from "../agent/trae.js";
 import { getOpenAiStatus, interruptOpenAiTurn, listOpenAiModels, OpenAiTurnError, startOpenAiTurn, updateOpenAiConfig } from "../agent/openai.js";
-import { generateScriptStage } from "../agent/script.js";
+import { generateScriptStage, type ScriptStage } from "../agent/script.js";
+import { runProductionAgent } from "../agent/production.js";
 import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -203,6 +204,22 @@ export function startHttpServer() {
             shot: req.body?.shot ? String(req.body.shot) : undefined,
         });
         res.json({ ok: true, content: result.content });
+    }));
+    // 自主生产 Agent：规划 → 生成 → 自检 → 返工，由 Agent 自己决定下一步做什么。
+    app.post("/agent/production/run", route(async (req, res) => {
+        const result = await runProductionAgent(config, {
+            goal: String(req.body?.goal || ""),
+            mode: req.body?.mode === "stage" ? "stage" : "auto",
+            stage: req.body?.stage ? String(req.body.stage) as ScriptStage : undefined,
+            state: (req.body?.state || {}) as never,
+            preamble: req.body?.preamble ? String(req.body.preamble) : undefined,
+            instruction: req.body?.instruction ? String(req.body.instruction) : undefined,
+            episode: req.body?.episode ? Number(req.body.episode) : undefined,
+            episodeTotal: req.body?.episodeTotal ? Number(req.body.episodeTotal) : undefined,
+            episodeOutline: req.body?.episodeOutline ? String(req.body.episodeOutline) : undefined,
+            shot: req.body?.shot ? String(req.body.shot) : undefined,
+        });
+        res.json({ ok: true, data: result });
     }));
     app.post("/agent/openai/turn", route(async (req, res) => {
         const prompt = String(req.body?.prompt || "");

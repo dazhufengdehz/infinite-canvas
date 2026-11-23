@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
 import { App, Button, Empty, Input, InputNumber, Segmented, Select, Switch } from "antd";
-import { AlertCircle, ArrowLeft, ArrowRight, Boxes, Check, ChevronDown, ChevronUp, Clapperboard, Download, Film, Play, Plus, RefreshCw, Sparkles, Square, Workflow } from "lucide-react";
+import { AlertCircle, ArrowLeft, ArrowRight, Bot, Boxes, Check, ChevronDown, ChevronUp, Clapperboard, Download, Film, Play, Plus, RefreshCw, Sparkles, Square, Workflow } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 
@@ -25,7 +25,8 @@ import {
 import { currentStage, deriveStageProgress, type StageAction, type StageProgress } from "@/lib/production/production-progress";
 import { productionVariantKey } from "@/lib/production/production-nodes";
 import { generateAssets, generateEpisodeScript, generateEpisodeStoryboard, generateAllStoryboards, generateOutline, generateSetting, generateShot, type ProductionCaller } from "@/lib/production/production-generation";
-import { generateScriptStage, type ScriptAdaptRequest } from "@/services/api/canvas-agent";
+import { runProductionAgentStep } from "@/lib/production/production-agent";
+import { generateScriptStage, type ProductionAgentResult, type ScriptAdaptRequest } from "@/services/api/canvas-agent";
 import { useProductionStore } from "@/stores/canvas/use-production-store";
 import { buildCreativeRulePrompt, useCreativeRuleStore } from "@/stores/use-creative-rule-store";
 import { useAgentStore } from "@/stores/use-agent-store";
@@ -84,6 +85,11 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
     /** 音色上传目标：角色 ID。 */
     const [voiceTarget, setVoiceTarget] = useState<string>("");
     const [batchOpen, setBatchOpen] = useState(false);
+    /** 制作 Agent 的目标与附加要求。 */
+    const [agentGoal, setAgentGoal] = useState("");
+    const [agentInstruction, setAgentInstruction] = useState("");
+    /** 制作 Agent 最近一次执行结果，用于展示判断依据与待确认问题。 */
+    const [agentResult, setAgentResult] = useState<ProductionAgentResult | null>(null);
     const fileRef = useRef<HTMLInputElement | null>(null);
 
     const width = useProductionPanelStore((state) => state.width);
@@ -338,8 +344,49 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
         }
     };
 
-    const keysOf = (kind: "asset" | "character" | "shot") => {
-        const wanted = kind === "shot"
+    /**
+     * 驱动制作 Agent 推进一步。
+     * Agent 自己判断该做什么、做完自检并自动返工，产出回写生产态后同步到画布。
+     */
+    const runAgentStep = async (goal: string, instruction: string) => {
+        if (busy) return;
+        const agent = useAgentStore.getState();
+        if (!agent.connected || !agent.url.trim() || !agent.token.trim()) {
+            message.error(t("canvas.production.agent.needAgent"));
+            return;
+        }
+        const current = useProductionStore.getState().data;
+        if (!current) {
+            message.error(t("canvas.production.agent.empty"));
+            return;
+        }
+        setBusy(true);
+        setProgress(t("canvas.production.agent.running"));
+        try {
+            const preamble = buildCreativeRulePrompt(useCreativeRuleStore.getState().rules);
+            const { result, writeback } = await runProductionAgentStep({
+                endpoint: agent.url.trim(),
+                token: agent.token.trim(),
+                goal,
+                mode: "auto",
+                state: current,
+                preamble: preamble || undefined,
+                instruction: instruction.trim() || undefined,
+            });
+            setAgentResult(result);
+            if (writeback.data) {
+                patch(writeback.data, true);
+                message.success(t("canvas.production.agent.written"));
+            }
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : t("canvas.production.agent.failed"));
+        } finally {
+            setBusy(false);
+            setProgress("");
+        }
+    };
+
+    const keysOf = (kind: "asset" | "character" | "shot") => {        const wanted = kind === "shot"
             ? shots.map((shot) => shot.key)
             : kind === "character"
               ? (data?.assets || []).filter((asset) => asset.kind === "character").flatMap((asset) => assetVariants(asset).map((variant) => productionVariantKey(variant.id)))
@@ -473,6 +520,13 @@ export function ProductionWorkspace({ projectId, canvasId, title, nodes, batch, 
                 </header>
 
                 <StageProgressBar progress={progressList} stage={stage} autoStage={autoStage} onStage={setStage} />
+
+                <AgentControlPanel
+                    busy={busy}
+                    onRun={runAgentStep}
+                    lastResult={agentResult}
+                    onDismissResult={() => setAgentResult(null)}
+                />
 
                 <div className="shrink-0 px-3 pb-2">
                     <Button
@@ -806,8 +860,88 @@ function CreativeRuleBar() {
     );
 }
 
-function SourceStage({ data, chapters, onChapters, onApplyChapters, onChange, onOptions, onGenerate, busy }: {
-    data: ProductionState;
+/**
+ * 制作 Agent 控制面板。
+ * 用户只说目标，Agent 自己判断该做哪一步、做完自检并自动返工；产出回写后同步画布。
+ */
+function AgentControlPanel({ busy, onRun, lastResult, onDismissResult }: {
+    busy: boolean;
+    onRun: (goal: string, instruction: string) => void;
+    lastResult: ProductionAgentResult | null;
+    onDismissResult: () => void;
+}) {
+    const { t } = useTranslation();
+    const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const [goal, setGoal] = useState("");
+    const [instruction, setInstruction] = useState("");
+    const [open, setOpen] = useState(false);
+    const canRun = goal.trim().length > 0 && !busy;
+
+    return (
+        <div className="shrink-0 border-b px-3 py-2" style={{ borderColor: theme.hairline.base }}>
+            <button type="button" className="flex w-full items-center gap-2 text-left" onClick={() => setOpen((value) => !value)}>
+                <Bot className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium">{t("canvas.production.agent.title")}</span>
+                {lastResult ? <span className="shrink-0 text-[11px]" style={{ color: theme.node.muted }}>{t(`canvas.production.stage.${lastResult.plan.stage}`)}</span> : null}
+                {open ? <ChevronUp className="size-3.5 shrink-0" style={{ color: theme.node.muted }} /> : <ChevronDown className="size-3.5 shrink-0" style={{ color: theme.node.muted }} />}
+            </button>
+            {open ? (
+                <div className="mt-2 space-y-2">
+                    <Input.TextArea
+                        value={goal}
+                        onChange={(event) => setGoal(event.target.value)}
+                        rows={2}
+                        placeholder={t("canvas.production.agent.goalPlaceholder")}
+                        className="!text-xs"
+                    />
+                    <Input.TextArea
+                        value={instruction}
+                        onChange={(event) => setInstruction(event.target.value)}
+                        rows={2}
+                        placeholder={t("canvas.production.agent.instructionPlaceholder")}
+                        className="!text-xs"
+                    />
+                    <Button size="small" type="primary" block icon={<Bot className="size-4" />} disabled={!canRun} loading={busy} onClick={() => onRun(goal, instruction)}>
+                        {t("canvas.production.agent.run")}
+                    </Button>
+                    {lastResult ? (
+                        <div className="space-y-1 rounded-lg p-2 text-[11px]" style={{ background: theme.accent.chrome, color: theme.node.muted }}>
+                            <div className="font-medium" style={{ color: theme.text.primary }}>{t("canvas.production.agent.decision")}</div>
+                            {lastResult.plan.reasoning ? <div>{lastResult.plan.reasoning}</div> : null}
+                            <div style={{ color: lastResult.review.passed ? theme.state.success : theme.state.warning }}>
+                                {lastResult.review.passed ? t("canvas.production.agent.reviewPassed") : t("canvas.production.agent.reviewIssues", { count: lastResult.review.issues.length })}
+                            </div>
+                            {lastResult.review.issues.length ? (
+                                <ul className="list-disc pl-4">
+                                    {lastResult.review.issues.map((issue) => <li key={issue}>{issue}</li>)}
+                                </ul>
+                            ) : null}
+                            {lastResult.rounds > 1 ? <div>{t("canvas.production.agent.reworked", { count: lastResult.rounds - 1 })}</div> : null}
+                            {lastResult.awaitingConfirmation ? (
+                                <div className="space-y-1" style={{ color: theme.state.warning }}>
+                                    <div>{t("canvas.production.agent.awaitingConfirmation")}</div>
+                                    {lastResult.plan.question ? <div>{lastResult.plan.question}</div> : null}
+                                    {lastResult.plan.suggestedOptions.length ? (
+                                        <div>
+                                            <div>{t("canvas.production.agent.confirmOptions")}</div>
+                                            <ul className="list-disc pl-4">
+                                                {lastResult.plan.suggestedOptions.map((option) => <li key={option}>{option}</li>)}
+                                            </ul>
+                                        </div>
+                                    ) : null}
+                                    <div style={{ color: theme.node.muted }}>{t("canvas.production.agent.confirmHint")}</div>
+                                </div>
+                            ) : null}
+                            <Button size="small" type="text" className="!px-0" onClick={onDismissResult}>{t("common.close")}</Button>
+                        </div>
+                    ) : null}
+                </div>
+            ) : null}
+        </div>
+    );
+}
+
+function SourceStage({ data, chapters, onChapters, onApplyChapters, onChange, onOptions, onGenerate, busy }: {    data: ProductionState;
     chapters: Set<number>;
     onChapters: (value: Set<number>) => void;
     onApplyChapters: () => void;

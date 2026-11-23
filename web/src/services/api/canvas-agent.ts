@@ -175,8 +175,53 @@ export async function generateScriptStage(endpoint: string, token: string, paylo
     return content;
 }
 
-export function runOpenAiTurn(endpoint: string, token: string, body: { prompt: string; clientId: string; attachments?: Array<{ id?: string; name?: string; type?: string; size?: number; width?: number; height?: number; dataUrl?: string }> }) {
-    return fetchAgentJson<{ ok?: boolean; threadId?: string; turnId?: string }>(endpoint, token, "/agent/openai/turn", jsonPost(body));
+/** 自主生产 Agent 的状态快照：Agent 据此判断项目真实进度。 */
+export type ProductionAgentEpisode = { number: number; title: string; synopsis: string; script: string; shotCount: number };
+export type ProductionAgentState = {
+    source: string;
+    condensed: string;
+    setting: string;
+    outline: string;
+    script: string;
+    assets: string;
+    episodes: ProductionAgentEpisode[];
+    assetCount: number;
+    shotCount: number;
+    options: ScriptAdaptOptions;
+};
+/** Agent 的下一步决策。 */
+export type ProductionAgentPlan = { stage: ScriptStage; reasoning: string; instruction: string; episode: number; needsConfirmation: boolean; question: string; suggestedOptions: string[] };
+/** Agent 对自己产出的审片结论。 */
+export type ProductionAgentReview = { passed: boolean; severity: "none" | "minor" | "major"; issues: string[] };
+export type ProductionAgentResult = { plan: ProductionAgentPlan; content: string; review: ProductionAgentReview; rounds: number; awaitingConfirmation: boolean };
+export type ProductionAgentRequest = {
+    goal: string;
+    mode: "auto" | "stage";
+    stage?: ScriptStage;
+    state: ProductionAgentState;
+    preamble?: string;
+    instruction?: string;
+    episode?: number;
+    episodeTotal?: number;
+    episodeOutline?: string;
+    shot?: string;
+};
+
+/**
+ * 调用自主生产 Agent：规划 → 生成 → 自检 → 返工。
+ * 整条链路最多要跑 4 次模型请求，单独给一个比普通接口更长的超时。
+ */
+export async function runProductionAgent(endpoint: string, token: string, payload: ProductionAgentRequest) {
+    const result = await fetchAgentJson<{ ok?: boolean; data?: ProductionAgentResult }>(endpoint, token, "/agent/production/run", {
+        ...jsonPost(payload),
+        signal: AbortSignal.timeout(900000),
+    });
+    const data = result.data;
+    if (!data) throw new AgentApiError(502, { error: i18n.t("canvas.production.agent.agentEmpty") });
+    return data;
+}
+
+export function runOpenAiTurn(endpoint: string, token: string, body: { prompt: string; clientId: string; attachments?: Array<{ id?: string; name?: string; type?: string; size?: number; width?: number; height?: number; dataUrl?: string }> }) {    return fetchAgentJson<{ ok?: boolean; threadId?: string; turnId?: string }>(endpoint, token, "/agent/openai/turn", jsonPost(body));
 }
 
 export function interruptOpenAiTurn(endpoint: string, token: string, threadId?: string) {
